@@ -1,0 +1,365 @@
+{
+  "schemaVersion": "1.0.0",
+  "meta": {
+    "id": "mixed",
+    "code": "MIXED",
+    "name": "Mixed Canonical",
+    "family": "invoice",
+    "status": "draft",
+    "version": 1,
+    "description": "Strict mixed fixture",
+    "tags": [
+      "strict"
+    ],
+    "compatibility": {
+      "minPresenterVersion": "1.0.0",
+      "minBridgeVersion": "1.0.0"
+    },
+    "source": {
+      "createdFrom": "test",
+      "importedFromTemplateId": null,
+      "importedFromSeedData": false
+    }
+  },
+  "page": {
+    "unit": "mm",
+    "size": "A4",
+    "orientation": "portrait",
+    "width": 210,
+    "height": 297,
+    "direction": "ltr",
+    "language": "en",
+    "margins": {
+      "top": 10,
+      "right": 10,
+      "bottom": 10,
+      "left": 10
+    }
+  },
+  "styleTokens": {
+    "border": {
+      "medium": 2,
+      "none": 0,
+      "thin": 1
+    },
+    "color": {
+      "black": "#000000",
+      "border": "#D9E2EC",
+      "divider": "#E5E7EB",
+      "page": "#FFFFFF",
+      "primary": "#0D8BFF",
+      "surface": "#FFFFFF",
+      "surface_light": "#F8FAFC",
+      "table_border": "#E5E7EB",
+      "table_header_bg": "#0D8BFF",
+      "table_header_text": "#FFFFFF",
+      "table_row_alt_bg": "#F4F8FF",
+      "table_row_bg": "#FFFFFF",
+      "text_inverse": "#FFFFFF",
+      "text_muted": "#8A8A8A",
+      "text_primary": "#111111",
+      "text_secondary": "#444444",
+      "total_bg": "#F4F8FF",
+      "total_text": "#111111",
+      "transparent": "transparent",
+      "white": "#FFFFFF"
+    },
+    "font": {
+      "family": "Cairo",
+      "size_lg": 14,
+      "size_md": 12,
+      "size_sm": 10,
+      "size_title": 22,
+      "size_xl": 16,
+      "size_xs": 4,
+      "weight_bold": "700",
+      "weight_medium": "500",
+      "weight_regular": "400"
+    },
+    "radius": {
+      "md": 4,
+      "none": 0,
+      "sm": 2
+    },
+    "spacing": {
+      "lg": 12,
+      "md": 8,
+      "sm": 4,
+      "xl": 16,
+      "xs": 2
+    }
+  },
+  "assets": [
+    {
+      "id": "asset_company_logo",
+      "type": "image",
+      "source": "data:image/png;base64,AA==",
+      "name": "Logo",
+      "mimeType": "image/png",
+      "fileName": "logo.png",
+      "sizeBytes": 1,
+      "originalSizeBytes": 1,
+      "width": 1,
+      "height": 1
+    }
+  ],
+  "layers": [
+    {
+      "id": "default",
+      "name": "Default",
+      "visible": true,
+      "locked": false,
+      "elementIds": [
+        "text_title",
+        "img_logo",
+        "signature_approval_binding",
+        "qr_invoice_binding",
+        "barcode_binding_code128_invoice",
+        "icon_receipt"
+      ]
+    }
+  ],
+  "elements": [
+    {
+      "id": "text_title",
+      "type": "text",
+      "name": "Title",
+      "layerId": "default",
+      "box": {
+        "x": 20,
+        "y": 20,
+        "width": 80,
+        "height": 12
+      },
+      "content": {
+        "source": "static",
+        "static": {
+          "value": "Invoice"
+        }
+      },
+      "style": {
+        "backgroundColor": "{token.color.transparent}",
+        "opacity": 1,
+        "text": {
+          "color": "{token.color.text_primary}",
+          "fontFamily": "{token.font.family}",
+          "fontSize": "{token.font.size_md}",
+          "fontWeight": "500",
+          "fontStyle": "normal",
+          "textAlign": "start",
+          "verticalAlign": "middle",
+          "lineHeight": 1.3,
+          "letterSpacing": 0,
+          "overflow": "clip",
+          "maxLines": null,
+          "padding": {
+            "top": 0,
+            "right": 0,
+            "bottom": 0,
+            "left": 0
+          },
+          "direction": "auto",
+          "decoration": "none"
+        }
+      },
+      "visibility": {
+        "visible": true,
+        "locked": false
+      }
+    },
+    {
+      "id": "img_logo",
+      "type": "image",
+      "layerId": "default",
+      "box": {
+        "x": 20,
+        "y": 52,
+        "width": 36,
+        "height": 24
+      },
+      "content": {
+        "source": "static",
+        "static": {
+          "assetId": "asset_company_logo",
+          "dataType": "dataUri"
+        },
+        "binding": {
+          "path": "",
+          "dataType": "auto",
+          "fallback": {
+            "assetId": ""
+          }
+        }
+      },
+      "style": {
+        "fit": "contain",
+        "alignment": "center",
+        "opacity": 1,
+        "backgroundColor": "{token.color.transparent}"
+      },
+      "visibility": {
+        "visible": true,
+        "locked": false
+      }
+    },
+    {
+      "id": "signature_approval_binding",
+      "type": "signature",
+      "name": "Approval Signature",
+      "layerId": "default",
+      "box": {
+        "x": 145,
+        "y": 240,
+        "width": 42,
+        "height": 20
+      },
+      "content": {
+        "source": "binding",
+        "static": {
+          "assetId": ""
+        },
+        "binding": {
+          "path": "Approval.Signature.value",
+          "dataType": "auto"
+        },
+        "emptyBehavior": "placeholderLine"
+      },
+      "visibility": {
+        "visible": true,
+        "locked": false
+      }
+    },
+    {
+      "id": "qr_invoice_binding",
+      "type": "qr",
+      "name": "Bound Invoice QR",
+      "layerId": "default",
+      "box": {
+        "x": 150,
+        "y": 18,
+        "width": 28,
+        "height": 28
+      },
+      "content": {
+        "source": "binding",
+        "static": {
+          "value": ""
+        },
+        "binding": {
+          "path": "invoice.qrPayload",
+          "dataType": "auto"
+        },
+        "emptyBehavior": "hide"
+      },
+      "visibility": {
+        "visible": true,
+        "locked": false
+      },
+      "encoding": {
+        "errorCorrection": "M",
+        "quietZone": 2,
+        "version": "7"
+      },
+      "style": {
+        "foregroundColor": "{token.color.black}",
+        "backgroundColor": "{token.color.transparent}",
+        "fit": "contain",
+        "alignment": "center",
+        "opacity": 1,
+        "border": {
+          "color": "{token.color.transparent}",
+          "width": 0,
+          "style": "none",
+          "radius": {
+            "topLeft": 0,
+            "topRight": 0,
+            "bottomRight": 0,
+            "bottomLeft": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "barcode_binding_code128_invoice",
+      "type": "barcode",
+      "name": "Invoice Barcode",
+      "layerId": "default",
+      "box": {
+        "x": 124,
+        "y": 236,
+        "width": 58,
+        "height": 20
+      },
+      "content": {
+        "source": "binding",
+        "static": {
+          "payload": "",
+          "dataType": "text"
+        },
+        "binding": {
+          "path": "invoice.barcode",
+          "dataType": "text"
+        }
+      },
+      "encoding": {
+        "symbology": "CODE128",
+        "showHumanReadableText": true,
+        "humanReadableTextPosition": "bottom",
+        "invalidValueBehavior": "hide"
+      },
+      "style": {
+        "foregroundColor": "{token.color.black}",
+        "backgroundColor": "{token.color.white}",
+        "fit": "stretch",
+        "alignment": "center",
+        "opacity": 1,
+        "border": {
+          "color": "{token.color.transparent}",
+          "width": 0,
+          "style": "none",
+          "radius": {
+            "topLeft": 0,
+            "topRight": 0,
+            "bottomRight": 0,
+            "bottomLeft": 0
+          }
+        }
+      },
+      "labelStyle": {
+        "fontFamily": "{token.font.family}",
+        "fontSize": "{token.font.size_sm}",
+        "fontWeight": "{token.font.weight_regular}",
+        "color": "{token.color.text_primary}",
+        "textAlign": "center",
+        "lineHeight": 1.2
+      },
+      "visibility": {
+        "visible": true,
+        "locked": false
+      }
+    },
+    {
+      "id": "icon_receipt",
+      "type": "icon",
+      "name": "Receipt Icon",
+      "layerId": "default",
+      "box": {
+        "x": 120,
+        "y": 72
+      },
+      "content": {
+        "library": "materialIcons",
+        "name": "receipt_long"
+      },
+      "style": {
+        "color": "{token.color.text_primary}",
+        "size": 24,
+        "opacity": 1
+      },
+      "visibility": {
+        "visible": true,
+        "locked": false
+      }
+    }
+  ]
+}

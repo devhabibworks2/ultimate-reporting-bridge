@@ -1,0 +1,395 @@
+{
+  "fixtureVersion": "1.0.0",
+  "document": {
+    "schemaVersion": "1.0.0",
+    "meta": {
+      "id": "task13-cross-stack-canonical",
+      "code": "task13-cross-stack-canonical",
+      "name": "Task 13 canonical cross-stack document",
+      "family": "sales_invoice",
+      "status": "draft",
+      "version": 1
+    },
+    "page": {
+      "layout": "Pages",
+      "unit": "mm",
+      "size": "A4",
+      "orientation": "portrait",
+      "width": 210,
+      "height": 297,
+      "direction": "ltr",
+      "language": "en"
+    },
+    "styleTokens": {
+      "color": {
+        "border": "#222222"
+      },
+      "font": {},
+      "spacing": {},
+      "border": {
+        "thin": 0.5
+      },
+      "radius": {}
+    },
+    "assets": [],
+    "layers": [
+      {
+        "id": "main",
+        "name": "Main",
+        "visible": true,
+        "locked": false,
+        "elementIds": [
+          "table-lines",
+          "approval-signature",
+          "receipt-icon"
+        ]
+      }
+    ],
+    "elements": [
+      {
+        "id": "table-lines",
+        "type": "table",
+        "name": "Runtime lines",
+        "layerId": "main",
+        "box": {
+          "x": 15,
+          "y": 45,
+          "width": 180,
+          "height": 100
+        },
+        "visibility": {
+          "visible": true,
+          "locked": false
+        },
+        "content": {
+          "mode": "headerWithRowData",
+          "headerPath": "report.detail.header",
+          "rowsPath": "report.detail.rows",
+          "emptyStateText": "No lines"
+        },
+        "columns": [
+          {
+            "id": "description",
+            "rowIndex": 0,
+            "visible": true,
+            "content": {
+              "header": {
+                "mode": "binding",
+                "value": "description"
+              },
+              "body": {
+                "mode": "field",
+                "dataType": "text",
+                "value": "description",
+                "parts": []
+              },
+              "footer": {
+                "cellsByRowId": {}
+              }
+            },
+            "layout": {
+              "width": "auto"
+            },
+            "style": {
+              "header": {},
+              "body": {},
+              "footer": {}
+            }
+          },
+          {
+            "id": "quantity",
+            "rowIndex": 1,
+            "visible": true,
+            "content": {
+              "header": {
+                "mode": "binding",
+                "value": "quantity"
+              },
+              "body": {
+                "mode": "field",
+                "dataType": "number",
+                "value": "quantity",
+                "parts": []
+              },
+              "footer": {
+                "cellsByRowId": {}
+              }
+            },
+            "layout": {
+              "width": "25.5%"
+            },
+            "style": {
+              "header": {},
+              "body": {},
+              "footer": {}
+            }
+          },
+          {
+            "id": "amount",
+            "rowIndex": 2,
+            "visible": true,
+            "content": {
+              "header": {
+                "mode": "binding",
+                "value": "amount"
+              },
+              "body": {
+                "mode": "field",
+                "dataType": "currency",
+                "value": "amount",
+                "parts": []
+              },
+              "footer": {
+                "cellsByRowId": {}
+              }
+            },
+            "layout": {
+              "width": "33.3%"
+            },
+            "style": {
+              "header": {},
+              "body": {},
+              "footer": {}
+            }
+          },
+          {
+            "id": "internal-note",
+            "rowIndex": 3,
+            "visible": false,
+            "content": {
+              "header": {
+                "mode": "binding",
+                "value": "internalNote"
+              },
+              "body": {
+                "mode": "field",
+                "dataType": "text",
+                "value": "internalNote",
+                "parts": []
+              },
+              "footer": {
+                "cellsByRowId": {}
+              }
+            },
+            "layout": {
+              "width": "41.2%"
+            },
+            "style": {
+              "header": {},
+              "body": {},
+              "footer": {}
+            }
+          }
+        ],
+        "header": {
+          "visible": true,
+          "height": 8,
+          "repeatOnPageBreak": true
+        },
+        "body": {
+          "rowHeight": 8,
+          "autoHeight": true
+        },
+        "footer": {
+          "visible": false,
+          "height": 8,
+          "rows": []
+        },
+        "layout": {
+          "cellSpacing": {
+            "horizontal": 1.5,
+            "vertical": 0.75
+          },
+          "overflow": {
+            "vertical": "paginate"
+          }
+        },
+        "style": {
+          "backgroundColor": "#ffffff",
+          "border": {
+            "color": "{token.color.border}",
+            "width": 0.5,
+            "style": "solid",
+            "radius": {
+              "topLeft": 0,
+              "topRight": 0,
+              "bottomRight": 0,
+              "bottomLeft": 0
+            }
+          },
+          "header": {
+            "backgroundColor": "#ffffff",
+            "text": {
+              "padding": {
+                "top": 1,
+                "right": 1.5,
+                "bottom": 1,
+                "left": 1.5
+              }
+            },
+            "border": {
+              "color": "#222222",
+              "width": "{token.border.thin}",
+              "style": "solid",
+              "radius": {
+                "topLeft": 0,
+                "topRight": 0,
+                "bottomRight": 0,
+                "bottomLeft": 0
+              }
+            }
+          },
+          "body": {
+            "backgroundColor": "#ffffff",
+            "text": {
+              "padding": {
+                "top": 1,
+                "right": 1.5,
+                "bottom": 1,
+                "left": 1.5
+              }
+            },
+            "border": {
+              "color": "#222222",
+              "width": "{token.border.thin}",
+              "style": "solid",
+              "radius": {
+                "topLeft": 0,
+                "topRight": 0,
+                "bottomRight": 0,
+                "bottomLeft": 0
+              }
+            }
+          },
+          "footer": {
+            "backgroundColor": "#ffffff",
+            "border": {
+              "color": "#222222",
+              "width": "{token.border.thin}",
+              "style": "solid",
+              "radius": {
+                "topLeft": 0,
+                "topRight": 0,
+                "bottomRight": 0,
+                "bottomLeft": 0
+              }
+            }
+          },
+          "rowStyles": {
+            "conditional": []
+          }
+        }
+      },
+      {
+        "id": "approval-signature",
+        "type": "signature",
+        "name": "Approval signature",
+        "layerId": "main",
+        "box": {
+          "x": 15,
+          "y": 160,
+          "width": 60,
+          "height": 12
+        },
+        "visibility": {
+          "visible": true,
+          "locked": false
+        },
+        "content": {
+          "source": "binding",
+          "static": {
+            "assetId": ""
+          },
+          "binding": {
+            "path": "report.approval.signature",
+            "dataType": "auto"
+          },
+          "emptyBehavior": "placeholderLine"
+        },
+        "style": {
+          "placeholderLine": {
+            "enabled": true,
+            "color": "{token.color.border}",
+            "width": 0.5,
+            "style": "dashed"
+          }
+        }
+      },
+      {
+        "id": "receipt-icon",
+        "type": "icon",
+        "name": "Receipt icon",
+        "layerId": "main",
+        "box": {
+          "x": 180,
+          "y": 20
+        },
+        "visibility": {
+          "visible": true,
+          "locked": false
+        },
+        "content": {
+          "library": "materialIcons",
+          "name": "receipt_long"
+        },
+        "style": {
+          "color": "#222222",
+          "size": 18,
+          "opacity": 1
+        }
+      }
+    ]
+  },
+  "runtimeData": {
+    "report": {
+      "detail": {
+        "header": {
+          "description": "Description",
+          "quantity": "Quantity",
+          "amount": "Amount",
+          "internalNote": "Internal"
+        },
+        "rows": [
+          {
+            "description": "Precision widget",
+            "quantity": 2,
+            "amount": 1234.5,
+            "internalNote": "not rendered"
+          },
+          {
+            "description": "Service adjustment",
+            "quantity": 1,
+            "amount": 67.89,
+            "internalNote": "not rendered"
+          }
+        ]
+      },
+      "approval": {
+        "signature": null
+      }
+    }
+  },
+  "expected": {
+    "visibleColumnIds": [
+      "description",
+      "quantity",
+      "amount"
+    ],
+    "headers": [
+      "Description",
+      "Quantity",
+      "Amount"
+    ],
+    "columnBudgetMm": 177,
+    "columnWidthsMm": [
+      72.924,
+      45.135,
+      58.941
+    ],
+    "paddingMm": 1.5,
+    "paddingCssPx": 5.669291338582677,
+    "paddingPdfPoints": 4.251968503937008,
+    "iconSizePt": 18,
+    "signaturePlaceholderColorToken": "{token.color.border}"
+  }
+}

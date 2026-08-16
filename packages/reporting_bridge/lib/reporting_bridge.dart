@@ -1,0 +1,33 @@
+/// Typed bridge contract between native host and Flutter presenter.
+library;
+
+export 'src/bridge_boot_payload.dart';
+export 'src/bridge_cache_namespace.dart';
+export 'src/bridge_call_envelope.dart';
+export 'src/bridge_client.dart';
+export 'src/bridge_config.dart';
+export 'src/bridge_contract.dart';
+export 'src/bridge_export_callback.dart';
+export 'src/bridge_headers.dart';
+export 'src/bridge_identity_context.dart';
+export 'src/bridge_inline_session_payload.dart';
+export 'src/bridge_local_server.dart';
+export 'src/bridge_methods.dart';
+export 'src/bridge_presenter_cache.dart';
+export 'src/bridge_presenter_bundle_contract.dart';
+export 'src/bridge_presenter_server.dart';
+export 'src/bridge_presenter_session.dart';
+export 'src/bridge_runtime_controller.dart';
+export 'src/bridge_runtime_error.dart';
+export 'src/bridge_runtime_session.dart';
+export 'src/bridge_runtime_storage.dart';
+export 'src/bridge_selected_template.dart';
+export 'src/bridge_semantic_version.dart';
+export 'src/bridge_server_endpoints.dart';
+export 'src/bridge_status.dart';
+export 'src/bridge_template_cache.dart';
+export 'src/bridge_template_query.dart';
+export 'src/bridge_template_sync.dart';
+export 'src/bridge_web_channel.dart';
+export 'src/bridge_web_export_transport.dart';
+export 'src/bridge_web_lifecycle.dart';

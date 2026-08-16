@@ -1,0 +1,34 @@
+name: reporting_bridge_flutter
+description: Flutter workflow and default UI for Ultimate Report Builder Reporting Bridge.
+publish_to: "none"
+version: 1.0.0
+
+environment:
+  sdk: ^3.9.0
+  flutter: ">=3.35.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  reporting_bridge:
+    path: ../reporting_bridge
+  flutter_inappwebview: ^6.1.5
+  archive: 4.0.9
+  share_plus: 12.0.1
+  file_picker: ^10.3.3
+  path_provider: ^2.1.5
+  printing: ^5.14.2
+  shared_preferences: ^2.3.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  plugin:
+    platforms:
+      android:
+        package: com.ultimate.reportbuilder.reporting_bridge_flutter
+        pluginClass: ReportingBridgeFlutterPlugin

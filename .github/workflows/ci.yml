@@ -1,0 +1,79 @@
+name: Reporting Bridge CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: reporting-bridge-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: '3.44.6'
+
+jobs:
+  reporting-bridge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Install dependencies
+        working-directory: packages/reporting_bridge
+        run: dart pub get
+      - name: Check formatting
+        working-directory: packages/reporting_bridge
+        run: dart format --output=none --set-exit-if-changed lib test
+      - name: Analyze
+        working-directory: packages/reporting_bridge
+        run: dart analyze
+      - name: Test
+        working-directory: packages/reporting_bridge
+        run: dart test
+
+  reporting-bridge-flutter:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Install dependencies
+        working-directory: packages/reporting_bridge_flutter
+        run: flutter pub get
+      - name: Check formatting
+        working-directory: packages/reporting_bridge_flutter
+        run: dart format --output=none --set-exit-if-changed lib test
+      - name: Analyze
+        working-directory: packages/reporting_bridge_flutter
+        run: flutter analyze
+      - name: Test
+        working-directory: packages/reporting_bridge_flutter
+        run: flutter test
+
+  minimal-host:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Install dependencies
+        working-directory: example/minimal_host
+        run: flutter pub get
+      - name: Analyze
+        working-directory: example/minimal_host
+        run: flutter analyze

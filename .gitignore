@@ -1,0 +1,45 @@
+# OS and editor
+.DS_Store
+Thumbs.db
+.idea/
+.history/
+*.swp
+*.iml
+
+# Dart / Flutter
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.packages
+**/.pub-cache/
+**/.pub/
+**/build/
+**/doc/api/
+**/ios/Flutter/.last_build_id
+**/coverage/
+
+# Android
+**/android/.gradle/
+**/android/local.properties
+**/android/**/GeneratedPluginRegistrant.java
+
+# iOS / macOS
+**/ios/Pods/
+**/ios/.symlinks/
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/flutter_export_environment.sh
+**/ios/Flutter/ephemeral/
+**/macos/Flutter/ephemeral/
+**/DerivedData/
+**/DerivedData2/
+
+# Secrets
+**/.env
+**/.env.*
+!**/.env.example
+
+# Logs
+*.log
+*.tmp
