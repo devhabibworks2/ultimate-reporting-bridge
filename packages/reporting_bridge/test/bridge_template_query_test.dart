@@ -49,6 +49,36 @@ void main() {
       });
     });
 
+    test('accepts hyphenated and mixed-separator system codes', () {
+      final hyphenated = TemplateQueryRequest(systemCode: ' SKEY-POS ');
+      final mixed = TemplateQueryRequest(systemCode: 'alpha-beta_gamma');
+
+      expect(hyphenated.systemCode, 'skey-pos');
+      expect(hyphenated.toJson()['systemCode'], 'skey-pos');
+      expect(mixed.systemCode, 'alpha-beta_gamma');
+    });
+
+    test('rejects malformed system code separators', () {
+      for (final invalid in <String>[
+        '-skey',
+        'skey-',
+        'skey--pos',
+        '_skey',
+        'skey_',
+        'skey__pos',
+        'skey-_pos',
+        'skey_-pos',
+        '',
+        '   ',
+      ]) {
+        expect(
+          () => TemplateQueryRequest(systemCode: invalid),
+          throwsArgumentError,
+          reason: invalid,
+        );
+      }
+    });
+
     test('defaults every missing filter to all', () {
       final request = TemplateQueryRequest(systemCode: 'erp');
 
