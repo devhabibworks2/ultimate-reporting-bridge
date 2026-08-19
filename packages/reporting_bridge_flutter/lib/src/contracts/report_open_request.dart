@@ -40,6 +40,7 @@ final class ReportOpenRequest {
     this.featuresOverride,
     this.actionPolicy = const ReportActionPolicy(),
     this.externalPrint,
+    this.directPrintAfterSave = false,
   }) : seedData = snapshotJsonObject(seedData),
        reportName = _trimmedOrNull(reportName),
        requestId = _trimmedOrNull(requestId),
@@ -72,12 +73,14 @@ final class ReportOpenRequest {
   final BridgeUiFeatures? featuresOverride;
   final ReportActionPolicy actionPolicy;
   final HostExternalPrintRequest? externalPrint;
+  final bool directPrintAfterSave;
 
   ReportOpenRequest copyWith({
     BridgeUiFeatures? featuresOverride,
     ReportActionPolicy? actionPolicy,
     ReportEntryPolicy? entryPolicy,
     String? localeOverride,
+    bool? directPrintAfterSave,
   }) => ReportOpenRequest(
     seedData: seedData,
     selectedTemplateCriteria: selectedTemplateCriteria,
@@ -92,6 +95,7 @@ final class ReportOpenRequest {
     featuresOverride: featuresOverride ?? this.featuresOverride,
     actionPolicy: actionPolicy ?? this.actionPolicy,
     externalPrint: externalPrint,
+    directPrintAfterSave: directPrintAfterSave ?? this.directPrintAfterSave,
   );
 }
 

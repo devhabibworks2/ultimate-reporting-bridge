@@ -58,6 +58,45 @@ void main() {
     },
   );
 
+  test(
+    'directPrintAfterSave defaults false and copyWith preserves overrides',
+    () {
+      final identity = const ReportIdentity(userId: 'u1');
+      final criteria = SelectedTemplateCriteria(
+        reportType: UrbReportType.salesInvoice,
+        identity: identity,
+      );
+      final sync = TemplateSyncRequest(
+        systemCode: UrbSystem.motakamelTransactions,
+        identity: identity,
+      );
+
+      final implicit = ReportOpenRequest(
+        seedData: const <String, dynamic>{'id': 1},
+        selectedTemplateCriteria: criteria,
+        templateSyncRequest: sync,
+      );
+      final explicit = ReportOpenRequest(
+        seedData: const <String, dynamic>{'id': 2},
+        selectedTemplateCriteria: criteria,
+        templateSyncRequest: sync,
+        directPrintAfterSave: true,
+      );
+
+      expect(implicit.directPrintAfterSave, isFalse);
+      expect(explicit.directPrintAfterSave, isTrue);
+      expect(explicit.copyWith().directPrintAfterSave, isTrue);
+      expect(
+        explicit.copyWith(directPrintAfterSave: false).directPrintAfterSave,
+        isFalse,
+      );
+      expect(
+        implicit.copyWith(directPrintAfterSave: true).directPrintAfterSave,
+        isTrue,
+      );
+    },
+  );
+
   test('TemplateSyncRequest defaults filter to core TemplateSyncFilter', () {
     final sync = TemplateSyncRequest(
       systemCode: UrbSystem.motakamelTransactions,

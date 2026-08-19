@@ -79,6 +79,7 @@ void main() {
     );
 
     expect(request.reportType, UrbReportType.salesInvoice);
+    expect(request.directPrintAfterSave, isFalse);
     expect(
       request.selectedTemplateCriteria.reportType,
       UrbReportType.salesInvoice,

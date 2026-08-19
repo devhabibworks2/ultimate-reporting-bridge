@@ -29,11 +29,13 @@ void main() {
     List<CachedTemplate>? templates,
     PresenterModePreference? mode,
     ReportFilePlatform? filePlatform,
+    ReportPrintPlatform? printPlatform,
     ReportSupportSharePlatform? supportSharePlatform,
     PresenterSurfaceBinding? surfaceBinding,
     Duration renderTimeout = const Duration(seconds: 30),
     BridgeUiFeatures features = const BridgeUiFeatures(),
     ReportEntryPolicy entryPolicy = ReportEntryPolicy.alwaysPrepare,
+    bool directPrintAfterSave = false,
     int systemId = 1,
   }) {
     bridge.templates = templates ?? <CachedTemplate>[_template('t1')];
@@ -45,7 +47,7 @@ void main() {
         reportType: 'sales_invoice',
         presenterMode: mode,
         entryPolicy: entryPolicy,
-      ),
+      ).copyWith(directPrintAfterSave: directPrintAfterSave),
       runtime: ReportFlowRuntime(
         connection: ReportServerConnection(
           endpoints: ReportServerEndpoints.deployed(
@@ -56,6 +58,7 @@ void main() {
         bridgeClient: bridge,
         preferences: preferences,
         filePlatform: filePlatform ?? _FakeFilePlatform(),
+        printPlatform: printPlatform ?? const UnsupportedReportPrintPlatform(),
         supportSharePlatform:
             supportSharePlatform ??
             const UnsupportedReportSupportSharePlatform(),
@@ -93,6 +96,30 @@ void main() {
     expect(controller.value.presenterLaunch, isNotNull);
     expect(bridge.prepareCalls, 1);
   });
+
+  test(
+    'directPrintAfterSave remains inert and does not bypass Preview',
+    () async {
+      preferences.valuesBySystem['legacy_system_1'] =
+          const ReportFlowPreferences(
+            templateId: 't1',
+            mode: PresenterModePreference.online,
+          );
+      final printer = _CountingPrintPlatform();
+      final controller = createController(
+        entryPolicy: ReportEntryPolicy.smart,
+        directPrintAfterSave: true,
+        printPlatform: printer,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      expect(controller.value.stage, ReportFlowStage.previewing);
+      expect(controller.value.presenterLaunch, isNotNull);
+      expect(printer.calls, 0);
+    },
+  );
 
   test(
     'smart entry opens Preview for a valid offline default and ready bundle',
@@ -1346,6 +1373,16 @@ CachedTemplate _sizedTemplate(String id, String size) {
       'elements': const <dynamic>[],
     },
   );
+}
+
+class _CountingPrintPlatform implements ReportPrintPlatform {
+  int calls = 0;
+
+  @override
+  Future<ReportPrintResult> printPdf(ReportPrintRequest request) async {
+    calls += 1;
+    return const ReportPrintResult.submitted();
+  }
 }
 
 class _FakeBridgeClient extends ReportingBridgeClient {
