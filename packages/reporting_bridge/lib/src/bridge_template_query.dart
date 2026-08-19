@@ -83,7 +83,9 @@ final class TemplateQueryRequest {
     if (normalizedSystemCode.isEmpty) {
       throw ArgumentError.value(systemCode, 'systemCode', 'Must not be empty.');
     }
-    if (!RegExp(r'^[a-z0-9]+(?:_[a-z0-9]+)*$').hasMatch(normalizedSystemCode)) {
+    if (!RegExp(
+      r'^[a-z0-9]+(?:[-_][a-z0-9]+)*$',
+    ).hasMatch(normalizedSystemCode)) {
       throw ArgumentError.value(
         systemCode,
         'systemCode',
