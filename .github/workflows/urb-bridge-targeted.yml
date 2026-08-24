@@ -4,25 +4,50 @@ on:
   pull_request:
     paths:
       - packages/reporting_bridge_flutter/lib/src/support/report_support_package.dart
+      - packages/reporting_bridge_flutter/lib/src/flow/report_flow_controller_base.dart
       - packages/reporting_bridge_flutter/test/support/report_support_package_test.dart
+      - packages/reporting_bridge_flutter/test/flow/report_flow_controller_test.dart
       - packages/reporting_bridge_flutter/pubspec.yaml
+      - packages/reporting_bridge_flutter/pubspec.lock
       - .github/workflows/urb-bridge-targeted.yml
   workflow_dispatch:
 
 jobs:
-  support-package:
+  bridge-verification:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref || github.ref }}
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.44.6'
           channel: stable
           cache: true
-      - name: Install dependencies
+      - name: Install Flutter package dependencies
         working-directory: packages/reporting_bridge_flutter
         run: flutter pub get
-      - name: Run URB support package test
+      - name: Verify formatting of feature-touched Dart files
         working-directory: packages/reporting_bridge_flutter
-        run: flutter test test/support/report_support_package_test.dart
+        run: |
+          dart format --output=none --set-exit-if-changed \
+            lib/src/support/report_support_package.dart \
+            lib/src/flow/report_flow_controller_base.dart \
+            test/support/report_support_package_test.dart \
+            test/flow/report_flow_controller_test.dart
+      - name: Analyze Flutter package
+        working-directory: packages/reporting_bridge_flutter
+        run: flutter analyze
+      - name: Test Flutter package
+        working-directory: packages/reporting_bridge_flutter
+        run: flutter test
+      - name: Install core package dependencies
+        working-directory: packages/reporting_bridge
+        run: dart pub get
+      - name: Analyze core package
+        working-directory: packages/reporting_bridge
+        run: dart analyze
+      - name: Test core package
+        working-directory: packages/reporting_bridge
+        run: dart test
