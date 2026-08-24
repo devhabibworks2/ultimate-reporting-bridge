@@ -1,0 +1,28 @@
+name: URB Bridge Targeted
+
+on:
+  pull_request:
+    paths:
+      - packages/reporting_bridge_flutter/lib/src/support/report_support_package.dart
+      - packages/reporting_bridge_flutter/test/support/report_support_package_test.dart
+      - packages/reporting_bridge_flutter/pubspec.yaml
+      - .github/workflows/urb-bridge-targeted.yml
+  workflow_dispatch:
+
+jobs:
+  support-package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.6'
+          channel: stable
+          cache: true
+      - name: Install dependencies
+        working-directory: packages/reporting_bridge_flutter
+        run: flutter pub get
+      - name: Run URB support package test
+        working-directory: packages/reporting_bridge_flutter
+        run: flutter test test/support/report_support_package_test.dart
