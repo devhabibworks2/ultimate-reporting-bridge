@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
+import 'package:crypto/crypto.dart';
 import 'package:reporting_bridge/reporting_bridge.dart';
 
 import '../contracts/report_open_request.dart';
@@ -19,7 +20,7 @@ final class ReportSupportPackageBuilder {
 
   ReportSupportPackage build({
     required Map<String, dynamic> seedData,
-    required CachedTemplate? template,
+    required CachedTemplate template,
     required ReportFlowFailure? failure,
     required String systemCode,
     required String reportType,
@@ -36,59 +37,64 @@ final class ReportSupportPackageBuilder {
     DateTime? generatedAt,
   }) {
     final timestamp = (generatedAt ?? DateTime.now()).toUtc();
-    final archive = Archive();
-
-    void addJson(String filename, Object? value) {
-      archive.add(
-        ArchiveFile.string(
-          filename,
-          const JsonEncoder.withIndent('  ').convert(value),
-        ),
-      );
-    }
-
-    addJson('error.json', _errorJson(failure));
-    addJson('template.json', _templateJson(template));
-    addJson('seed_data.json', _sanitizeDiagnosticValue(seedData));
-    addJson('system.json', <String, Object?>{
-      'systemCode': systemCode,
-      'reportType': reportType,
-      if (reportName != null) 'reportName': reportName,
-      if (requestId != null) 'requestId': requestId,
-      if (userId != null) 'userId': userId,
-      if (branchId != null) 'branchId': branchId,
-      if (systemUnit != null) 'systemUnit': systemUnit,
-      if (customType != null) 'customType': customType,
-      'presenterMode': presenterMode.name,
-      if (locale != null) 'locale': locale,
-    });
-    addJson(
-      'presenter.json',
-      _presenterJson(
-        presenterLaunch: presenterLaunch,
-        presenterManifest: presenterManifest,
+    final payloads = <String, Uint8List>{
+      'template.json': _jsonBytes(template.document),
+      'seed_data.json': _jsonBytes(_sanitizeDiagnosticValue(seedData)),
+      'diagnostics/error.json': _jsonBytes(_errorJson(failure)),
+      'diagnostics/system.json': _jsonBytes(
+        _sanitizeDiagnosticValue(<String, Object?>{
+          'systemCode': systemCode,
+          'reportType': reportType,
+          if (reportName != null) 'reportName': reportName,
+          if (requestId != null) 'requestId': requestId,
+          if (userId != null) 'userId': userId,
+          if (branchId != null) 'branchId': branchId,
+          if (systemUnit != null) 'systemUnit': systemUnit,
+          if (customType != null) 'customType': customType,
+          'presenterMode': presenterMode.name,
+          if (locale != null) 'locale': locale,
+        }),
       ),
-    );
-    addJson('manifest.json', <String, Object?>{
-      'format': 'urb-report-support-package',
-      'version': 1,
+      'diagnostics/presenter.json': _jsonBytes(
+        _sanitizeDiagnosticValue(
+          _presenterJson(
+            presenterLaunch: presenterLaunch,
+            presenterManifest: presenterManifest,
+          ),
+        ),
+      ),
+      'diagnostics/bridge.json': _jsonBytes(
+        _sanitizeDiagnosticValue(_bridgeJson(template)),
+      ),
+    };
+
+    final manifest = <String, Object?>{
+      'format': 'urb-template-package',
+      'packageVersion': 1,
       'generatedAt': timestamp.toIso8601String(),
-      'bridgeVersion': BridgeContract.implementationVersion,
-      'bridgePayloadVersion': BridgeContract.payloadVersion,
-      'containsSeedData': true,
-      'excluded': <String>[
-        'authorization headers',
-        'cookies',
-        'credentials',
-        'template query extra',
-        'external print extra',
-      ],
-    });
+      'producer': 'bridge',
+      'packageKind': 'diagnostics',
+      'sourceSystemCode': systemCode,
+      'seedData': const <String, Object?>{'mode': 'redacted'},
+      'integrity': <String, Object?>{
+        'algorithm': 'sha256',
+        'files': <String, String>{
+          for (final entry in payloads.entries)
+            entry.key: sha256.convert(entry.value).toString(),
+        },
+      },
+    };
+
+    final archive = Archive()
+      ..add(_archiveFile('manifest.json', _jsonBytes(manifest)));
+    for (final entry in payloads.entries) {
+      archive.add(_archiveFile(entry.key, entry.value));
+    }
 
     final bytes = ZipEncoder().encodeBytes(archive);
     return ReportSupportPackage(
       bytes: bytes,
-      filename: 'urb_report_issue_${_filenameTimestamp(timestamp)}.zip',
+      filename: 'urb_report_issue_${_filenameTimestamp(timestamp)}.urb',
     );
   }
 
@@ -109,24 +115,26 @@ final class ReportSupportPackageBuilder {
     };
   }
 
-  Map<String, Object?>? _templateJson(CachedTemplate? template) {
-    if (template == null) return null;
+  Map<String, Object?> _bridgeJson(CachedTemplate template) {
     return <String, Object?>{
-      'id': template.id,
-      'type': template.type,
-      if (template.code != null) 'code': template.code,
-      if (template.name != null) 'name': template.name,
-      if (template.description != null) 'description': template.description,
-      if (template.publishedVersionNo != null)
-        'publishedVersionNo': template.publishedVersionNo,
-      if (template.version != null) 'version': template.version,
-      if (template.minPresenterVersion != null)
-        'minPresenterVersion': template.minPresenterVersion,
-      if (template.minBridgeVersion != null)
-        'minBridgeVersion': template.minBridgeVersion,
-      'metadata': template.metadata,
-      'compatibility': template.compatibility,
-      'document': template.document,
+      'bridgeVersion': BridgeContract.implementationVersion,
+      'bridgePayloadVersion': BridgeContract.payloadVersion,
+      'template': <String, Object?>{
+        'id': template.id,
+        'type': template.type,
+        if (template.code != null) 'code': template.code,
+        if (template.name != null) 'name': template.name,
+        if (template.description != null) 'description': template.description,
+        if (template.publishedVersionNo != null)
+          'publishedVersionNo': template.publishedVersionNo,
+        if (template.version != null) 'version': template.version,
+        if (template.minPresenterVersion != null)
+          'minPresenterVersion': template.minPresenterVersion,
+        if (template.minBridgeVersion != null)
+          'minBridgeVersion': template.minBridgeVersion,
+        'metadata': template.metadata,
+        'compatibility': template.compatibility,
+      },
     };
   }
 
@@ -153,6 +161,16 @@ final class ReportSupportPackageBuilder {
       },
     };
   }
+}
+
+ArchiveFile _archiveFile(String name, Uint8List bytes) {
+  return ArchiveFile(name, bytes.length, bytes);
+}
+
+Uint8List _jsonBytes(Object? value) {
+  return Uint8List.fromList(
+    utf8.encode(const JsonEncoder.withIndent('  ').convert(value)),
+  );
 }
 
 Object? _sanitizeDiagnosticValue(Object? value, {String? key}) {
