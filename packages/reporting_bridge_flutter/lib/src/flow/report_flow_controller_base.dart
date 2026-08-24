@@ -1241,9 +1241,17 @@ class ReportFlowControllerImpl
 
     _set(_value.copyWith(supportShare: ReportOperationStatus.running));
     try {
+      final template = _value.committedTemplate ?? _value.selectedTemplate;
+      if (template == null) {
+        throw const ReportFlowFailure(
+          code: ReportFlowFailureCode.developmentSupportFailed,
+          diagnostic:
+              'A selected template is required to create a URB package.',
+        );
+      }
       final package = const ReportSupportPackageBuilder().build(
         seedData: request.seedData,
-        template: _value.committedTemplate ?? _value.selectedTemplate,
+        template: template,
         failure: _value.failure,
         systemCode: request.templateSyncRequest.systemCode.value,
         reportType: request.reportType.value,

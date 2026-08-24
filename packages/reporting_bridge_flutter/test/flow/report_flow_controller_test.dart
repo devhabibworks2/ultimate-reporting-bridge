@@ -1094,7 +1094,7 @@ void main() {
   });
 
   test(
-    'development support shares a ZIP through the injected platform',
+    'development support shares a URB package through the injected platform',
     () async {
       final sharePlatform = _FakeSupportSharePlatform();
       final controller = createController(supportSharePlatform: sharePlatform);
@@ -1106,8 +1106,35 @@ void main() {
       expect(sharePlatform.calls, 1);
       expect(sharePlatform.lastBytes, isNotEmpty);
       expect(sharePlatform.lastFilename, startsWith('urb_report_issue_'));
-      expect(sharePlatform.lastFilename, endsWith('.zip'));
+      expect(sharePlatform.lastFilename, endsWith('.urb'));
       expect(controller.value.supportShare, ReportOperationStatus.succeeded);
+    },
+  );
+
+  test(
+    'development support fails without a selected template and does not share',
+    () async {
+      final sharePlatform = _FakeSupportSharePlatform();
+      final controller = createController(
+        templates: const <CachedTemplate>[],
+        supportSharePlatform: sharePlatform,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      await expectLater(
+        controller.shareDevelopmentSupportPackage(),
+        throwsA(
+          isA<ReportFlowFailure>().having(
+            (failure) => failure.code,
+            'code',
+            ReportFlowFailureCode.developmentSupportFailed,
+          ),
+        ),
+      );
+      expect(sharePlatform.calls, 0);
+      expect(controller.value.supportShare, ReportOperationStatus.failed);
     },
   );
 
