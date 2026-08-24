@@ -1,0 +1,104 @@
+name: URB Bridge Interop Artifact
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/urb-interop-artifact.yml
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.6'
+          channel: stable
+          cache: true
+      - name: Install dependencies
+        working-directory: packages/reporting_bridge_flutter
+        run: flutter pub get
+      - name: Generate deterministic Bridge URB package
+        working-directory: packages/reporting_bridge_flutter
+        run: |
+          cat > test/support/_urb_interop_generate_test.dart <<'DART'
+          import 'dart:io';
+          import 'package:flutter_test/flutter_test.dart';
+          import 'package:reporting_bridge_flutter/reporting_bridge_flutter.dart';
+          import 'package:reporting_bridge_flutter/src/support/report_support_package.dart';
+
+          void main() {
+            test('generate deterministic URB interop artifact', () {
+              const document = <String, dynamic>{
+                'schemaVersion': '1.0.0',
+                'meta': <String, dynamic>{
+                  'id': 'interop-doc',
+                  'code': 'INTEROP',
+                  'name': 'Interop Invoice',
+                  'family': 'sales_invoice',
+                  'status': 'draft',
+                  'version': 1,
+                  'description': '',
+                  'tags': <dynamic>[],
+                },
+                'page': <String, dynamic>{
+                  'layout': 'Pages',
+                  'unit': 'mm',
+                  'size': 'A4',
+                  'width': 210,
+                  'height': 297,
+                  'orientation': 'portrait',
+                  'language': 'en',
+                  'direction': 'ltr',
+                },
+                'styleTokens': <String, dynamic>{},
+                'assets': <dynamic>[],
+                'layers': <dynamic>[
+                  <String, dynamic>{
+                    'id': 'main',
+                    'name': 'Main',
+                    'visible': true,
+                    'locked': false,
+                    'elementIds': <dynamic>[],
+                  },
+                ],
+                'elements': <dynamic>[],
+              };
+              final package = const ReportSupportPackageBuilder().build(
+                seedData: <String, dynamic>{
+                  'CustomerName': 'Interop Customer',
+                  'token': 'must-redact',
+                },
+                template: const CachedTemplate(
+                  id: 'interop-template',
+                  type: 'sales_invoice',
+                  code: 'INTEROP',
+                  name: 'Interop Invoice',
+                  publishedVersionNo: 1,
+                  version: '1',
+                  document: document,
+                ),
+                failure: null,
+                systemCode: 'ERP',
+                reportType: 'sales_invoice',
+                presenterMode: PresenterModePreference.online,
+                generatedAt: DateTime.utc(2026, 8, 25, 0, 0, 0),
+              );
+              final out = File('build/bridge-urb-v1.urb');
+              out.parent.createSync(recursive: true);
+              out.writeAsBytesSync(package.bytes);
+              expect(out.lengthSync(), greaterThan(0));
+            });
+          }
+          DART
+          flutter test test/support/_urb_interop_generate_test.dart
+          rm test/support/_urb_interop_generate_test.dart
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bridge-urb-v1
+          path: packages/reporting_bridge_flutter/build/bridge-urb-v1.urb
+          if-no-files-found: error
+          retention-days: 1
