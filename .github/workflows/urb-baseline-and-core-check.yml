@@ -1,0 +1,48 @@
+name: URB Baseline And Core Check
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/urb-baseline-and-core-check.yml
+
+jobs:
+  baseline-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cb3994cdb1ee3399c7a196e0988ed31b98bc73f0
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.6'
+          channel: stable
+          cache: true
+      - name: Install dependencies
+        working-directory: packages/reporting_bridge_flutter
+        run: flutter pub get
+      - name: Reproduce baseline UI test status
+        working-directory: packages/reporting_bridge_flutter
+        run: flutter test test/ui/report_flow_screen_test.dart
+
+  core-package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.6'
+          channel: stable
+          cache: true
+      - name: Install core dependencies
+        working-directory: packages/reporting_bridge
+        run: dart pub get
+      - name: Analyze core package
+        working-directory: packages/reporting_bridge
+        run: dart analyze
+      - name: Test core package
+        working-directory: packages/reporting_bridge
+        run: dart test
