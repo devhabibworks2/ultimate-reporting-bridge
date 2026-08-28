@@ -1999,7 +1999,8 @@ class _SettingsActionTile extends StatelessWidget {
                 style: TextStyle(color: scheme.onSurfaceVariant),
               ),
             ),
-      trailing: Icon(Icons.chevron_right_rounded,
+      trailing: Icon(
+        Icons.chevron_right_rounded,
         color: destructive
             ? scheme.error.withValues(alpha: 0.82)
             : scheme.onSurfaceVariant,
