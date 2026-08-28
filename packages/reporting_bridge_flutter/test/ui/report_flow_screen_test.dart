@@ -77,20 +77,32 @@ void main() {
     await _pumpFlow(tester, controller);
 
     expect(find.text('Step 1 of 2'), findsOneWidget);
-    expect(find.text('Report templates'), findsOneWidget);
-    expect(find.text('Update templates'), findsOneWidget);
+    expect(find.text('templates'), findsOneWidget);
+    final templateCard = find
+        .ancestor(of: find.text('templates'), matching: find.byType(Card))
+        .first;
+    expect(
+      find.descendant(of: templateCard, matching: find.text('Update')),
+      findsOneWidget,
+    );
     final resourcesScrollable = find.descendant(
       of: find.byType(ListView),
       matching: find.byType(Scrollable),
     );
     await tester.scrollUntilVisible(
-      find.text('Offline Presenter', skipOffstage: false),
+      find.text('Presenter', skipOffstage: false),
       80,
       scrollable: resourcesScrollable,
     );
     await tester.pumpAndSettle();
-    expect(find.text('Offline Presenter'), findsOneWidget);
-    expect(find.text('Update Presenter'), findsOneWidget);
+    expect(find.text('Presenter'), findsOneWidget);
+    final presenterCard = find
+        .ancestor(of: find.text('Presenter'), matching: find.byType(Card))
+        .first;
+    expect(
+      find.descendant(of: presenterCard, matching: find.text('Update')),
+      findsOneWidget,
+    );
     expect(find.text('Synchronize templates'), findsNothing);
     expect(find.text('Download Presenter'), findsNothing);
 
@@ -232,8 +244,8 @@ void main() {
     await _pumpFlow(tester, controller);
 
     expect(find.text('الخطوة ١ من ٢'), findsOneWidget);
-    expect(find.text('قوالب التقرير'), findsOneWidget);
-    expect(find.text('استخدام العارض دون اتصال'), findsOneWidget);
+    expect(find.text('القوالب'), findsOneWidget);
+    expect(find.text('استخدام التقارير دون اتصال'), findsOneWidget);
     final directionality = tester.widget<Directionality>(
       find
           .ancestor(
@@ -255,9 +267,7 @@ void main() {
     await _pumpFlow(tester, controller);
 
     expect(
-      find.text(
-        'Updates all available report templates for the selected system and stores them locally.',
-      ),
+      find.text('Updates all report templates and stores them locally.'),
       findsOneWidget,
     );
     expect(
@@ -277,12 +287,7 @@ void main() {
     );
     await _pumpFlow(tester, controller);
 
-    expect(
-      find.text(
-        'Updates templates supported by this application for the selected system.',
-      ),
-      findsOneWidget,
-    );
+    expect(find.text('Updates templates.'), findsOneWidget);
   });
 
   testWidgets(
@@ -294,12 +299,7 @@ void main() {
       );
       await _pumpFlow(tester, controller);
 
-      expect(
-        find.text(
-          'Updates templates supported by this application for the selected system.',
-        ),
-        findsOneWidget,
-      );
+      expect(find.text('Updates templates.'), findsOneWidget);
       expect(
         find.text('Cached for this app: 7 · Compatible with current report: 1'),
         findsOneWidget,
@@ -325,10 +325,7 @@ void main() {
       findsOneWidget,
     );
     final templateCard = find
-        .ancestor(
-          of: find.text('Report templates'),
-          matching: find.byType(Card),
-        )
+        .ancestor(of: find.text('templates'), matching: find.byType(Card))
         .first;
     expect(
       find.descendant(of: templateCard, matching: find.text('Ready')),
@@ -340,16 +337,13 @@ void main() {
       matching: find.byType(Scrollable),
     );
     await tester.scrollUntilVisible(
-      find.text('Offline Presenter', skipOffstage: false),
+      find.text('Presenter', skipOffstage: false),
       80,
       scrollable: resourcesScrollable,
     );
     await tester.pumpAndSettle();
     final presenterCard = find
-        .ancestor(
-          of: find.text('Offline Presenter'),
-          matching: find.byType(Card),
-        )
+        .ancestor(of: find.text('Presenter'), matching: find.byType(Card))
         .first;
     expect(
       find.descendant(of: presenterCard, matching: find.text('Ready')),
@@ -528,7 +522,13 @@ void main() {
 
     expect(find.text('Presenter update failed.'), findsOneWidget);
     expect(find.text('Template update failed.'), findsNothing);
-    expect(find.text('Update Presenter'), findsOneWidget);
+    final presenterCard = find
+        .ancestor(of: find.text('Presenter'), matching: find.byType(Card))
+        .first;
+    expect(
+      find.descendant(of: presenterCard, matching: find.text('Update')),
+      findsOneWidget,
+    );
     expect(
       find.byKey(const ValueKey<String>('presenter-resource-error-more')),
       findsOneWidget,
@@ -1021,7 +1021,10 @@ void main() {
         find.textContaining('Unable to render text element.'),
         findsOneWidget,
       );
-      expect(find.text('Update templates'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey<String>('render-failure-update-templates')),
+        findsOneWidget,
+      );
       expect(find.text('Change template'), findsOneWidget);
       expect(find.text('Retry'), findsNothing);
       expect(find.text('Show details'), findsNothing);
@@ -1032,7 +1035,9 @@ void main() {
       expect(find.byType(PresenterActionDock), findsNothing);
       expect(find.byIcon(Icons.warning_rounded), findsOneWidget);
 
-      await tester.tap(find.text('Update templates'));
+      await tester.tap(
+        find.byKey(const ValueKey<String>('render-failure-update-templates')),
+      );
       await tester.pumpAndSettle();
       expect(controller.value.stage, ReportFlowStage.preparingResources);
       expect(
@@ -1189,7 +1194,10 @@ void main() {
         findsOneWidget,
       );
       expect(find.byType(SingleChildScrollView), findsWidgets);
-      expect(find.text('Update templates'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey<String>('render-failure-update-templates')),
+        findsOneWidget,
+      );
       expect(find.text('Change template'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
