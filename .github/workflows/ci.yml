@@ -77,3 +77,56 @@ jobs:
       - name: Analyze
         working-directory: example/minimal_host
         run: flutter analyze
+
+  publish-authority:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    needs:
+      - reporting-bridge
+      - reporting-bridge-flutter
+      - minimal-host
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Publish exact green owner-CI authority
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AUTHORITY_REPOSITORY: ${{ github.repository }}
+          AUTHORITY_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          remote="https://x-access-token:${GH_TOKEN}@github.com/${AUTHORITY_REPOSITORY}.git"
+          root="$(mktemp -d)"
+          trap 'rm -rf "$root"' EXIT
+          if git ls-remote --exit-code --heads "$remote" refs/heads/ci-authority >/dev/null 2>&1; then
+            git clone --depth 1 --branch ci-authority "$remote" "$root/authority"
+          else
+            mkdir -p "$root/authority"
+            git -C "$root/authority" init
+            git -C "$root/authority" checkout --orphan ci-authority
+            git -C "$root/authority" remote add origin "$remote"
+          fi
+          mkdir -p "$root/authority/authority"
+          AUTHORITY_PATH="$root/authority/authority/${GITHUB_SHA}.json"; export AUTHORITY_PATH
+          python3 - <<'PY'
+          import json, os, pathlib
+          p={
+            'schema':1,
+            'repository':os.environ['AUTHORITY_REPOSITORY'],
+            'sourceSha':os.environ['AUTHORITY_SHA'],
+            'workflowPath':'.github/workflows/ci.yml',
+            'runId':int(os.environ['GITHUB_RUN_ID']),
+            'runAttempt':int(os.environ['GITHUB_RUN_ATTEMPT']),
+            'event':'push',
+            'branch':'main',
+            'requiredJobs':['reporting-bridge','reporting-bridge-flutter','minimal-host'],
+          }
+          pathlib.Path(os.environ['AUTHORITY_PATH']).write_text(json.dumps(p,indent=2,sort_keys=True)+'\n')
+          PY
+          git -C "$root/authority" config user.name github-actions
+          git -C "$root/authority" config user.email github-actions@github.com
+          git -C "$root/authority" add "authority/${GITHUB_SHA}.json"
+          if git -C "$root/authority" diff --cached --quiet; then exit 0; fi
+          git -C "$root/authority" commit -m "ci-authority: ${GITHUB_SHA}"
+          git -C "$root/authority" push origin HEAD:refs/heads/ci-authority
