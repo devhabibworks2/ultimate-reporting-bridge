@@ -168,6 +168,25 @@ void main() {
       expect(migrated?.systemCode, 'system-a');
     });
 
+    test('coded selection adopts catalog type when stored type is stale', () {
+      const coded = SelectedTemplate(
+        id: 'stale-id',
+        type: 'stale_invoice_type',
+        code: 'INV-A5-AR',
+        systemCode: 'system-a',
+      );
+      final migrated = SelectedTemplate.migrateLegacyId(
+        legacy: coded,
+        catalog: entriesFor(catalog),
+        systemCode: 'system-a',
+      );
+
+      expect(migrated?.id, '595');
+      expect(migrated?.type, 'sales_invoice');
+      expect(migrated?.code, 'INV-A5-AR');
+      expect(migrated?.systemCode, 'system-a');
+    });
+
     test('missing legacy id clears selection', () {
       const legacy = SelectedTemplate(id: '999', type: 'sales_invoice');
       final migrated = SelectedTemplate.migrateLegacyId(

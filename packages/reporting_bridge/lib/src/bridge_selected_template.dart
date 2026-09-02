@@ -125,8 +125,7 @@ class SelectedTemplate {
     if (existingCode != null && existingCode.isNotEmpty) {
       for (final entry in catalog) {
         if (entry.systemCode == normalizedSystemCode &&
-            entry.code == existingCode &&
-            entry.type == legacy.type) {
+            entry.code == existingCode) {
           return SelectedTemplate(
             id: entry.id,
             type: entry.type,
