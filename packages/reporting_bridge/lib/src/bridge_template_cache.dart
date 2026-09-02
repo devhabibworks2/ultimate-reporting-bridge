@@ -42,7 +42,11 @@ class CachedTemplate {
   final int? _legacyMinPresenterDevVersion;
   final int? _legacyMaxPresenterDevVersion;
 
-  SelectedTemplate get selectedTemplate => SelectedTemplate(id: id, type: type);
+  SelectedTemplate get selectedTemplate => SelectedTemplate(
+        id: id,
+        type: type,
+        code: templateCode,
+      );
 
   String get effectiveMinPresenterVersion {
     final canonical = minPresenterVersion?.trim();
@@ -444,12 +448,24 @@ class TemplateSelectionResolver {
       );
     }
     if (storedSelection != null && storedSelection.matchesType(reportType)) {
-      for (final template in compatible) {
-        if (template.id == storedSelection.id) {
-          return TemplateSelectionResult(
-            status: 'stored-selected',
-            template: template,
-          );
+      final storedCode = storedSelection.code?.trim();
+      if (storedCode != null && storedCode.isNotEmpty) {
+        for (final template in compatible) {
+          if (template.templateCode == storedCode) {
+            return TemplateSelectionResult(
+              status: 'stored-selected',
+              template: template,
+            );
+          }
+        }
+      } else {
+        for (final template in compatible) {
+          if (template.id == storedSelection.id) {
+            return TemplateSelectionResult(
+              status: 'stored-selected',
+              template: template,
+            );
+          }
         }
       }
     }
