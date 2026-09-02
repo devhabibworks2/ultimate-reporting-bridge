@@ -189,6 +189,14 @@ void main() {
             minPresenterDevVersion: 1,
           ),
         );
+        await cache.writeCatalogMetadata(
+          TemplateCatalogMetadata(
+            catalogRevision: 'test-revision',
+            systemCode: 'test-system',
+            filterFingerprint: 'test-filter',
+            extraFingerprint: 'test-extra',
+          ),
+        );
 
         final systemFiltered = await cache.listTemplates(
           type: 'invoice',
@@ -198,22 +206,33 @@ void main() {
 
         final stored = await resolver.resolveSelectedTemplate(
           reportType: 'invoice',
+          systemCode: 'test-system',
           presenterDevVersion: 1,
-          storedSelection: const SelectedTemplate(id: '34', type: 'invoice'),
+          storedSelection: const SelectedTemplate(
+            id: '34',
+            type: 'invoice',
+            systemCode: 'test-system',
+          ),
         );
         expect(stored.status, 'stored-selected');
         expect(stored.template?.id, '34');
 
         final wrongType = await resolver.resolveSelectedTemplate(
           reportType: 'receipt',
+          systemCode: 'test-system',
           presenterDevVersion: 1,
-          storedSelection: const SelectedTemplate(id: '34', type: 'invoice'),
+          storedSelection: const SelectedTemplate(
+            id: '34',
+            type: 'invoice',
+            systemCode: 'test-system',
+          ),
         );
         expect(wrongType.status, 'auto-selected');
         expect(wrongType.template?.id, '90');
 
         final many = await resolver.resolveSelectedTemplate(
           reportType: 'invoice',
+          systemCode: 'test-system',
           presenterDevVersion: 1,
         );
         expect(many.status, 'selection-required');
@@ -229,6 +248,7 @@ void main() {
 
       final none = await resolver.resolveSelectedTemplate(
         reportType: 'invoice',
+        systemCode: 'test-system',
         presenterDevVersion: 1,
       );
       expect(none.status, 'no-template');
@@ -244,8 +264,17 @@ void main() {
           minPresenterDevVersion: 4,
         ),
       );
+      await cache.writeCatalogMetadata(
+        TemplateCatalogMetadata(
+          catalogRevision: 'test-revision',
+          systemCode: 'test-system',
+          filterFingerprint: 'test-filter',
+          extraFingerprint: 'test-extra',
+        ),
+      );
       final incompatible = await resolver.resolveSelectedTemplate(
         reportType: 'invoice',
+        systemCode: 'test-system',
         presenterDevVersion: 1,
       );
       expect(incompatible.status, 'incompatible');

@@ -42,11 +42,8 @@ class CachedTemplate {
   final int? _legacyMinPresenterDevVersion;
   final int? _legacyMaxPresenterDevVersion;
 
-  SelectedTemplate get selectedTemplate => SelectedTemplate(
-        id: id,
-        type: type,
-        code: templateCode,
-      );
+  SelectedTemplate get selectedTemplate =>
+      SelectedTemplate(id: id, type: type, code: templateCode);
 
   String get effectiveMinPresenterVersion {
     final canonical = minPresenterVersion?.trim();
@@ -257,6 +254,7 @@ class TemplateCacheService {
   const TemplateCacheService({required this.cacheRoot});
 
   static const String _catalogMetadataFileName = '.catalog.json';
+  static const String _selectionFileName = '.selection.json';
 
   final Directory cacheRoot;
 
@@ -289,6 +287,66 @@ class TemplateCacheService {
     } finally {
       if (await temporary.exists()) await temporary.delete();
     }
+  }
+
+  Future<SelectedTemplate?> readSelectedTemplate() async {
+    final file = File('${cacheRoot.path}/$_selectionFileName');
+    if (!await file.exists()) return null;
+    try {
+      final decoded = jsonDecode(await file.readAsString());
+      if (decoded is! Map) return null;
+      return SelectedTemplate.fromMap(decoded);
+    } on FormatException {
+      return null;
+    } on FileSystemException {
+      return null;
+    }
+  }
+
+  Future<void> writeSelectedTemplate(SelectedTemplate selection) async {
+    await cacheRoot.create(recursive: true);
+    final file = File('${cacheRoot.path}/$_selectionFileName');
+    final temporary = File('${file.path}.tmp');
+    try {
+      await temporary.writeAsString(
+        jsonEncode(selection.toStorageMap()),
+        flush: true,
+      );
+      if (await file.exists()) await file.delete();
+      await temporary.rename(file.path);
+    } finally {
+      if (await temporary.exists()) await temporary.delete();
+    }
+  }
+
+  Future<void> clearSelectedTemplate() async {
+    final file = File('${cacheRoot.path}/$_selectionFileName');
+    if (await file.exists()) await file.delete();
+  }
+
+  Future<SelectedTemplate?> migrateSelectedTemplate({
+    required Iterable<CachedTemplate> catalog,
+    required String systemCode,
+  }) async {
+    final stored = await readSelectedTemplate();
+    final migrated = SelectedTemplate.migrateLegacyId(
+      legacy: stored,
+      catalog: catalog.map(
+        (template) => SelectedTemplateCatalogEntry(
+          id: template.id,
+          type: template.type,
+          code: template.templateCode,
+          systemCode: systemCode,
+        ),
+      ),
+      systemCode: systemCode,
+    );
+    if (migrated == null) {
+      await clearSelectedTemplate();
+    } else {
+      await writeSelectedTemplate(migrated);
+    }
+    return migrated;
   }
 
   Future<void> putTemplate(CachedTemplate template) async {
@@ -340,7 +398,9 @@ class TemplateCacheService {
     await for (final entity in cacheRoot.list(followLinks: false)) {
       if (entity is! File || !entity.path.endsWith('.json')) continue;
       if (entity.path.endsWith('/$_catalogMetadataFileName') ||
-          entity.path.endsWith('\\$_catalogMetadataFileName')) {
+          entity.path.endsWith('\\$_catalogMetadataFileName') ||
+          entity.path.endsWith('/$_selectionFileName') ||
+          entity.path.endsWith('\\$_selectionFileName')) {
         continue;
       }
       final template = await _readTemplateFile(entity);
@@ -419,6 +479,7 @@ class TemplateSelectionResolver {
 
   Future<TemplateSelectionResult> resolveSelectedTemplate({
     required String reportType,
+    required String systemCode,
     String? presenterVersion,
     int? presenterDevVersion,
     String bridgeVersion = BridgeContract.implementationVersion,
@@ -426,7 +487,14 @@ class TemplateSelectionResolver {
   }) async {
     final effectivePresenterVersion =
         presenterVersion ?? '${presenterDevVersion ?? 1}.0.0';
-    final templates = await cache.listTemplates(type: reportType);
+    final metadata = await cache.readCatalogMetadata();
+    final catalogMatchesSystem = metadata?.systemCode == systemCode;
+    final templates = catalogMatchesSystem
+        ? await cache.listTemplates(
+            type: reportType,
+            systemId: metadata?.systemId,
+          )
+        : const <CachedTemplate>[];
     final compatible = templates
         .where(
           (template) => template.isCompatibleWith(
@@ -447,7 +515,9 @@ class TemplateSelectionResolver {
         errorCode: BridgeRuntimeErrorCodes.presenterVersionTooOld,
       );
     }
-    if (storedSelection != null && storedSelection.matchesType(reportType)) {
+    if (storedSelection != null &&
+        storedSelection.matchesType(reportType) &&
+        storedSelection.systemCode == systemCode) {
       final storedCode = storedSelection.code?.trim();
       if (storedCode != null && storedCode.isNotEmpty) {
         for (final template in compatible) {

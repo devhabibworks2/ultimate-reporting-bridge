@@ -508,6 +508,7 @@ class PresenterTemplateSyncService {
     required List<CachedTemplate> downloaded,
     required TemplateCatalogMetadata metadata,
   }) async {
+    final storedSelection = await cache.readSelectedTemplate();
     final root = cache.cacheRoot;
     await root.parent.create(recursive: true);
     final token = DateTime.now().microsecondsSinceEpoch;
@@ -522,6 +523,13 @@ class PresenterTemplateSyncService {
       await stagedCache.putTemplate(template);
     }
     await stagedCache.writeCatalogMetadata(metadata);
+    if (storedSelection != null && metadata.systemCode != null) {
+      await stagedCache.writeSelectedTemplate(storedSelection);
+      await stagedCache.migrateSelectedTemplate(
+        catalog: downloaded,
+        systemCode: metadata.systemCode!,
+      );
+    }
 
     var originalMoved = false;
     var stagedInstalled = false;

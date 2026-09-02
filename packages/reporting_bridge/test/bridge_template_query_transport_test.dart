@@ -98,6 +98,64 @@ void main() {
   });
 
   test(
+    'catalog sync rewrites legacy selection on disk by system and code',
+    () async {
+      final root = await Directory.systemTemp.createTemp(
+        'bridge-query-selection-',
+      );
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() async {
+        await server.close(force: true);
+        if (await root.exists()) await root.delete(recursive: true);
+      });
+      server.listen((request) async {
+        await utf8.decoder.bind(request).join();
+        await _writeJson(
+          request,
+          _queryEnvelope(<Map<String, dynamic>>[
+            _queryTemplate('10', 7, 'sales_invoice'),
+          ]),
+        );
+      });
+
+      final query = TemplateQueryRequest(systemCode: 'motakamel_transactions');
+      final cacheRoot = bridgeTemplateCacheDirectoryForScope(
+        bridgeRoot: root,
+        scope: BridgeTemplateCacheScope(
+          apiBaseUrl: _api(server),
+          systemCode: query.systemCode,
+          identity: query.identity,
+          filter: query.filter,
+          extra: query.extra,
+        ),
+      );
+      final cache = TemplateCacheService(cacheRoot: cacheRoot);
+      await cache.writeSelectedTemplate(
+        const SelectedTemplate(id: '10', type: 'sales_invoice'),
+      );
+      final gateway = PresenterServerGateway(
+        apiBaseUrl: _api(server),
+        bridgeRoot: root,
+      );
+
+      await gateway.syncTemplates(query: query);
+
+      final persisted =
+          jsonDecode(
+                await File('${cacheRoot.path}/.selection.json').readAsString(),
+              )
+              as Map<String, dynamic>;
+      expect(persisted, <String, dynamic>{
+        'selectedTemplates': <String, dynamic>{
+          'type': 'sales_invoice',
+          'code': '10-code',
+          'systemCode': 'motakamel_transactions',
+        },
+      });
+    },
+  );
+
+  test(
     'maps backend errors and preserves the previous valid catalog',
     () async {
       final root = await Directory.systemTemp.createTemp('bridge-query-error-');
