@@ -26,6 +26,15 @@ class SelectedTemplate {
 
   bool matchesType(String reportType) => type == reportType;
 
+  bool get hasDurableIdentity {
+    final normalizedCode = code?.trim();
+    final normalizedSystemCode = systemCode?.trim();
+    return normalizedCode != null &&
+        normalizedCode.isNotEmpty &&
+        normalizedSystemCode != null &&
+        normalizedSystemCode.isNotEmpty;
+  }
+
   /// Preferred durable identity for persistence and display.
   String get durableIdentity {
     final value = code?.trim();
@@ -53,19 +62,18 @@ class SelectedTemplate {
   Map<String, dynamic> toStorageMap() {
     final normalizedCode = code?.trim();
     final normalizedSystemCode = systemCode?.trim();
-    if (normalizedCode != null &&
-        normalizedCode.isNotEmpty &&
-        normalizedSystemCode != null &&
-        normalizedSystemCode.isNotEmpty) {
-      return <String, dynamic>{
-        'selectedTemplates': <String, dynamic>{
-          'type': type,
-          'code': normalizedCode,
-          'systemCode': normalizedSystemCode,
-        },
-      };
+    if (!hasDurableIdentity) {
+      throw StateError(
+        'Durable template selection requires systemCode and code.',
+      );
     }
-    return <String, dynamic>{'selectedTemplates': toMap()};
+    return <String, dynamic>{
+      'selectedTemplates': <String, dynamic>{
+        'type': type,
+        'code': normalizedCode,
+        'systemCode': normalizedSystemCode,
+      },
+    };
   }
 
   static SelectedTemplate? fromMap(Map<dynamic, dynamic>? raw) {
@@ -131,9 +139,7 @@ class SelectedTemplate {
     }
 
     for (final entry in catalog) {
-      if (entry.systemCode == normalizedSystemCode &&
-          entry.id == legacy.id &&
-          entry.type == legacy.type) {
+      if (entry.systemCode == normalizedSystemCode && entry.id == legacy.id) {
         return SelectedTemplate(
           id: entry.id,
           type: entry.type,

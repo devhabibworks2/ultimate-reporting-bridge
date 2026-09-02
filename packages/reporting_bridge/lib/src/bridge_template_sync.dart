@@ -468,7 +468,7 @@ class PresenterTemplateSyncService {
       }
       late final CachedTemplate template;
       try {
-        template = CachedTemplate.fromMap(raw);
+        template = CachedTemplate.fromMap(raw, systemCode: responseSystemCode);
       } on BridgeRuntimeException catch (error) {
         throw BridgeRuntimeException(
           BridgeTemplateSyncErrorCodes.templateCatalogInvalid,
@@ -524,10 +524,10 @@ class PresenterTemplateSyncService {
     }
     await stagedCache.writeCatalogMetadata(metadata);
     if (storedSelection != null && metadata.systemCode != null) {
-      await stagedCache.writeSelectedTemplate(storedSelection);
       await stagedCache.migrateSelectedTemplate(
         catalog: downloaded,
         systemCode: metadata.systemCode!,
+        legacy: storedSelection,
       );
     }
 

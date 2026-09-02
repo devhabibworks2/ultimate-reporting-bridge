@@ -12,6 +12,7 @@ class CachedTemplate {
     required this.type,
     required this.document,
     this.systemId,
+    this.systemCode,
     this.code,
     this.name,
     this.description,
@@ -30,6 +31,7 @@ class CachedTemplate {
   final String type;
   final Map<String, dynamic> document;
   final int? systemId;
+  final String? systemCode;
   final String? code;
   final String? name;
   final String? description;
@@ -42,8 +44,12 @@ class CachedTemplate {
   final int? _legacyMinPresenterDevVersion;
   final int? _legacyMaxPresenterDevVersion;
 
-  SelectedTemplate get selectedTemplate =>
-      SelectedTemplate(id: id, type: type, code: templateCode);
+  SelectedTemplate get selectedTemplate => SelectedTemplate(
+    id: id,
+    type: type,
+    code: templateCode,
+    systemCode: systemCode,
+  );
 
   String get effectiveMinPresenterVersion {
     final canonical = minPresenterVersion?.trim();
@@ -141,6 +147,7 @@ class CachedTemplate {
       'type': type,
       'document': document,
       if (systemId != null) 'systemId': systemId,
+      if (systemCode != null) 'systemCode': systemCode,
       if (code != null) 'code': code,
       if (name != null) 'name': name,
       if (description != null) 'description': description,
@@ -157,7 +164,10 @@ class CachedTemplate {
     };
   }
 
-  static CachedTemplate fromMap(Map<dynamic, dynamic> raw) {
+  static CachedTemplate fromMap(
+    Map<dynamic, dynamic> raw, {
+    String? systemCode,
+  }) {
     final id = raw['id'];
     final type = raw['type'] ?? raw['reportType'];
     final document = raw['document'];
@@ -178,6 +188,7 @@ class CachedTemplate {
       type: type.toString(),
       document: _stringMap(document),
       systemId: _nullablePositiveInt(raw['systemId']),
+      systemCode: systemCode ?? _stringOrNull(raw['systemCode']),
       code: _stringOrNull(raw['code']),
       name: _stringOrNull(raw['name']),
       description: _stringOrNull(raw['description']),
@@ -304,6 +315,10 @@ class TemplateCacheService {
   }
 
   Future<void> writeSelectedTemplate(SelectedTemplate selection) async {
+    if (!selection.hasDurableIdentity) {
+      await clearSelectedTemplate();
+      return;
+    }
     await cacheRoot.create(recursive: true);
     final file = File('${cacheRoot.path}/$_selectionFileName');
     final temporary = File('${file.path}.tmp');
@@ -327,8 +342,9 @@ class TemplateCacheService {
   Future<SelectedTemplate?> migrateSelectedTemplate({
     required Iterable<CachedTemplate> catalog,
     required String systemCode,
+    SelectedTemplate? legacy,
   }) async {
-    final stored = await readSelectedTemplate();
+    final stored = legacy ?? await readSelectedTemplate();
     final migrated = SelectedTemplate.migrateLegacyId(
       legacy: stored,
       catalog: catalog.map(

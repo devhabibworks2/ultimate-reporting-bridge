@@ -46,6 +46,52 @@ void main() {
       expect(selected?.code, isNull);
       expect(selected?.durableIdentity, '34');
     });
+
+    test('refuses or clears incomplete durable writes', () async {
+      const incomplete = SelectedTemplate(
+        id: '595',
+        type: 'sales_invoice',
+        code: 'INV-A5-AR',
+      );
+      expect(incomplete.toStorageMap, throwsStateError);
+
+      final temp = await Directory.systemTemp.createTemp(
+        'bridge_sel_incomplete_',
+      );
+      addTearDown(() => temp.delete(recursive: true));
+      final cache = TemplateCacheService(cacheRoot: temp);
+      await cache.writeSelectedTemplate(
+        const SelectedTemplate(
+          id: '595',
+          type: 'sales_invoice',
+          code: 'INV-A5-AR',
+          systemCode: 'system-a',
+        ),
+      );
+
+      await cache.writeSelectedTemplate(incomplete);
+
+      expect(await File('${temp.path}/.selection.json').exists(), isFalse);
+    });
+
+    test('cached template selection carries its system code', () {
+      const template = CachedTemplate(
+        id: '595',
+        type: 'sales_invoice',
+        code: 'INV-A5-AR',
+        systemCode: 'system-a',
+        document: <String, dynamic>{},
+      );
+
+      expect(template.selectedTemplate.systemCode, 'system-a');
+      expect(template.selectedTemplate.toStorageMap(), <String, dynamic>{
+        'selectedTemplates': <String, dynamic>{
+          'type': 'sales_invoice',
+          'code': 'INV-A5-AR',
+          'systemCode': 'system-a',
+        },
+      });
+    });
   });
 
   group('SelectedTemplate legacy migration', () {
@@ -108,6 +154,20 @@ void main() {
       expect(migrated.systemCode, 'system-a');
     });
 
+    test('exact legacy id adopts catalog type when legacy type is stale', () {
+      const legacy = SelectedTemplate(id: '595', type: 'stale_invoice_type');
+      final migrated = SelectedTemplate.migrateLegacyId(
+        legacy: legacy,
+        catalog: entriesFor(catalog),
+        systemCode: 'system-a',
+      );
+
+      expect(migrated?.id, '595');
+      expect(migrated?.type, 'sales_invoice');
+      expect(migrated?.code, 'INV-A5-AR');
+      expect(migrated?.systemCode, 'system-a');
+    });
+
     test('missing legacy id clears selection', () {
       const legacy = SelectedTemplate(id: '999', type: 'sales_invoice');
       final migrated = SelectedTemplate.migrateLegacyId(
@@ -146,8 +206,14 @@ void main() {
       final temp = await Directory.systemTemp.createTemp('bridge_sel_migrate_');
       addTearDown(() => temp.delete(recursive: true));
       final cache = TemplateCacheService(cacheRoot: temp);
-      await cache.writeSelectedTemplate(
-        const SelectedTemplate(id: '595', type: 'sales_invoice'),
+      await temp.create(recursive: true);
+      await File('${temp.path}/.selection.json').writeAsString(
+        jsonEncode(<String, dynamic>{
+          'selectedTemplates': <String, dynamic>{
+            'id': '595',
+            'type': 'sales_invoice',
+          },
+        }),
       );
 
       final migrated = await cache.migrateSelectedTemplate(
@@ -172,8 +238,14 @@ void main() {
       final temp = await Directory.systemTemp.createTemp('bridge_sel_stale_');
       addTearDown(() => temp.delete(recursive: true));
       final cache = TemplateCacheService(cacheRoot: temp);
-      await cache.writeSelectedTemplate(
-        const SelectedTemplate(id: '999', type: 'sales_invoice'),
+      await temp.create(recursive: true);
+      await File('${temp.path}/.selection.json').writeAsString(
+        jsonEncode(<String, dynamic>{
+          'selectedTemplates': <String, dynamic>{
+            'id': '999',
+            'type': 'sales_invoice',
+          },
+        }),
       );
 
       final migrated = await cache.migrateSelectedTemplate(

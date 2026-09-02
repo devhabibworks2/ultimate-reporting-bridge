@@ -53,13 +53,14 @@ void main() {
       id: '34',
       type: 'invoice',
       code: 'INV-34',
+      systemCode: 'system-a',
     );
 
     expect(selected.toStorageMap(), <String, dynamic>{
       'selectedTemplates': <String, dynamic>{
-        'id': '34',
         'type': 'invoice',
         'code': 'INV-34',
+        'systemCode': 'system-a',
       },
     });
     expect(

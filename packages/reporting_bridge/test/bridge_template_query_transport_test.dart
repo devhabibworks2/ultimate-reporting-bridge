@@ -90,6 +90,8 @@ void main() {
       'voucher-80',
     ]);
     expect(cached.first.type, 'sales_invoice');
+    expect(cached.first.systemCode, 'motakamel_transactions');
+    expect(cached.first.selectedTemplate.systemCode, 'motakamel_transactions');
     expect(cached.first.publishedVersionNo, 7);
     expect(cached.first.description, 'Description for invoice-a4');
     expect(cached.first.metadata['layout'], 'Pages');
@@ -129,9 +131,14 @@ void main() {
           extra: query.extra,
         ),
       );
-      final cache = TemplateCacheService(cacheRoot: cacheRoot);
-      await cache.writeSelectedTemplate(
-        const SelectedTemplate(id: '10', type: 'sales_invoice'),
+      await cacheRoot.create(recursive: true);
+      await File('${cacheRoot.path}/.selection.json').writeAsString(
+        jsonEncode(<String, dynamic>{
+          'selectedTemplates': <String, dynamic>{
+            'id': '10',
+            'type': 'sales_invoice',
+          },
+        }),
       );
       final gateway = PresenterServerGateway(
         apiBaseUrl: _api(server),
