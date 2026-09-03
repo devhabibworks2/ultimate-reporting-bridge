@@ -16,120 +16,143 @@ void main() {
       await _expectCatalogRejected(item);
     });
 
-    test('rejects a query item whose Code disagrees with document.meta.code', () async {
-      final item = _queryTemplate(code: 'INV-A5-AR', metaCode: 'INV-A4-EN');
-      await _expectCatalogRejected(item);
-    });
+    test(
+      'rejects a query item whose Code disagrees with document.meta.code',
+      () async {
+        final item = _queryTemplate(code: 'INV-A5-AR', metaCode: 'INV-A4-EN');
+        await _expectCatalogRejected(item);
+      },
+    );
   });
 
-  test('legacy numeric id is never persisted as durable Template Code', () async {
-    final temp = await Directory.systemTemp.createTemp('bridge_no_id_as_code_');
-    addTearDown(() => temp.delete(recursive: true));
-    final cache = TemplateCacheService(cacheRoot: temp);
-    await temp.create(recursive: true);
-    await File('${temp.path}/.selection.json').writeAsString(
-      jsonEncode(<String, dynamic>{
-        'selectedTemplates': <String, dynamic>{
-          'id': '595',
-          'type': 'sales_invoice',
-        },
-      }),
-    );
+  test(
+    'legacy numeric id is never persisted as durable Template Code',
+    () async {
+      final temp = await Directory.systemTemp.createTemp(
+        'bridge_no_id_as_code_',
+      );
+      addTearDown(() => temp.delete(recursive: true));
+      final cache = TemplateCacheService(cacheRoot: temp);
+      await temp.create(recursive: true);
+      await File('${temp.path}/.selection.json').writeAsString(
+        jsonEncode(<String, dynamic>{
+          'selectedTemplates': <String, dynamic>{
+            'id': '595',
+            'type': 'sales_invoice',
+          },
+        }),
+      );
 
-    final migrated = await cache.migrateSelectedTemplate(
-      catalog: const <CachedTemplate>[
-        CachedTemplate(
-          id: '595',
-          type: 'sales_invoice',
-          systemId: 7,
-          systemCode: 'system-a',
-          document: <String, dynamic>{'meta': <String, dynamic>{}},
-        ),
-      ],
-      systemCode: 'system-a',
-    );
+      final migrated = await cache.migrateSelectedTemplate(
+        catalog: const <CachedTemplate>[
+          CachedTemplate(
+            id: '595',
+            type: 'sales_invoice',
+            systemId: 7,
+            systemCode: 'system-a',
+            document: <String, dynamic>{'meta': <String, dynamic>{}},
+          ),
+        ],
+        systemCode: 'system-a',
+      );
 
-    expect(migrated, isNull);
-    expect(await File('${temp.path}/.selection.json').exists(), isFalse);
-  });
+      expect(migrated, isNull);
+      expect(await File('${temp.path}/.selection.json').exists(), isFalse);
+    },
+  );
 
   group('stale stored selection handling', () {
-    test('wrong-system stored selection never auto-selects another template', () async {
-      final temp = await Directory.systemTemp.createTemp('bridge_stale_system_');
-      addTearDown(() => temp.delete(recursive: true));
-      final cache = TemplateCacheService(cacheRoot: temp);
-      await _putSingleTemplate(
-        cache,
-        systemId: 2,
-        systemCode: 'system-b',
-        code: 'INV-A5-AR',
-      );
-      final resolver = TemplateSelectionResolver(cache: cache);
-
-      final result = await resolver.resolveSelectedTemplate(
-        reportType: 'sales_invoice',
-        systemCode: 'system-b',
-        storedSelection: const SelectedTemplate(
-          id: '10',
-          type: 'sales_invoice',
+    test(
+      'wrong-system stored selection never auto-selects another template',
+      () async {
+        final temp = await Directory.systemTemp.createTemp(
+          'bridge_stale_system_',
+        );
+        addTearDown(() => temp.delete(recursive: true));
+        final cache = TemplateCacheService(cacheRoot: temp);
+        await _putSingleTemplate(
+          cache,
+          systemId: 2,
+          systemCode: 'system-b',
           code: 'INV-A5-AR',
+        );
+        final resolver = TemplateSelectionResolver(cache: cache);
+
+        final result = await resolver.resolveSelectedTemplate(
+          reportType: 'sales_invoice',
+          systemCode: 'system-b',
+          storedSelection: const SelectedTemplate(
+            id: '10',
+            type: 'sales_invoice',
+            code: 'INV-A5-AR',
+            systemCode: 'system-a',
+          ),
+        );
+
+        expect(result.status, 'selection-required');
+        expect(result.template, isNull);
+        expect(result.errorCode, 'STALE_TEMPLATE_SELECTION');
+      },
+    );
+
+    test(
+      'missing stored Code never auto-selects a different compatible template',
+      () async {
+        final temp = await Directory.systemTemp.createTemp(
+          'bridge_stale_code_',
+        );
+        addTearDown(() => temp.delete(recursive: true));
+        final cache = TemplateCacheService(cacheRoot: temp);
+        await _putSingleTemplate(
+          cache,
+          systemId: 1,
           systemCode: 'system-a',
-        ),
-      );
+          code: 'INV-NEW',
+        );
+        final resolver = TemplateSelectionResolver(cache: cache);
 
-      expect(result.status, 'selection-required');
-      expect(result.template, isNull);
-      expect(result.errorCode, 'STALE_TEMPLATE_SELECTION');
-    });
-
-    test('missing stored Code never auto-selects a different compatible template', () async {
-      final temp = await Directory.systemTemp.createTemp('bridge_stale_code_');
-      addTearDown(() => temp.delete(recursive: true));
-      final cache = TemplateCacheService(cacheRoot: temp);
-      await _putSingleTemplate(
-        cache,
-        systemId: 1,
-        systemCode: 'system-a',
-        code: 'INV-NEW',
-      );
-      final resolver = TemplateSelectionResolver(cache: cache);
-
-      final result = await resolver.resolveSelectedTemplate(
-        reportType: 'sales_invoice',
-        systemCode: 'system-a',
-        storedSelection: const SelectedTemplate(
-          id: '10',
-          type: 'sales_invoice',
-          code: 'INV-OLD',
+        final result = await resolver.resolveSelectedTemplate(
+          reportType: 'sales_invoice',
           systemCode: 'system-a',
-        ),
-      );
+          storedSelection: const SelectedTemplate(
+            id: '10',
+            type: 'sales_invoice',
+            code: 'INV-OLD',
+            systemCode: 'system-a',
+          ),
+        );
 
-      expect(result.status, 'selection-required');
-      expect(result.template, isNull);
-      expect(result.errorCode, 'STALE_TEMPLATE_SELECTION');
-    });
+        expect(result.status, 'selection-required');
+        expect(result.template, isNull);
+        expect(result.errorCode, 'STALE_TEMPLATE_SELECTION');
+      },
+    );
 
-    test('fresh user with no stored selection may still auto-select a sole template', () async {
-      final temp = await Directory.systemTemp.createTemp('bridge_fresh_auto_');
-      addTearDown(() => temp.delete(recursive: true));
-      final cache = TemplateCacheService(cacheRoot: temp);
-      await _putSingleTemplate(
-        cache,
-        systemId: 1,
-        systemCode: 'system-a',
-        code: 'INV-A5-AR',
-      );
-      final resolver = TemplateSelectionResolver(cache: cache);
+    test(
+      'fresh user with no stored selection may still auto-select a sole template',
+      () async {
+        final temp = await Directory.systemTemp.createTemp(
+          'bridge_fresh_auto_',
+        );
+        addTearDown(() => temp.delete(recursive: true));
+        final cache = TemplateCacheService(cacheRoot: temp);
+        await _putSingleTemplate(
+          cache,
+          systemId: 1,
+          systemCode: 'system-a',
+          code: 'INV-A5-AR',
+        );
+        final resolver = TemplateSelectionResolver(cache: cache);
 
-      final result = await resolver.resolveSelectedTemplate(
-        reportType: 'sales_invoice',
-        systemCode: 'system-a',
-      );
+        final result = await resolver.resolveSelectedTemplate(
+          reportType: 'sales_invoice',
+          systemCode: 'system-a',
+        );
 
-      expect(result.status, 'auto-selected');
-      expect(result.template?.templateCode, 'INV-A5-AR');
-    });
+        expect(result.status, 'auto-selected');
+        expect(result.template?.templateCode, 'INV-A5-AR');
+      },
+    );
   });
 }
 
@@ -149,14 +172,14 @@ Future<void> _expectCatalogRejected(Map<String, dynamic> item) async {
   });
 
   final gateway = PresenterServerGateway(
-    apiBaseUrl: Uri.parse('http://${server.address.address}:${server.port}/api/'),
+    apiBaseUrl: Uri.parse(
+      'http://${server.address.address}:${server.port}/api/',
+    ),
     bridgeRoot: root,
   );
 
   await expectLater(
-    gateway.syncTemplates(
-      query: TemplateQueryRequest(systemCode: 'system-a'),
-    ),
+    gateway.syncTemplates(query: TemplateQueryRequest(systemCode: 'system-a')),
     throwsA(
       isA<BridgeRuntimeException>().having(
         (error) => error.code,

@@ -47,7 +47,7 @@ class CachedTemplate {
   SelectedTemplate get selectedTemplate => SelectedTemplate(
     id: id,
     type: type,
-    code: templateCode,
+    code: durableTemplateCode,
     systemCode: systemCode,
   );
 
@@ -80,14 +80,26 @@ class CachedTemplate {
     return id;
   }
 
-  String get templateCode {
+  String? get durableTemplateCode {
     final explicit = code?.trim();
     if (explicit != null && explicit.isNotEmpty) return explicit;
 
     final meta = document['meta'];
     if (meta is Map) {
-      final value = (meta['code'] ?? meta['id'])?.toString().trim();
+      final value = meta['code']?.toString().trim();
       if (value != null && value.isNotEmpty) return value;
+    }
+    return null;
+  }
+
+  String get templateCode {
+    final durable = durableTemplateCode;
+    if (durable != null) return durable;
+
+    final meta = document['meta'];
+    if (meta is Map) {
+      final legacy = meta['id']?.toString().trim();
+      if (legacy != null && legacy.isNotEmpty) return legacy;
     }
     return id;
   }
@@ -347,14 +359,18 @@ class TemplateCacheService {
     final stored = legacy ?? await readSelectedTemplate();
     final migrated = SelectedTemplate.migrateLegacyId(
       legacy: stored,
-      catalog: catalog.map(
-        (template) => SelectedTemplateCatalogEntry(
-          id: template.id,
-          type: template.type,
-          code: template.templateCode,
-          systemCode: systemCode,
-        ),
-      ),
+      catalog: catalog.expand((template) {
+        final code = template.durableTemplateCode;
+        if (code == null) return const <SelectedTemplateCatalogEntry>[];
+        return <SelectedTemplateCatalogEntry>[
+          SelectedTemplateCatalogEntry(
+            id: template.id,
+            type: template.type,
+            code: code,
+            systemCode: systemCode,
+          ),
+        ];
+      }),
       systemCode: systemCode,
     );
     if (migrated == null) {
@@ -531,29 +547,34 @@ class TemplateSelectionResolver {
         errorCode: BridgeRuntimeErrorCodes.presenterVersionTooOld,
       );
     }
-    if (storedSelection != null &&
-        storedSelection.matchesType(reportType) &&
-        storedSelection.systemCode == systemCode) {
-      final storedCode = storedSelection.code?.trim();
-      if (storedCode != null && storedCode.isNotEmpty) {
-        for (final template in compatible) {
-          if (template.templateCode == storedCode) {
-            return TemplateSelectionResult(
-              status: 'stored-selected',
-              template: template,
-            );
+    if (storedSelection != null) {
+      if (storedSelection.matchesType(reportType) &&
+          storedSelection.systemCode == systemCode) {
+        final storedCode = storedSelection.code?.trim();
+        if (storedCode != null && storedCode.isNotEmpty) {
+          for (final template in compatible) {
+            if (template.templateCode == storedCode) {
+              return TemplateSelectionResult(
+                status: 'stored-selected',
+                template: template,
+              );
+            }
           }
-        }
-      } else {
-        for (final template in compatible) {
-          if (template.id == storedSelection.id) {
-            return TemplateSelectionResult(
-              status: 'stored-selected',
-              template: template,
-            );
+        } else {
+          for (final template in compatible) {
+            if (template.id == storedSelection.id) {
+              return TemplateSelectionResult(
+                status: 'stored-selected',
+                template: template,
+              );
+            }
           }
         }
       }
+      return const TemplateSelectionResult(
+        status: 'selection-required',
+        errorCode: BridgeRuntimeErrorCodes.staleTemplateSelection,
+      );
     }
     if (compatible.length == 1) {
       return TemplateSelectionResult(

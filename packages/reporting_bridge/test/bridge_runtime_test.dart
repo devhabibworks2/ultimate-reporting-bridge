@@ -227,8 +227,12 @@ void main() {
             systemCode: 'test-system',
           ),
         );
-        expect(wrongType.status, 'auto-selected');
-        expect(wrongType.template?.id, '90');
+        expect(wrongType.status, 'selection-required');
+        expect(wrongType.template, isNull);
+        expect(
+          wrongType.errorCode,
+          BridgeRuntimeErrorCodes.staleTemplateSelection,
+        );
 
         final many = await resolver.resolveSelectedTemplate(
           reportType: 'invoice',

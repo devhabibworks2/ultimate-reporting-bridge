@@ -560,7 +560,7 @@ Map<String, dynamic> _queryTemplate(
     },
     'document': <String, dynamic>{
       'schemaVersion': '1.0.0',
-      'meta': <String, dynamic>{'name': 'Template $id'},
+      'meta': <String, dynamic>{'name': 'Template $id', 'code': '$id-code'},
       'page': <String, dynamic>{},
       'styleTokens': <String, dynamic>{},
       'assets': <Object?>[],

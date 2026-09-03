@@ -369,8 +369,9 @@ void main() {
         ),
       );
 
-      expect(result.status, 'auto-selected');
-      expect(result.template?.id, '44');
+      expect(result.status, 'selection-required');
+      expect(result.template, isNull);
+      expect(result.errorCode, BridgeRuntimeErrorCodes.staleTemplateSelection);
     });
   });
 }

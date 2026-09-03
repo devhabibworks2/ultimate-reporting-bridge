@@ -466,6 +466,22 @@ class PresenterTemplateSyncService {
           'Template query item $index is not an object.',
         );
       }
+      final topLevelCode = _nonEmptyString(raw['code']);
+      final rawDocument = raw['document'];
+      final rawMeta = rawDocument is Map ? rawDocument['meta'] : null;
+      final documentCode = rawMeta is Map
+          ? _nonEmptyString(rawMeta['code'])
+          : null;
+      if (topLevelCode == null ||
+          documentCode == null ||
+          topLevelCode != documentCode) {
+        throw BridgeRuntimeException(
+          BridgeTemplateSyncErrorCodes.templateCatalogInvalid,
+          'Template query item $index requires matching non-empty '
+          'code and document.meta.code.',
+        );
+      }
+
       late final CachedTemplate template;
       try {
         template = CachedTemplate.fromMap(raw, systemCode: responseSystemCode);
