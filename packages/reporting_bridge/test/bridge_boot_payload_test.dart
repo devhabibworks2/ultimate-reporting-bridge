@@ -49,15 +49,25 @@ void main() {
   });
 
   test('SelectedTemplate keeps required storage shape', () {
-    const selected = SelectedTemplate(id: '34', type: 'invoice');
+    const selected = SelectedTemplate(
+      id: '34',
+      type: 'invoice',
+      code: 'INV-34',
+      systemCode: 'system-a',
+    );
 
     expect(selected.toStorageMap(), <String, dynamic>{
-      'selectedTemplates': <String, dynamic>{'id': '34', 'type': 'invoice'},
+      'selectedTemplates': <String, dynamic>{
+        'type': 'invoice',
+        'code': 'INV-34',
+        'systemCode': 'system-a',
+      },
     });
     expect(
       SelectedTemplate.fromMap(selected.toStorageMap())?.matchesType('invoice'),
       isTrue,
     );
+    expect(SelectedTemplate.fromMap(selected.toStorageMap())?.code, 'INV-34');
   });
 
   test('BridgeConfig status redacts custom API headers', () {

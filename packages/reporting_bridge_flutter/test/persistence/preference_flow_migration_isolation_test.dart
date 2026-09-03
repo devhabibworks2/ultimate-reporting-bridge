@@ -204,7 +204,7 @@ void main() {
       },
     );
 
-    test('new writes remain V5 only', () async {
+    test('new writes use V6 Code identity only', () async {
       final prefs = await SharedPreferences.getInstance();
       final store = SharedPreferencesReportFlowPreferenceStore(prefs);
       final scope = ReportPreferenceScope(
@@ -215,13 +215,17 @@ void main() {
       await store.save(
         scope,
         const ReportFlowPreferences(
-          templateId: 'fresh',
+          templateCode: 'FRESH-CODE',
           mode: PresenterModePreference.online,
         ),
       );
       expect(
-        prefs.getKeys().where((key) => key.contains('selected_template.v5.')),
+        prefs.getKeys().where((key) => key.contains('selected_template.v6.')),
         isNotEmpty,
+      );
+      expect(
+        prefs.getKeys().where((key) => key.contains('selected_template.v5.')),
+        isEmpty,
       );
       expect(
         prefs.getKeys().where(
@@ -259,7 +263,7 @@ void main() {
       await store.save(
         scope,
         const ReportFlowPreferences(
-          templateId: 'gone-template',
+          templateCode: 'GONE-CODE',
           mode: PresenterModePreference.offline,
         ),
       );
@@ -274,7 +278,7 @@ void main() {
       addTearDown(controller.dispose);
       await controller.initialize();
 
-      expect(controller.value.selectedTemplateId, isNot('gone-template'));
+      expect(controller.value.selectedTemplateId, isNull);
       expect(controller.value.selectedMode, PresenterModePreference.offline);
       expect(
         prefs.getString(
@@ -284,9 +288,9 @@ void main() {
       );
       expect(
         prefs.getString(
-          'urb.reporting_bridge.selected_template.v5.${scope.selectedTemplateStorageToken}',
+          'urb.reporting_bridge.selected_template.v6.${scope.selectedTemplateStorageToken}',
         ),
-        contains('gone-template'),
+        contains('GONE-CODE'),
       );
     });
   });
@@ -374,13 +378,14 @@ CachedTemplate _pagesTemplate(String id) => CachedTemplate(
   id: id,
   type: 'sales_invoice',
   systemId: 7,
-  code: 'legacy_system_7',
+  code: 'CODE-$id',
   name: id,
   document: <String, dynamic>{
     'schemaVersion': '1.0.0',
-    'meta': const <String, dynamic>{
+    'meta': <String, dynamic>{
       'name': 'Invoice',
       'family': 'sales_invoice',
+      'code': 'CODE-$id',
     },
     'page': const <String, dynamic>{
       'layout': 'Pages',

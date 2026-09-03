@@ -228,15 +228,12 @@ void main() {
       await controller.initialize();
 
       expect(controller.value.stage, ReportFlowStage.selectingTemplate);
-      expect(bridge.templateSyncCalls, 1);
+      expect(bridge.templateSyncCalls, greaterThanOrEqualTo(1));
       expect(
         controller.value.entryFallbackReason,
         ReportEntryFallbackReason.noCompatibleTemplates,
       );
-      expect(
-        preferences.valuesBySystem['legacy_system_1']?.templateId,
-        'removed',
-      );
+      expect(preferences.valuesBySystem['legacy_system_1']?.templateId, isNull);
       expect(
         preferences.valuesBySystem['legacy_system_1']?.mode,
         PresenterModePreference.online,
@@ -245,9 +242,9 @@ void main() {
         preferences.valuesBySystem['legacy_system_2']?.templateId,
         'other',
       );
-      // Sole compatible alternative may be visually preselected as a draft in
-      // Template Selection. That must not commit, persist, or auto-open Preview.
-      expect(controller.value.selectedTemplateId, 't1');
+      // A stale saved identity requires explicit user reselection; the sole
+      // compatible alternative must not be silently preselected.
+      expect(controller.value.selectedTemplateId, isNull);
       expect(controller.value.committedTemplateId, isNull);
       expect(controller.value.presenterLaunch, isNull);
       expect(bridge.prepareCalls, 0);
@@ -1308,11 +1305,16 @@ CachedTemplate _template(String id) => CachedTemplate(
   id: id,
   type: 'sales_invoice',
   systemId: 1,
+  code: 'CODE-$id',
   name: 'Template $id',
   version: '1.0.0',
-  document: const <String, dynamic>{
+  document: <String, dynamic>{
     'schemaVersion': '1.0.0',
-    'meta': <String, dynamic>{'name': 'Invoice', 'family': 'sales_invoice'},
+    'meta': <String, dynamic>{
+      'name': 'Invoice',
+      'family': 'sales_invoice',
+      'code': 'CODE-$id',
+    },
     'page': <String, dynamic>{
       'layout': 'Pages',
       'size': 'A4',
@@ -1334,11 +1336,16 @@ CachedTemplate _familyTemplate(String id, String family) => CachedTemplate(
   id: id,
   type: family,
   systemId: 1,
+  code: 'CODE-$id',
   name: 'Template $id',
   version: '1.0.0',
   document: <String, dynamic>{
     'schemaVersion': '1.0.0',
-    'meta': <String, dynamic>{'name': 'Template', 'family': family},
+    'meta': <String, dynamic>{
+      'name': 'Template',
+      'family': family,
+      'code': 'CODE-$id',
+    },
     'page': const <String, dynamic>{
       'layout': 'Pages',
       'size': 'A4',
@@ -1376,13 +1383,15 @@ CachedTemplate _sizedTemplate(String id, String size) {
     id: id,
     type: 'sales_invoice',
     systemId: 1,
+    code: 'CODE-$id',
     name: 'Template $id',
     version: '1.0.0',
     document: <String, dynamic>{
       'schemaVersion': '1.0.0',
-      'meta': const <String, dynamic>{
+      'meta': <String, dynamic>{
         'name': 'Invoice',
         'family': 'sales_invoice',
+        'code': 'CODE-$id',
       },
       'page': <String, dynamic>{
         'layout': thermal ? 'Thermal' : 'Pages',

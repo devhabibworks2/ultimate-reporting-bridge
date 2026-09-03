@@ -40,10 +40,11 @@ class ReportPreferenceScope {
     return 'legacy_system_${systemId ?? 0}';
   }
 
-  /// V5 selected-template identity: reportType + optional identity/customType.
+  /// Durable selected-template identity is System-scoped.
   ///
   /// [customType] is developer-defined identity: trim only, never case-fold.
   String get selectedTemplateCanonical => <String>[
+    'system=${_scopePart(effectiveSystem)}',
     'report=${_scopePart(reportType.toLowerCase())}',
     'user=${_scopePart(userId)}',
     'branch=${_scopePart(branchId)}',
@@ -53,6 +54,19 @@ class ReportPreferenceScope {
 
   String get selectedTemplateStorageToken => base64Url
       .encode(utf8.encode(selectedTemplateCanonical))
+      .replaceAll('=', '');
+
+  /// V5 selected-template key retained for one-way migration reads only.
+  String get legacySelectedTemplateV5Canonical => <String>[
+    'report=${_scopePart(reportType.toLowerCase())}',
+    'user=${_scopePart(userId)}',
+    'branch=${_scopePart(branchId)}',
+    'systemUnit=${_scopePart(systemUnit)}',
+    'customType=${_scopePart(customType)}',
+  ].join('|');
+
+  String get legacySelectedTemplateV5StorageToken => base64Url
+      .encode(utf8.encode(legacySelectedTemplateV5Canonical))
       .replaceAll('=', '');
 
   /// Presenter-mode operational identity: connection + system + report + identity.
@@ -88,14 +102,6 @@ class ReportPreferenceScope {
       base64Url.encode(utf8.encode(canonical)).replaceAll('=', '');
 
   /// Deterministic numeric system id for V1–V3 migration only.
-  ///
-  /// Uses explicit [systemId] when present, otherwise `legacy_system_<n>` codes.
-  ///
-  /// Canonical Host codes such as `motakamel_transactions` are intentionally
-  /// non-migratable for V1–V3: repository fixtures disagree on numeric identity
-  /// (backend docs example uses `id: 3`, several Bridge tests use `id: 7`), and
-  /// no product authority maps code → historic numeric id without guessing.
-  /// V4 and V5 migration remain available for those Hosts.
   int? get resolvedLegacySystemId {
     if (systemId != null) return systemId;
     final match = RegExp(
@@ -116,6 +122,7 @@ class ReportPreferenceScope {
 class ReportFlowPreferences {
   const ReportFlowPreferences({
     this.templateId,
+    this.templateCode,
     required this.mode,
     this.language,
     this.layout,
@@ -123,8 +130,11 @@ class ReportFlowPreferences {
     this.customType,
   });
 
-  /// Selected template id, or `null` when only Presenter mode is persisted.
+  /// Transient/runtime or legacy template id. Never written as V6 durable identity.
   final String? templateId;
+
+  /// Permanent business identity used by durable selected-template storage.
+  final String? templateCode;
   final PresenterModePreference mode;
   final String? language;
   final String? layout;
@@ -134,6 +144,8 @@ class ReportFlowPreferences {
   ReportFlowPreferences copyWith({
     String? templateId,
     bool clearTemplateId = false,
+    String? templateCode,
+    bool clearTemplateCode = false,
     PresenterModePreference? mode,
     String? language,
     String? layout,
@@ -141,6 +153,7 @@ class ReportFlowPreferences {
     String? customType,
   }) => ReportFlowPreferences(
     templateId: clearTemplateId ? null : templateId ?? this.templateId,
+    templateCode: clearTemplateCode ? null : templateCode ?? this.templateCode,
     mode: mode ?? this.mode,
     language: language ?? this.language,
     layout: layout ?? this.layout,
@@ -150,6 +163,7 @@ class ReportFlowPreferences {
 
   Map<String, dynamic> toJson() => <String, dynamic>{
     if (templateId != null) 'templateId': templateId,
+    if (templateCode != null) 'templateCode': templateCode,
     'mode': mode.name,
     if (language != null) 'language': language,
     if (layout != null) 'layout': layout,
@@ -163,13 +177,18 @@ class ReportFlowPreferences {
     final templateId = rawTemplateId == null || rawTemplateId.isEmpty
         ? null
         : rawTemplateId;
+    final rawTemplateCode = raw['templateCode']?.toString().trim();
+    final templateCode = rawTemplateCode == null || rawTemplateCode.isEmpty
+        ? null
+        : rawTemplateCode;
     final modeName = (raw['mode'] ?? raw['runMode'])?.toString();
     final mode = PresenterModePreference.values
         .where((value) => value.name == modeName)
         .firstOrNull;
-    if (templateId == null && mode == null) return null;
+    if (templateId == null && templateCode == null && mode == null) return null;
     return ReportFlowPreferences(
       templateId: templateId,
+      templateCode: templateCode,
       mode: mode ?? PresenterModePreference.online,
       language: _optionalCode(raw['language']),
       layout: _optionalCode(raw['layout']),
@@ -198,6 +217,8 @@ class SharedPreferencesReportFlowPreferenceStore
   SharedPreferencesReportFlowPreferenceStore(this._preferences);
 
   static const _selectedTemplatePrefix =
+      'urb.reporting_bridge.selected_template.v6.';
+  static const _legacySelectedTemplateV5Prefix =
       'urb.reporting_bridge.selected_template.v5.';
   static const _presenterModePrefix = 'urb.reporting_bridge.presenter_mode.v1.';
   static const _legacyV4Prefix = 'urb.reporting_bridge.default.v4.';
@@ -222,45 +243,61 @@ class SharedPreferencesReportFlowPreferenceStore
   String _selectedKey(ReportPreferenceScope scope) =>
       '$_selectedTemplatePrefix${scope.selectedTemplateStorageToken}';
 
+  String _legacySelectedV5Key(ReportPreferenceScope scope) =>
+      '$_legacySelectedTemplateV5Prefix${scope.legacySelectedTemplateV5StorageToken}';
+
   String _modeKey(ReportPreferenceScope scope) =>
       '$_presenterModePrefix${scope.presenterModeStorageToken}';
 
   @override
   Future<ReportFlowPreferences?> load(ReportPreferenceScope scope) =>
       _synchronized(() async {
-        final selected = _decodeSelected(
+        final selectedCode = _decodeSelectedCode(
           _preferences.getString(_selectedKey(scope)),
+          expectedSystemCode: scope.effectiveSystem,
         );
         final mode = _decodeMode(_preferences.getString(_modeKey(scope)));
-        if (selected != null) {
+        if (selectedCode != null) {
           return ReportFlowPreferences(
-            templateId: selected,
+            templateCode: selectedCode,
             mode: mode ?? PresenterModePreference.online,
           );
         }
-        if (mode != null) {
-          // Mode is independently loadable without a selected template.
-          return ReportFlowPreferences(templateId: null, mode: mode);
+
+        // V5 stored a runtime/cache ID without System. It is returned only as
+        // migration input; the controller must resolve it against the active
+        // System catalog before any V6 durable write can occur.
+        final legacyV5Id = _decodeLegacySelectedId(
+          _preferences.getString(_legacySelectedV5Key(scope)),
+        );
+        if (legacyV5Id != null) {
+          return ReportFlowPreferences(
+            templateId: legacyV5Id,
+            mode: mode ?? PresenterModePreference.online,
+          );
         }
 
         final legacy = await _loadLegacy(scope);
-        if (legacy == null) return null;
-        await _writeV5(scope, legacy);
-        return ReportFlowPreferences(
-          templateId: legacy.templateId,
-          mode: legacy.mode,
-        );
+        if (legacy != null) {
+          await _writeMode(scope, legacy.mode);
+          return legacy;
+        }
+        if (mode != null) {
+          return ReportFlowPreferences(mode: mode);
+        }
+        return null;
       });
 
   @override
   Future<void> save(
     ReportPreferenceScope scope,
     ReportFlowPreferences preferences,
-  ) => _synchronized(() => _writeV5(scope, preferences));
+  ) => _synchronized(() => _writeV6(scope, preferences));
 
   @override
   Future<void> remove(ReportPreferenceScope scope) => _synchronized(() async {
     await _preferences.remove(_selectedKey(scope));
+    await _preferences.remove(_legacySelectedV5Key(scope));
     await _preferences.remove(_modeKey(scope));
   });
 
@@ -268,26 +305,37 @@ class SharedPreferencesReportFlowPreferenceStore
   Future<void> removeSelectedTemplate(ReportPreferenceScope scope) =>
       _synchronized(() async {
         await _preferences.remove(_selectedKey(scope));
+        await _preferences.remove(_legacySelectedV5Key(scope));
       });
 
-  Future<void> _writeV5(
+  Future<void> _writeV6(
     ReportPreferenceScope scope,
     ReportFlowPreferences preferences,
   ) async {
-    final templateId = preferences.templateId?.trim();
-    if (templateId != null && templateId.isNotEmpty) {
+    final templateCode = preferences.templateCode?.trim();
+    if (templateCode != null && templateCode.isNotEmpty) {
       await _preferences.setString(
         _selectedKey(scope),
-        jsonEncode(<String, dynamic>{'templateId': templateId}),
+        jsonEncode(<String, dynamic>{
+          'systemCode': scope.effectiveSystem,
+          'templateCode': templateCode,
+        }),
       );
-    } else {
+      // A genuine V6 Code supersedes any old ID record.
+      await _preferences.remove(_legacySelectedV5Key(scope));
+    } else if (preferences.templateId == null) {
       await _preferences.remove(_selectedKey(scope));
     }
-    await _preferences.setString(
-      _modeKey(scope),
-      jsonEncode(<String, dynamic>{'mode': preferences.mode.name}),
-    );
+    await _writeMode(scope, preferences.mode);
   }
+
+  Future<void> _writeMode(
+    ReportPreferenceScope scope,
+    PresenterModePreference mode,
+  ) => _preferences.setString(
+    _modeKey(scope),
+    jsonEncode(<String, dynamic>{'mode': mode.name}),
+  );
 
   Future<ReportFlowPreferences?> _loadLegacy(
     ReportPreferenceScope scope,
@@ -402,7 +450,24 @@ class SharedPreferencesReportFlowPreferenceStore
     return false;
   }
 
-  static String? _decodeSelected(String? raw) {
+  static String? _decodeSelectedCode(
+    String? raw, {
+    required String expectedSystemCode,
+  }) {
+    if (raw == null || raw.trim().isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return null;
+      final systemCode = decoded['systemCode']?.toString().trim().toLowerCase();
+      if (systemCode != expectedSystemCode.trim().toLowerCase()) return null;
+      final templateCode = decoded['templateCode']?.toString().trim();
+      return templateCode == null || templateCode.isEmpty ? null : templateCode;
+    } on FormatException {
+      return null;
+    }
+  }
+
+  static String? _decodeLegacySelectedId(String? raw) {
     if (raw == null || raw.trim().isEmpty) return null;
     try {
       final decoded = jsonDecode(raw);
@@ -451,22 +516,20 @@ class SharedPreferencesReportFlowPreferenceStore
 }
 
 class MemoryReportFlowPreferenceStore implements ReportFlowPreferenceStore {
-  final Map<String, String> _selected = <String, String>{};
+  final Map<String, ReportFlowPreferences> _selected =
+      <String, ReportFlowPreferences>{};
   final Map<String, PresenterModePreference> _modes =
       <String, PresenterModePreference>{};
 
   @override
   Future<ReportFlowPreferences?> load(ReportPreferenceScope scope) async {
-    final templateId = _selected[scope.selectedTemplateCanonical];
+    final selected = _selected[scope.selectedTemplateCanonical];
     final mode = _modes[scope.presenterModeCanonical];
-    if (templateId != null) {
-      return ReportFlowPreferences(
-        templateId: templateId,
-        mode: mode ?? PresenterModePreference.online,
-      );
+    if (selected != null) {
+      return selected.copyWith(mode: mode ?? selected.mode);
     }
     if (mode != null) {
-      return ReportFlowPreferences(templateId: null, mode: mode);
+      return ReportFlowPreferences(mode: mode);
     }
     return null;
   }
@@ -488,8 +551,10 @@ class MemoryReportFlowPreferenceStore implements ReportFlowPreferenceStore {
     ReportFlowPreferences preferences,
   ) async {
     final templateId = preferences.templateId?.trim();
-    if (templateId != null && templateId.isNotEmpty) {
-      _selected[scope.selectedTemplateCanonical] = templateId;
+    final templateCode = preferences.templateCode?.trim();
+    if ((templateId != null && templateId.isNotEmpty) ||
+        (templateCode != null && templateCode.isNotEmpty)) {
+      _selected[scope.selectedTemplateCanonical] = preferences;
     } else {
       _selected.remove(scope.selectedTemplateCanonical);
     }

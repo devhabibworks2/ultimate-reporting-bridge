@@ -466,9 +466,25 @@ class PresenterTemplateSyncService {
           'Template query item $index is not an object.',
         );
       }
+      final topLevelCode = _nonEmptyString(raw['code']);
+      final rawDocument = raw['document'];
+      final rawMeta = rawDocument is Map ? rawDocument['meta'] : null;
+      final documentCode = rawMeta is Map
+          ? _nonEmptyString(rawMeta['code'])
+          : null;
+      if (topLevelCode == null ||
+          documentCode == null ||
+          topLevelCode != documentCode) {
+        throw BridgeRuntimeException(
+          BridgeTemplateSyncErrorCodes.templateCatalogInvalid,
+          'Template query item $index requires matching non-empty '
+          'code and document.meta.code.',
+        );
+      }
+
       late final CachedTemplate template;
       try {
-        template = CachedTemplate.fromMap(raw);
+        template = CachedTemplate.fromMap(raw, systemCode: responseSystemCode);
       } on BridgeRuntimeException catch (error) {
         throw BridgeRuntimeException(
           BridgeTemplateSyncErrorCodes.templateCatalogInvalid,
@@ -508,6 +524,7 @@ class PresenterTemplateSyncService {
     required List<CachedTemplate> downloaded,
     required TemplateCatalogMetadata metadata,
   }) async {
+    final storedSelection = await cache.readSelectedTemplate();
     final root = cache.cacheRoot;
     await root.parent.create(recursive: true);
     final token = DateTime.now().microsecondsSinceEpoch;
@@ -522,6 +539,13 @@ class PresenterTemplateSyncService {
       await stagedCache.putTemplate(template);
     }
     await stagedCache.writeCatalogMetadata(metadata);
+    if (storedSelection != null && metadata.systemCode != null) {
+      await stagedCache.migrateSelectedTemplate(
+        catalog: downloaded,
+        systemCode: metadata.systemCode!,
+        legacy: storedSelection,
+      );
+    }
 
     var originalMoved = false;
     var stagedInstalled = false;
