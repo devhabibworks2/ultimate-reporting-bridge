@@ -422,6 +422,8 @@ CachedTemplate _template() => CachedTemplate(
   id: 'thermal-en',
   type: 'sales_invoice',
   systemId: 7,
+  systemCode: 'motakamel_transactions',
+  code: 'THERMAL-EN',
   name: 'Thermal invoice',
   document: const <String, dynamic>{
     'schemaVersion': '1.0.0',
@@ -429,6 +431,7 @@ CachedTemplate _template() => CachedTemplate(
       'name': 'Thermal invoice',
       'family': 'sales_invoice',
       'systemCode': 'motakamel_transactions',
+      'code': 'THERMAL-EN',
     },
     'page': <String, dynamic>{
       'unit': 'mm',
@@ -451,6 +454,8 @@ CachedTemplate _arabicTemplate() => CachedTemplate(
   id: 'pages-ar',
   type: 'sales_invoice',
   systemId: 7,
+  systemCode: 'motakamel_transactions',
+  code: 'PAGES-AR',
   name: 'Pages invoice AR',
   document: const <String, dynamic>{
     'schemaVersion': '1.0.0',
@@ -458,6 +463,7 @@ CachedTemplate _arabicTemplate() => CachedTemplate(
       'name': 'Pages invoice AR',
       'family': 'sales_invoice',
       'systemCode': 'motakamel_transactions',
+      'code': 'PAGES-AR',
     },
     'page': <String, dynamic>{
       'unit': 'mm',

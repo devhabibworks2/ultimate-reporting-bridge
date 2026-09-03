@@ -149,11 +149,16 @@ CachedTemplate _template(String id) => CachedTemplate(
   id: id,
   type: 'sales_invoice',
   systemId: 1,
+  code: 'CODE-$id',
   name: 'Template $id',
   version: '1.0.0',
-  document: const <String, dynamic>{
+  document: <String, dynamic>{
     'schemaVersion': '1.0.0',
-    'meta': <String, dynamic>{'name': 'Invoice', 'family': 'sales_invoice'},
+    'meta': <String, dynamic>{
+      'name': 'Invoice',
+      'family': 'sales_invoice',
+      'code': 'CODE-$id',
+    },
     'page': <String, dynamic>{
       'layout': 'Pages',
       'size': 'A4',

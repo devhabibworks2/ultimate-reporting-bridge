@@ -153,9 +153,7 @@ class ReportFlowPreferences {
     String? customType,
   }) => ReportFlowPreferences(
     templateId: clearTemplateId ? null : templateId ?? this.templateId,
-    templateCode: clearTemplateCode
-        ? null
-        : templateCode ?? this.templateCode,
+    templateCode: clearTemplateCode ? null : templateCode ?? this.templateCode,
     mode: mode ?? this.mode,
     language: language ?? this.language,
     layout: layout ?? this.layout,
@@ -518,19 +516,17 @@ class SharedPreferencesReportFlowPreferenceStore
 }
 
 class MemoryReportFlowPreferenceStore implements ReportFlowPreferenceStore {
-  final Map<String, String> _selectedCodes = <String, String>{};
+  final Map<String, ReportFlowPreferences> _selected =
+      <String, ReportFlowPreferences>{};
   final Map<String, PresenterModePreference> _modes =
       <String, PresenterModePreference>{};
 
   @override
   Future<ReportFlowPreferences?> load(ReportPreferenceScope scope) async {
-    final templateCode = _selectedCodes[scope.selectedTemplateCanonical];
+    final selected = _selected[scope.selectedTemplateCanonical];
     final mode = _modes[scope.presenterModeCanonical];
-    if (templateCode != null) {
-      return ReportFlowPreferences(
-        templateCode: templateCode,
-        mode: mode ?? PresenterModePreference.online,
-      );
+    if (selected != null) {
+      return selected.copyWith(mode: mode ?? selected.mode);
     }
     if (mode != null) {
       return ReportFlowPreferences(mode: mode);
@@ -540,13 +536,13 @@ class MemoryReportFlowPreferenceStore implements ReportFlowPreferenceStore {
 
   @override
   Future<void> remove(ReportPreferenceScope scope) async {
-    _selectedCodes.remove(scope.selectedTemplateCanonical);
+    _selected.remove(scope.selectedTemplateCanonical);
     _modes.remove(scope.presenterModeCanonical);
   }
 
   @override
   Future<void> removeSelectedTemplate(ReportPreferenceScope scope) async {
-    _selectedCodes.remove(scope.selectedTemplateCanonical);
+    _selected.remove(scope.selectedTemplateCanonical);
   }
 
   @override
@@ -554,11 +550,13 @@ class MemoryReportFlowPreferenceStore implements ReportFlowPreferenceStore {
     ReportPreferenceScope scope,
     ReportFlowPreferences preferences,
   ) async {
+    final templateId = preferences.templateId?.trim();
     final templateCode = preferences.templateCode?.trim();
-    if (templateCode != null && templateCode.isNotEmpty) {
-      _selectedCodes[scope.selectedTemplateCanonical] = templateCode;
-    } else if (preferences.templateId == null) {
-      _selectedCodes.remove(scope.selectedTemplateCanonical);
+    if ((templateId != null && templateId.isNotEmpty) ||
+        (templateCode != null && templateCode.isNotEmpty)) {
+      _selected[scope.selectedTemplateCanonical] = preferences;
+    } else {
+      _selected.remove(scope.selectedTemplateCanonical);
     }
     _modes[scope.presenterModeCanonical] = preferences.mode;
   }

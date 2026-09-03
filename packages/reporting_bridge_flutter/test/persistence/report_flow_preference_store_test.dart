@@ -9,7 +9,7 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
   });
 
-  group('V5 selected-template identity', () {
+  group('V6 selected-template identity', () {
     test('language/layout/size/server do not change the selection token', () {
       const base = ReportPreferenceScope(
         connectionKey: 'deployed|https://one.example',
@@ -61,7 +61,7 @@ void main() {
       );
       const differentServer = ReportPreferenceScope(
         connectionKey: 'deployed|https://two.example',
-        system: 'other_system',
+        system: 'motakamel_transactions',
         reportType: 'sales_invoice',
         userId: '42',
         branchId: '01',
@@ -172,14 +172,14 @@ void main() {
     await store.save(
       first,
       const ReportFlowPreferences(
-        templateId: 'shared-template',
+        templateCode: 'SHARED-CODE',
         mode: PresenterModePreference.online,
       ),
     );
     await store.save(
       second,
       const ReportFlowPreferences(
-        templateId: 'shared-template',
+        templateCode: 'SHARED-CODE',
         mode: PresenterModePreference.offline,
       ),
     );
@@ -188,7 +188,7 @@ void main() {
     expect((await store.load(second))?.mode, PresenterModePreference.offline);
     expect(
       first.selectedTemplateStorageToken,
-      second.selectedTemplateStorageToken,
+      isNot(second.selectedTemplateStorageToken),
     );
     expect(
       first.presenterModeStorageToken,
@@ -197,7 +197,7 @@ void main() {
   });
 
   test(
-    'migrates V4 into V5 selected-template + mode without deleting V4',
+    'loads V4 ID for controller migration and persists mode without inventing Code',
     () async {
       const scope = ReportPreferenceScope(
         connectionKey: 'deployed|https://legacy.example',
@@ -225,10 +225,12 @@ void main() {
       expect(migrated?.templateId, 'v4-template');
       expect(migrated?.mode, PresenterModePreference.offline);
       expect(
-        preferences.getString(
-          'urb.reporting_bridge.selected_template.v5.${scope.selectedTemplateStorageToken}',
+        preferences.getKeys().where(
+          (key) =>
+              key.contains('selected_template.v6.') ||
+              key.contains('selected_template.v5.'),
         ),
-        jsonEncode(<String, dynamic>{'templateId': 'v4-template'}),
+        isEmpty,
       );
       expect(
         preferences.getString(
@@ -264,24 +266,21 @@ void main() {
       firstStore.save(
         firstScope,
         const ReportFlowPreferences(
-          templateId: 'invoice-template',
+          templateCode: 'INVOICE-CODE',
           mode: PresenterModePreference.online,
         ),
       ),
       secondStore.save(
         secondScope,
         const ReportFlowPreferences(
-          templateId: 'voucher-template',
+          templateCode: 'VOUCHER-CODE',
           mode: PresenterModePreference.offline,
         ),
       ),
     ]);
 
-    expect((await firstStore.load(firstScope))?.templateId, 'invoice-template');
-    expect(
-      (await secondStore.load(secondScope))?.templateId,
-      'voucher-template',
-    );
+    expect((await firstStore.load(firstScope))?.templateCode, 'INVOICE-CODE');
+    expect((await secondStore.load(secondScope))?.templateCode, 'VOUCHER-CODE');
     expect(
       (await secondStore.load(secondScope))?.mode,
       PresenterModePreference.offline,
@@ -307,7 +306,7 @@ void main() {
         customType: 'b',
       );
       const value = ReportFlowPreferences(
-        templateId: 'template',
+        templateCode: 'TEMPLATE-CODE',
         mode: PresenterModePreference.online,
       );
 
@@ -316,7 +315,7 @@ void main() {
       await store.remove(first);
 
       expect(await store.load(first), isNull);
-      expect((await store.load(second))?.templateId, 'template');
+      expect((await store.load(second))?.templateCode, 'TEMPLATE-CODE');
     },
   );
 

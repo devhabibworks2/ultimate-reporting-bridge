@@ -29,58 +29,70 @@ void main() {
     );
   });
 
-  test('durable selected-template record stores systemCode plus templateCode', () async {
-    const scope = ReportPreferenceScope(
-      connectionKey: 'deployed|https://example.test',
-      system: 'system_a',
-      reportType: 'sales_invoice',
-      userId: '42',
-    );
-    final preferences = await SharedPreferences.getInstance();
-    final store = SharedPreferencesReportFlowPreferenceStore(preferences);
-    final durable = ReportFlowPreferences.fromJson(<String, dynamic>{
-      'templateCode': 'INV-A5-AR',
-      'mode': 'online',
-    });
+  test(
+    'durable selected-template record stores systemCode plus templateCode',
+    () async {
+      const scope = ReportPreferenceScope(
+        connectionKey: 'deployed|https://example.test',
+        system: 'system_a',
+        reportType: 'sales_invoice',
+        userId: '42',
+      );
+      final preferences = await SharedPreferences.getInstance();
+      final store = SharedPreferencesReportFlowPreferenceStore(preferences);
+      final durable = ReportFlowPreferences.fromJson(<String, dynamic>{
+        'templateCode': 'INV-A5-AR',
+        'mode': 'online',
+      });
 
-    expect(durable, isNotNull);
-    await store.save(scope, durable!);
+      expect(durable, isNotNull);
+      await store.save(scope, durable!);
 
-    final selectedKeys = preferences
-        .getKeys()
-        .where((key) => key.startsWith('urb.reporting_bridge.selected_template.'))
-        .toList(growable: false);
-    expect(selectedKeys, hasLength(1));
-    expect(selectedKeys.single, startsWith('urb.reporting_bridge.selected_template.v6.'));
+      final selectedKeys = preferences
+          .getKeys()
+          .where(
+            (key) => key.startsWith('urb.reporting_bridge.selected_template.'),
+          )
+          .toList(growable: false);
+      expect(selectedKeys, hasLength(1));
+      expect(
+        selectedKeys.single,
+        startsWith('urb.reporting_bridge.selected_template.v6.'),
+      );
 
-    final raw = jsonDecode(preferences.getString(selectedKeys.single)!) as Map;
-    expect(raw['systemCode'], 'system_a');
-    expect(raw['templateCode'], 'INV-A5-AR');
-    expect(raw.containsKey('templateId'), isFalse);
-  });
+      final raw =
+          jsonDecode(preferences.getString(selectedKeys.single)!) as Map;
+      expect(raw['systemCode'], 'system_a');
+      expect(raw['templateCode'], 'INV-A5-AR');
+      expect(raw.containsKey('templateId'), isFalse);
+    },
+  );
 
-  test('legacy numeric templateId is never written as a durable V6 selection', () async {
-    const scope = ReportPreferenceScope(
-      connectionKey: 'deployed|https://example.test',
-      system: 'system_a',
-      reportType: 'sales_invoice',
-    );
-    final preferences = await SharedPreferences.getInstance();
-    final store = SharedPreferencesReportFlowPreferenceStore(preferences);
+  test(
+    'legacy numeric templateId is never written as a durable V6 selection',
+    () async {
+      const scope = ReportPreferenceScope(
+        connectionKey: 'deployed|https://example.test',
+        system: 'system_a',
+        reportType: 'sales_invoice',
+      );
+      final preferences = await SharedPreferences.getInstance();
+      final store = SharedPreferencesReportFlowPreferenceStore(preferences);
 
-    await store.save(
-      scope,
-      const ReportFlowPreferences(
-        templateId: '17',
-        mode: PresenterModePreference.online,
-      ),
-    );
+      await store.save(
+        scope,
+        const ReportFlowPreferences(
+          templateId: '17',
+          mode: PresenterModePreference.online,
+        ),
+      );
 
-    expect(
-      preferences.getKeys().where(
-        (key) => key.startsWith('urb.reporting_bridge.selected_template.v6.'),
-      ),
-      isEmpty,
-    );
-  });
+      expect(
+        preferences.getKeys().where(
+          (key) => key.startsWith('urb.reporting_bridge.selected_template.v6.'),
+        ),
+        isEmpty,
+      );
+    },
+  );
 }

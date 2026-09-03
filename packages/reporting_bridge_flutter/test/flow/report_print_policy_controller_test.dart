@@ -391,13 +391,16 @@ CachedTemplate _template(String id, {String orientation = 'portrait'}) =>
       id: id,
       type: 'sales_invoice',
       systemId: 1,
+      systemCode: 'motakamel_transactions',
+      code: 'CODE-$id',
       name: id,
       document: <String, dynamic>{
         'schemaVersion': '1.0.0',
-        'meta': const <String, dynamic>{
+        'meta': <String, dynamic>{
           'name': 'Thermal invoice',
           'family': 'sales_invoice',
           'systemCode': 'motakamel_transactions',
+          'code': 'CODE-$id',
         },
         'page': <String, dynamic>{
           'unit': 'mm',
@@ -420,13 +423,16 @@ CachedTemplate _pagesTemplate(String id) => CachedTemplate(
   id: id,
   type: 'sales_invoice',
   systemId: 1,
+  systemCode: 'motakamel_transactions',
+  code: 'CODE-$id',
   name: id,
-  document: const <String, dynamic>{
+  document: <String, dynamic>{
     'schemaVersion': '1.0.0',
     'meta': <String, dynamic>{
       'name': 'A4 invoice',
       'family': 'sales_invoice',
       'systemCode': 'motakamel_transactions',
+      'code': 'CODE-$id',
     },
     'page': <String, dynamic>{
       'unit': 'mm',

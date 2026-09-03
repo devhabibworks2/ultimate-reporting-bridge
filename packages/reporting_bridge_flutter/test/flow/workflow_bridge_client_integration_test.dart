@@ -220,6 +220,7 @@ Map<String, dynamic> _queryEnvelope() => <String, dynamic>{
           'meta': <String, dynamic>{
             'name': 'Invoice 80mm',
             'systemCode': 'motakamel_transactions',
+            'code': 'invoice-80',
           },
           'page': <String, dynamic>{},
           'styleTokens': <String, dynamic>{},

@@ -498,7 +498,9 @@ class _RequestScopedPreferenceStore implements ReportFlowPreferenceStore {
 
     final legacyId = stored.templateId?.trim();
     if (legacyId != null && legacyId.isNotEmpty) {
-      final resolved = await _lookupTemplate((template) => template.id == legacyId);
+      final resolved = await _lookupTemplate(
+        (template) => template.id == legacyId,
+      );
       final template = resolved.template;
       final durableCode = template?.durableTemplateCode;
       if (template != null &&
@@ -507,6 +509,7 @@ class _RequestScopedPreferenceStore implements ReportFlowPreferenceStore {
         await delegate.save(
           scope,
           ReportFlowPreferences(
+            templateId: template.id,
             templateCode: durableCode,
             mode: stored.mode,
           ),
@@ -546,9 +549,7 @@ class _RequestScopedPreferenceStore implements ReportFlowPreferenceStore {
     await delegate.removeSelectedTemplate(scope);
     selectionRequiresExplicitReselection = false;
     if (loadedPreferences != null) {
-      loadedPreferences = ReportFlowPreferences(
-        mode: loadedPreferences!.mode,
-      );
+      loadedPreferences = ReportFlowPreferences(mode: loadedPreferences!.mode);
     }
   }
 
@@ -564,9 +565,7 @@ class _RequestScopedPreferenceStore implements ReportFlowPreferenceStore {
     await delegate.removeSelectedTemplate(scope);
     selectionRequiresExplicitReselection = false;
     if (loadedPreferences != null) {
-      loadedPreferences = ReportFlowPreferences(
-        mode: loadedPreferences!.mode,
-      );
+      loadedPreferences = ReportFlowPreferences(mode: loadedPreferences!.mode);
     }
   }
 
@@ -578,6 +577,7 @@ class _RequestScopedPreferenceStore implements ReportFlowPreferenceStore {
     final explicitCode = preferences.templateCode?.trim();
     if (explicitCode != null && explicitCode.isNotEmpty) {
       final durable = ReportFlowPreferences(
+        templateId: preferences.templateId,
         templateCode: explicitCode,
         mode: preferences.mode,
       );
@@ -589,15 +589,14 @@ class _RequestScopedPreferenceStore implements ReportFlowPreferenceStore {
 
     final templateId = preferences.templateId?.trim();
     if (templateId == null || templateId.isEmpty) {
-      await delegate.save(
-        scope,
-        ReportFlowPreferences(mode: preferences.mode),
-      );
+      await delegate.save(scope, ReportFlowPreferences(mode: preferences.mode));
       loadedPreferences = preferences;
       return;
     }
 
-    final resolved = await _lookupTemplate((template) => template.id == templateId);
+    final resolved = await _lookupTemplate(
+      (template) => template.id == templateId,
+    );
     final template = resolved.template;
     final templateCode = template?.durableTemplateCode;
     if (template == null || templateCode == null) {
@@ -608,6 +607,7 @@ class _RequestScopedPreferenceStore implements ReportFlowPreferenceStore {
     await delegate.save(
       scope,
       ReportFlowPreferences(
+        templateId: template.id,
         templateCode: templateCode,
         mode: preferences.mode,
       ),

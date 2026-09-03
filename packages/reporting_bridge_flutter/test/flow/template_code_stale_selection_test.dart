@@ -9,43 +9,48 @@ import 'package:reporting_bridge_flutter/src/flow/report_flow_runtime.dart';
 import '../test_open_request.dart';
 
 void main() {
-  test('stale saved selection requires explicit reselection without auto substitute', () async {
-    final root = Directory.systemTemp.createTempSync('urb-template-code-stale-');
-    addTearDown(() async {
-      if (root.existsSync()) root.deleteSync(recursive: true);
-    });
+  test(
+    'stale saved selection requires explicit reselection without auto substitute',
+    () async {
+      final root = Directory.systemTemp.createTempSync(
+        'urb-template-code-stale-',
+      );
+      addTearDown(() async {
+        if (root.existsSync()) root.deleteSync(recursive: true);
+      });
 
-    final preferences = _StalePreferenceStore();
-    final bridge = _SingleTemplateBridgeClient(root);
-    final controller = ReportFlowControllerImpl(
-      request: buildTestOpenRequest(
-        system: 'legacy_system_1',
-        reportType: 'sales_invoice',
-        entryPolicy: ReportEntryPolicy.smart,
-      ),
-      runtime: ReportFlowRuntime(
-        connection: ReportServerConnection(
-          endpoints: ReportServerEndpoints.deployed(
-            Uri.parse('https://example.test'),
-          ),
-          cacheRoot: root,
+      final preferences = _StalePreferenceStore();
+      final bridge = _SingleTemplateBridgeClient(root);
+      final controller = ReportFlowControllerImpl(
+        request: buildTestOpenRequest(
+          system: 'legacy_system_1',
+          reportType: 'sales_invoice',
+          entryPolicy: ReportEntryPolicy.smart,
         ),
-        bridgeClient: bridge,
-        preferences: preferences,
-        filePlatform: _NoopFilePlatform(),
-        surfaceBinding: PresenterSurfaceBinding(),
-      ),
-    );
-    addTearDown(controller.dispose);
+        runtime: ReportFlowRuntime(
+          connection: ReportServerConnection(
+            endpoints: ReportServerEndpoints.deployed(
+              Uri.parse('https://example.test'),
+            ),
+            cacheRoot: root,
+          ),
+          bridgeClient: bridge,
+          preferences: preferences,
+          filePlatform: _NoopFilePlatform(),
+          surfaceBinding: PresenterSurfaceBinding(),
+        ),
+      );
+      addTearDown(controller.dispose);
 
-    await controller.initialize();
+      await controller.initialize();
 
-    expect(controller.value.stage, ReportFlowStage.selectingTemplate);
-    expect(controller.value.selectedTemplateId, isNull);
-    expect(controller.value.committedTemplateId, isNull);
-    expect(controller.value.presenterLaunch, isNull);
-    expect(bridge.prepareCalls, 0);
-  });
+      expect(controller.value.stage, ReportFlowStage.selectingTemplate);
+      expect(controller.value.selectedTemplateId, isNull);
+      expect(controller.value.committedTemplateId, isNull);
+      expect(controller.value.presenterLaunch, isNull);
+      expect(bridge.prepareCalls, 0);
+    },
+  );
 }
 
 CachedTemplate _template() => const CachedTemplate(
@@ -144,7 +149,8 @@ class _StalePreferenceStore implements ReportFlowPreferenceStore {
   );
 
   @override
-  Future<ReportFlowPreferences?> load(ReportPreferenceScope scope) async => value;
+  Future<ReportFlowPreferences?> load(ReportPreferenceScope scope) async =>
+      value;
 
   @override
   Future<void> save(
