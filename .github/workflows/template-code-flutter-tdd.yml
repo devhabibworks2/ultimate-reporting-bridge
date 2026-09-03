@@ -1,0 +1,32 @@
+name: Template Code Flutter TDD
+
+on:
+  push:
+    branches:
+      - feat/template-code-persistence-20260902
+
+concurrency:
+  group: template-code-flutter-tdd-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  flutter-template-code:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.6'
+          channel: stable
+          cache: true
+      - name: Install dependencies
+        working-directory: packages/reporting_bridge_flutter
+        run: flutter pub get
+      - name: Persistence contract
+        working-directory: packages/reporting_bridge_flutter
+        run: flutter test test/persistence/template_code_durable_identity_test.dart
+      - name: Stale selection contract
+        if: always()
+        working-directory: packages/reporting_bridge_flutter
+        run: flutter test test/flow/template_code_stale_selection_test.dart
