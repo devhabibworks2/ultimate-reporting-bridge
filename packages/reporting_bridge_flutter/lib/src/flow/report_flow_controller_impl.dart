@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:reporting_bridge/reporting_bridge.dart';
 
 import '../contracts/external_printer_contract.dart';
+import '../contracts/report_open_request.dart';
 import '../contracts/template_compatibility_constraints.dart';
 import '../contracts/template_sync_request.dart';
 import '../logging/bridge_diagnostics.dart';
@@ -15,7 +16,6 @@ import 'report_flow_event.dart';
 import 'report_flow_failure.dart';
 import 'report_flow_runtime.dart';
 import 'report_flow_state.dart';
-import '../contracts/report_open_request.dart';
 import 'report_template_metadata.dart';
 
 /// Extends the preserved workflow repairs owned by the base controller.
@@ -38,15 +38,16 @@ class ReportFlowControllerImpl extends base.ReportFlowControllerImpl
     final effectiveRequest = request.copyWith(
       featuresOverride: effectiveFeatures,
     );
-    final scopedPreferences = _RequestScopedPreferenceStore(
-      delegate: runtime.preferences,
-      request: effectiveRequest,
-      connectionKey: runtime.connection.preferenceSourceKey,
-    );
     final flowBridgeClient = _WorkflowBridgeClient(
       delegate: runtime.bridgeClient,
       system: effectiveRequest.templateSyncRequest.systemCode.value,
       templateSyncRequest: effectiveRequest.templateSyncRequest,
+    );
+    final scopedPreferences = _RequestScopedPreferenceStore(
+      delegate: runtime.preferences,
+      request: effectiveRequest,
+      connectionKey: runtime.connection.preferenceSourceKey,
+      bridgeClient: flowBridgeClient,
     );
     final scopedRuntime = ReportFlowRuntime(
       connection: runtime.connection,
@@ -61,6 +62,7 @@ class ReportFlowControllerImpl extends base.ReportFlowControllerImpl
       request: effectiveRequest,
       runtime: runtime,
       scopedRuntime: scopedRuntime,
+      scopedPreferences: scopedPreferences,
       workflowBridgeClient: flowBridgeClient,
       features: effectiveFeatures,
       renderTimeout: renderTimeout,
@@ -74,11 +76,13 @@ class ReportFlowControllerImpl extends base.ReportFlowControllerImpl
     required ReportOpenRequest request,
     required ReportFlowRuntime runtime,
     required ReportFlowRuntime scopedRuntime,
+    required _RequestScopedPreferenceStore scopedPreferences,
     required _WorkflowBridgeClient workflowBridgeClient,
     required BridgeUiFeatures features,
     required Duration renderTimeout,
     required VoidCallback? onDisposed,
   }) : _runtime = runtime,
+       _scopedPreferences = scopedPreferences,
        _workflowBridgeClient = workflowBridgeClient,
        _effectiveFeatures = features,
        _compatibilityConstraints = resolveTemplateCompatibilityConstraints(
@@ -93,6 +97,7 @@ class ReportFlowControllerImpl extends base.ReportFlowControllerImpl
        );
 
   final ReportFlowRuntime _runtime;
+  final _RequestScopedPreferenceStore _scopedPreferences;
   final _WorkflowBridgeClient _workflowBridgeClient;
   final BridgeUiFeatures _effectiveFeatures;
   final TemplateCompatibilityConstraints _compatibilityConstraints;
@@ -153,6 +158,7 @@ class ReportFlowControllerImpl extends base.ReportFlowControllerImpl
     if (template == null || !_isEligible(template)) {
       return;
     }
+    _scopedPreferences.acceptExplicitReselection();
     super.selectTemplate(templateId);
   }
 
@@ -388,6 +394,7 @@ class ReportFlowControllerImpl extends base.ReportFlowControllerImpl
   }
 
   void _ensureEligibleSelection() {
+    if (_scopedPreferences.selectionRequiresExplicitReselection) return;
     final current = value.selectedTemplate;
     if (current != null && _isEligible(current)) {
       return;
@@ -428,12 +435,17 @@ class _RequestScopedPreferenceStore implements ReportFlowPreferenceStore {
     required this.delegate,
     required this.request,
     required this.connectionKey,
+    required this.bridgeClient,
   });
+
+  static const _staleRuntimeId = '__urb_template_code_reselection_required__';
 
   final ReportFlowPreferenceStore delegate;
   final ReportOpenRequest request;
   final String connectionKey;
+  final ReportingBridgeClient bridgeClient;
   ReportFlowPreferences? loadedPreferences;
+  bool selectionRequiresExplicitReselection = false;
 
   ReportPreferenceScope get scope => ReportPreferenceScope(
     connectionKey: connectionKey,
@@ -450,16 +462,91 @@ class _RequestScopedPreferenceStore implements ReportFlowPreferenceStore {
 
   @override
   Future<ReportFlowPreferences?> load(ReportPreferenceScope _) async {
+    selectionRequiresExplicitReselection = false;
     final stored = await delegate.load(scope);
+    if (stored == null) {
+      loadedPreferences = null;
+      return null;
+    }
+
+    final templateCode = stored.templateCode?.trim();
+    if (templateCode != null && templateCode.isNotEmpty) {
+      final resolved = await _lookupTemplate(
+        (template) => template.durableTemplateCode == templateCode,
+      );
+      if (resolved.template != null) {
+        final runtime = ReportFlowPreferences(
+          templateId: resolved.template!.id,
+          templateCode: templateCode,
+          mode: stored.mode,
+        );
+        loadedPreferences = runtime;
+        return runtime;
+      }
+
+      // A request-scoped catalog may exclude an otherwise valid Code. Preserve
+      // the durable Code, but never substitute another template silently.
+      selectionRequiresExplicitReselection = true;
+      final stale = ReportFlowPreferences(
+        templateId: _staleRuntimeId,
+        templateCode: templateCode,
+        mode: stored.mode,
+      );
+      loadedPreferences = stale;
+      return stale;
+    }
+
+    final legacyId = stored.templateId?.trim();
+    if (legacyId != null && legacyId.isNotEmpty) {
+      final resolved = await _lookupTemplate((template) => template.id == legacyId);
+      final template = resolved.template;
+      final durableCode = template?.durableTemplateCode;
+      if (template != null &&
+          durableCode != null &&
+          _legacyTemplateMatchesActiveSystem(template)) {
+        await delegate.save(
+          scope,
+          ReportFlowPreferences(
+            templateCode: durableCode,
+            mode: stored.mode,
+          ),
+        );
+        final runtime = ReportFlowPreferences(
+          templateId: template.id,
+          templateCode: durableCode,
+          mode: stored.mode,
+        );
+        loadedPreferences = runtime;
+        return runtime;
+      }
+
+      // A successful refresh is authoritative enough to reject a legacy ID
+      // for the active System. Clear that ID once; never manufacture a Code.
+      if (resolved.refreshed) {
+        await delegate.removeSelectedTemplate(scope);
+      }
+      selectionRequiresExplicitReselection = true;
+      final stale = ReportFlowPreferences(
+        templateId: _staleRuntimeId,
+        mode: stored.mode,
+      );
+      loadedPreferences = stale;
+      return stale;
+    }
+
     loadedPreferences = stored;
     return stored;
   }
 
+  void acceptExplicitReselection() {
+    selectionRequiresExplicitReselection = false;
+  }
+
   Future<void> discardLoadedSelection() async {
     await delegate.removeSelectedTemplate(scope);
+    selectionRequiresExplicitReselection = false;
     if (loadedPreferences != null) {
       loadedPreferences = ReportFlowPreferences(
-        templateId: null,
         mode: loadedPreferences!.mode,
       );
     }
@@ -469,14 +556,15 @@ class _RequestScopedPreferenceStore implements ReportFlowPreferenceStore {
   Future<void> remove(ReportPreferenceScope _) async {
     await delegate.remove(scope);
     loadedPreferences = null;
+    selectionRequiresExplicitReselection = false;
   }
 
   @override
   Future<void> removeSelectedTemplate(ReportPreferenceScope _) async {
     await delegate.removeSelectedTemplate(scope);
+    selectionRequiresExplicitReselection = false;
     if (loadedPreferences != null) {
       loadedPreferences = ReportFlowPreferences(
-        templateId: null,
         mode: loadedPreferences!.mode,
       );
     }
@@ -486,9 +574,79 @@ class _RequestScopedPreferenceStore implements ReportFlowPreferenceStore {
   Future<void> save(
     ReportPreferenceScope _,
     ReportFlowPreferences preferences,
-  ) {
-    loadedPreferences = preferences;
-    return delegate.save(scope, preferences);
+  ) async {
+    final explicitCode = preferences.templateCode?.trim();
+    if (explicitCode != null && explicitCode.isNotEmpty) {
+      final durable = ReportFlowPreferences(
+        templateCode: explicitCode,
+        mode: preferences.mode,
+      );
+      await delegate.save(scope, durable);
+      loadedPreferences = preferences;
+      selectionRequiresExplicitReselection = false;
+      return;
+    }
+
+    final templateId = preferences.templateId?.trim();
+    if (templateId == null || templateId.isEmpty) {
+      await delegate.save(
+        scope,
+        ReportFlowPreferences(mode: preferences.mode),
+      );
+      loadedPreferences = preferences;
+      return;
+    }
+
+    final resolved = await _lookupTemplate((template) => template.id == templateId);
+    final template = resolved.template;
+    final templateCode = template?.durableTemplateCode;
+    if (template == null || templateCode == null) {
+      throw StateError(
+        'Selected template cannot be persisted without a genuine Template Code.',
+      );
+    }
+    await delegate.save(
+      scope,
+      ReportFlowPreferences(
+        templateCode: templateCode,
+        mode: preferences.mode,
+      ),
+    );
+    loadedPreferences = ReportFlowPreferences(
+      templateId: template.id,
+      templateCode: templateCode,
+      mode: preferences.mode,
+    );
+    selectionRequiresExplicitReselection = false;
+  }
+
+  Future<({CachedTemplate? template, bool refreshed})> _lookupTemplate(
+    bool Function(CachedTemplate template) predicate,
+  ) async {
+    var templates = await bridgeClient.listTemplates();
+    for (final template in templates) {
+      if (predicate(template)) return (template: template, refreshed: false);
+    }
+    try {
+      await bridgeClient.syncTemplates();
+      templates = await bridgeClient.listTemplates();
+      for (final template in templates) {
+        if (predicate(template)) return (template: template, refreshed: true);
+      }
+      return (template: null, refreshed: true);
+    } catch (_) {
+      return (template: null, refreshed: false);
+    }
+  }
+
+  bool _legacyTemplateMatchesActiveSystem(CachedTemplate template) {
+    final activeSystem = scope.effectiveSystem;
+    final templateSystem = template.systemCode?.trim().toLowerCase();
+    if (templateSystem != null && templateSystem.isNotEmpty) {
+      return templateSystem == activeSystem;
+    }
+    final legacySystemId = scope.resolvedLegacySystemId;
+    return legacySystemId != null && template.systemId == legacySystemId;
   }
 }
 
@@ -591,6 +749,7 @@ class _WorkflowBridgeClient extends ReportingBridgeClient {
     final meta = document['meta'];
     final documentMetadata = meta is Map ? meta : const <dynamic, dynamic>{};
     final raw =
+        template.systemCode ??
         template.metadata['systemCode'] ??
         documentMetadata['systemCode'] ??
         document['systemCode'] ??
