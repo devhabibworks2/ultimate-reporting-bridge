@@ -1,0 +1,28 @@
+name: Template Code Repair TDD
+
+on:
+  push:
+    branches:
+      - feat/template-code-persistence-20260902
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  focused:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.6'
+          channel: stable
+          cache: true
+      - name: Install dependencies
+        working-directory: packages/reporting_bridge
+        run: dart pub get
+      - name: Run focused Template Code repair tests
+        working-directory: packages/reporting_bridge
+        run: dart test test/bridge_template_code_hardening_test.dart
