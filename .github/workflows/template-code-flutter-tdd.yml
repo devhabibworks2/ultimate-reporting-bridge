@@ -12,7 +12,7 @@ concurrency:
 jobs:
   flutter-template-code:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -20,13 +20,36 @@ jobs:
           flutter-version: '3.44.6'
           channel: stable
           cache: true
-      - name: Install dependencies
+      - name: Install Flutter Bridge dependencies
         working-directory: packages/reporting_bridge_flutter
         run: flutter pub get
-      - name: Persistence contract
+      - name: Focused persistence contract
         working-directory: packages/reporting_bridge_flutter
         run: flutter test test/persistence/template_code_durable_identity_test.dart
-      - name: Stale selection contract
-        if: always()
+      - name: Focused stale selection contract
         working-directory: packages/reporting_bridge_flutter
         run: flutter test test/flow/template_code_stale_selection_test.dart
+      - name: Flutter Bridge format
+        if: always()
+        working-directory: packages/reporting_bridge_flutter
+        run: dart format --output=none --set-exit-if-changed lib test
+      - name: Flutter Bridge analyze
+        if: always()
+        working-directory: packages/reporting_bridge_flutter
+        run: flutter analyze
+      - name: Flutter Bridge full test
+        if: always()
+        working-directory: packages/reporting_bridge_flutter
+        run: flutter test
+      - name: Install core Bridge dependencies
+        if: always()
+        working-directory: packages/reporting_bridge
+        run: dart pub get
+      - name: Core Bridge analyze
+        if: always()
+        working-directory: packages/reporting_bridge
+        run: dart analyze
+      - name: Core Bridge full test
+        if: always()
+        working-directory: packages/reporting_bridge
+        run: dart test
