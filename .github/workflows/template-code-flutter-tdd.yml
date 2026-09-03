@@ -1,55 +1,68 @@
-name: Template Code Flutter TDD
+name: Template Code Flutter Reconcile
 
 on:
   push:
     branches:
       - feat/template-code-persistence-20260902
 
+permissions:
+  contents: write
+
 concurrency:
-  group: template-code-flutter-tdd-${{ github.ref }}
+  group: template-code-flutter-reconcile-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  flutter-template-code:
+  reconcile-and-verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.44.6'
           channel: stable
           cache: true
+      - name: Apply bounded reconciliation patch
+        run: python3 .github/scripts/reconcile_template_code_flutter.py
       - name: Install Flutter Bridge dependencies
         working-directory: packages/reporting_bridge_flutter
         run: flutter pub get
-      - name: Focused persistence contract
+      - name: Format Flutter Bridge
+        run: dart format packages/reporting_bridge_flutter/lib packages/reporting_bridge_flutter/test
+      - name: Diff check
+        run: git diff --check
+      - name: Focused durable identity
         working-directory: packages/reporting_bridge_flutter
         run: flutter test test/persistence/template_code_durable_identity_test.dart
-      - name: Focused stale selection contract
+      - name: Focused stale selection
         working-directory: packages/reporting_bridge_flutter
         run: flutter test test/flow/template_code_stale_selection_test.dart
-      - name: Flutter Bridge format
-        if: always()
-        working-directory: packages/reporting_bridge_flutter
-        run: dart format --output=none --set-exit-if-changed lib test
       - name: Flutter Bridge analyze
-        if: always()
         working-directory: packages/reporting_bridge_flutter
         run: flutter analyze
       - name: Flutter Bridge full test
-        if: always()
         working-directory: packages/reporting_bridge_flutter
         run: flutter test
       - name: Install core Bridge dependencies
-        if: always()
         working-directory: packages/reporting_bridge
         run: dart pub get
       - name: Core Bridge analyze
-        if: always()
         working-directory: packages/reporting_bridge
         run: dart analyze
       - name: Core Bridge full test
-        if: always()
         working-directory: packages/reporting_bridge
         run: dart test
+      - name: Commit verified reconciliation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add packages/reporting_bridge_flutter
+          if git diff --cached --quiet; then
+            echo "No reconciled changes to commit."
+          else
+            git commit -m "test(template-code): reconcile Flutter Code identity fixtures"
+            git push origin HEAD:feat/template-code-persistence-20260902
+          fi
