@@ -27,6 +27,26 @@ jobs:
           cache: true
       - name: Apply bounded reconciliation patch
         run: python3 .github/scripts/reconcile_template_code_flutter.py
+      - name: Fix dynamic migration fixture const marker
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('packages/reporting_bridge_flutter/test/persistence/preference_flow_migration_isolation_test.dart')
+          text = path.read_text()
+          old = """    'meta': const <String, dynamic>{
+              'name': 'Invoice',
+              'family': 'sales_invoice',
+              'code': 'CODE-$id',
+          """
+          new = """    'meta': <String, dynamic>{
+              'name': 'Invoice',
+              'family': 'sales_invoice',
+              'code': 'CODE-$id',
+          """
+          if old not in text:
+              raise SystemExit('dynamic migration fixture const marker not found')
+          path.write_text(text.replace(old, new, 1))
+          PY
       - name: Install Flutter Bridge dependencies
         working-directory: packages/reporting_bridge_flutter
         run: flutter pub get
