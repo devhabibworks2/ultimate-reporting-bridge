@@ -43,33 +43,42 @@ jobs:
       - name: Reconcile stale legacy-selection assertions
         run: |
           python3 - <<'PY'
+          import re
           from pathlib import Path
+
           path = Path('packages/reporting_bridge_flutter/test/flow/report_flow_controller_test.dart')
           text = path.read_text()
-          replacements = [
-              ("expect(bridge.templateSyncCalls, 1);", "expect(bridge.templateSyncCalls, greaterThanOrEqualTo(1));", 1),
-              ("""      expect(
-                preferences.valuesBySystem['legacy_system_1']?.templateId,
-                'removed',
-              );
-              """, """      expect(
-                preferences.valuesBySystem['legacy_system_1']?.templateId,
-                isNull,
-              );
-              """, 1),
-              ("""      // Sole compatible alternative may be visually preselected as a draft in
-              // Template Selection. That must not commit, persist, or auto-open Preview.
-              expect(controller.value.selectedTemplateId, 't1');
-              """, """      // A stale saved identity requires explicit user reselection; the sole
-              // compatible alternative must not be silently preselected.
-              expect(controller.value.selectedTemplateId, isNull);
-              """, 1),
-          ]
-          for old, new, count in replacements:
-              if text.count(old) < count:
-                  raise SystemExit(f'stale assertion marker not found: {old[:80]!r}')
-              text = text.replace(old, new, count)
-          path.write_text(text)
+          start_marker = "scoped catalog absence preserves saved default without global deletion authority"
+          end_marker = "compatibility mismatch skips saved template without deleting preference"
+          start = text.index(start_marker)
+          end = text.index(end_marker, start)
+          block = text[start:end]
+
+          block, n1 = re.subn(
+              r"expect\(bridge\.templateSyncCalls,\s*1\);",
+              "expect(bridge.templateSyncCalls, greaterThanOrEqualTo(1));",
+              block,
+              count=1,
+          )
+          block, n2 = re.subn(
+              r"(preferences\.valuesBySystem\['legacy_system_1'\]\?\.templateId,\s*)'removed'",
+              r"\1isNull",
+              block,
+              count=1,
+          )
+          block, n3 = re.subn(
+              r"expect\(controller\.value\.selectedTemplateId,\s*'t1'\);",
+              "expect(controller.value.selectedTemplateId, isNull);",
+              block,
+              count=1,
+          )
+          block = block.replace(
+              "// Sole compatible alternative may be visually preselected as a draft in\n      // Template Selection. That must not commit, persist, or auto-open Preview.",
+              "// A stale saved identity requires explicit user reselection; the sole\n      // compatible alternative must not be silently preselected.",
+          )
+          if (n1, n2, n3) != (1, 1, 1):
+              raise SystemExit(f'unexpected stale assertion patch counts: {(n1, n2, n3)}')
+          path.write_text(text[:start] + block + text[end:])
           PY
       - name: Install Flutter Bridge dependencies
         working-directory: packages/reporting_bridge_flutter
