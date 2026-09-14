@@ -10,11 +10,14 @@ import '../flow/report_flow_state.dart';
 import '../contracts/report_open_request.dart';
 import '../flow/report_result.dart';
 import '../localization/report_flow_strings.dart';
+import '../printing/thermal_printer_controller.dart';
+import '../printing/thermal_printer_models.dart';
 import 'bridge_presenter_view.dart';
 import 'bridge_ui_config.dart';
 import 'bridge_ui_features.dart';
 import 'presenter_action_dock.dart';
 import 'template_presentation.dart';
+import 'thermal_printer_settings_screen.dart';
 
 TextDirection _contentTextDirection(String value, TextDirection fallback) {
   final arabic = RegExp(
@@ -1776,6 +1779,41 @@ class _SettingsPage extends StatelessWidget {
                       onTap: openTemplateSelection,
                     ),
                   ),
+                if (features.showPrint &&
+                    controller.thermalPrinterSettings != null) ...<Widget>[
+                  const SizedBox(height: 16),
+                  const _SettingsSectionTitle('الطباعة'),
+                  const SizedBox(height: 8),
+                  _SettingsSurface(
+                    child: ValueListenableBuilder<ThermalPrinterSettingsState>(
+                      valueListenable: controller.thermalPrinterSettings!,
+                      builder: (context, printerState, _) =>
+                          _SettingsActionTile(
+                            key: const ValueKey<String>(
+                              'settings-thermal-printer-row',
+                            ),
+                            icon: Icons.print_outlined,
+                            title: printerState.profile == null
+                                ? 'إعداد الطابعة الحرارية'
+                                : printerState.profile!.displayName,
+                            description: printerState.profile == null
+                                ? 'لم يتم إعداد طابعة افتراضية.'
+                                : 'تغيير الاتصال، عرض الطباعة، وخيارات الورق.',
+                            onTap: state.busy
+                                ? null
+                                : () => Navigator.of(context).push<void>(
+                                    MaterialPageRoute<void>(
+                                      builder: (_) =>
+                                          ThermalPrinterSettingsScreen(
+                                            controller: controller
+                                                .thermalPrinterSettings!,
+                                          ),
+                                    ),
+                                  ),
+                          ),
+                    ),
+                  ),
+                ],
                 if (features.allowOfflineMode) ...<Widget>[
                   const SizedBox(height: 16),
                   _SettingsSectionTitle(strings.presenterMode),
@@ -2501,6 +2539,43 @@ class _PreviewPage extends StatelessWidget {
               code: ReportFlowFailureCode.printFailed,
               diagnostic: error.toString(),
             );
+      final printerSettings = controller.thermalPrinterSettings;
+      if (failure.code == ReportFlowFailureCode.printSetupRequired &&
+          printerSettings != null) {
+        await Navigator.of(context).push<void>(
+          MaterialPageRoute<void>(
+            builder: (_) =>
+                ThermalPrinterSettingsScreen(controller: printerSettings),
+          ),
+        );
+        return;
+      }
+      final needsPrinterSettings =
+          failure.code ==
+              ReportFlowFailureCode.savedBluetoothPrinterUnavailable ||
+          failure.code == ReportFlowFailureCode.bluetoothPermissionDenied;
+      if (needsPrinterSettings && printerSettings != null) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: Text(strings.failure(failure)),
+              action: SnackBarAction(
+                label: strings.settings,
+                onPressed: () {
+                  Navigator.of(context).push<void>(
+                    MaterialPageRoute<void>(
+                      builder: (_) => ThermalPrinterSettingsScreen(
+                        controller: printerSettings,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          );
+        return;
+      }
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(SnackBar(content: Text(strings.failure(failure))));
@@ -2581,7 +2656,12 @@ class _PreviewPage extends StatelessWidget {
           : PresenterActionDock(
               saveLabel: strings.savePdf,
               shareLabel: strings.share,
-              printLabel: strings.print,
+              printLabel: switch (state.printProgress?.phase) {
+                ThermalPrintPhase.preparing => strings.preparingPrint,
+                ThermalPrintPhase.connecting => strings.connectingPrinter,
+                ThermalPrintPhase.printing => strings.sendingToPrinter,
+                null => strings.print,
+              },
               settingsLabel: strings.settings,
               showSavePdf: features.showSavePdf,
               showSharePdf: features.showSharePdf,

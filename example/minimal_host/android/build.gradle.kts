@@ -1,5 +1,6 @@
 allprojects {
     repositories {
+        maven("https://jitpack.io")
         google()
         mavenCentral()
     }

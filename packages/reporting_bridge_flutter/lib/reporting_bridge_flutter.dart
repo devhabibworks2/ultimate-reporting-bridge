@@ -26,6 +26,8 @@ export 'src/platform/android_print_configuration.dart';
 export 'src/platform/bridge_platform_adapters.dart';
 export 'src/platform/platform_printing.dart';
 export 'src/platform/presenter_surface_binding.dart';
+export 'src/printing/thermal_printer_models.dart';
+export 'src/printing/thermal_printer_controller.dart';
 export 'src/ui/bridge_presenter_view.dart';
 export 'src/ui/bridge_ui_config.dart';
 export 'src/ui/bridge_ui_features.dart';

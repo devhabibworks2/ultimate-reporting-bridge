@@ -107,6 +107,12 @@ class ReportFlowStrings {
   String get adoptAndOpenReport =>
       arabic ? 'اعتماد القالب وفتح التقرير' : 'Adopt and open report';
   String get print => arabic ? 'طباعة' : 'Print';
+  String get preparingPrint =>
+      arabic ? 'جارٍ تجهيز الطباعة' : 'Preparing print';
+  String get connectingPrinter =>
+      arabic ? 'جارٍ الاتصال بالطابعة' : 'Connecting printer';
+  String get sendingToPrinter =>
+      arabic ? 'جارٍ إرسال الطباعة' : 'Sending to printer';
   String get savePdf => arabic ? 'حفظ PDF' : 'Save PDF';
   String get share => arabic ? 'مشاركة' : 'Share';
   String get language => arabic ? 'اللغة' : 'Language';
@@ -364,6 +370,42 @@ class ReportFlowStrings {
         arabic
             ? 'لا يمكن تحويل حجم الورق المحدد للطباعة.'
             : 'The selected paper size cannot be converted for printing.',
+      ReportFlowFailureCode.savedBluetoothPrinterUnavailable =>
+        arabic
+            ? 'الطابعة المحفوظة غير متاحة. تأكد من ربطها عبر Bluetooth ثم حدّث إعداداتها.'
+            : 'The saved Bluetooth printer is unavailable. Pair it, then refresh its settings.',
+      ReportFlowFailureCode.bluetoothPermissionDenied =>
+        arabic
+            ? 'يلزم السماح بصلاحية الأجهزة القريبة لاستخدام طابعة Bluetooth.'
+            : 'Nearby devices permission is required for Bluetooth printing.',
+      ReportFlowFailureCode.bluetoothPrinterConnectionFailed =>
+        arabic
+            ? 'تعذر الاتصال بطابعة Bluetooth. تأكد أنها قيد التشغيل وقريبة.'
+            : 'The Bluetooth printer could not be connected. Check that it is powered on and nearby.',
+      ReportFlowFailureCode.tcpPrinterConnectionTimeout =>
+        arabic
+            ? 'انتهت مهلة الاتصال بالشبكة. تحقق من عنوان IP والمنفذ وأن الجهازين على الشبكة نفسها.'
+            : 'The network printer connection timed out. Check its IP address, port, and network.',
+      ReportFlowFailureCode.tcpPrinterHostNotFound =>
+        arabic
+            ? 'تعذر العثور على عنوان طابعة الشبكة. تحقق من IP أو اسم المضيف.'
+            : 'The network printer host could not be found. Check its IP address or hostname.',
+      ReportFlowFailureCode.tcpPrinterConnectionRefused =>
+        arabic
+            ? 'رفضت طابعة الشبكة الاتصال. تحقق من المنفذ وأنها متصلة بالشبكة.'
+            : 'The network printer refused the connection. Check its port and network connection.',
+      ReportFlowFailureCode.tcpPrinterSendFailed =>
+        arabic
+            ? 'انقطع الإرسال إلى طابعة الشبكة قبل اكتماله. أعد المحاولة.'
+            : 'Sending data to the network printer did not complete. Please try again.',
+      ReportFlowFailureCode.tcpPrinterConnectionFailed =>
+        arabic
+            ? 'تعذر الاتصال بطابعة الشبكة. تحقق من IP والمنفذ والشبكة نفسها.'
+            : 'The network printer could not be connected. Check its IP address, port, and network.',
+      ReportFlowFailureCode.thermalPrinterConnectionFailed =>
+        arabic
+            ? 'تعذر الاتصال بالطابعة. تأكد أنها قيد التشغيل وقريبة.'
+            : 'The printer could not be connected. Check that it is powered on and nearby.',
       ReportFlowFailureCode.printFailed =>
         arabic ? 'تعذرت طباعة التقرير.' : 'Report printing failed.',
       ReportFlowFailureCode.cleanupFailed => cleanupWarning,

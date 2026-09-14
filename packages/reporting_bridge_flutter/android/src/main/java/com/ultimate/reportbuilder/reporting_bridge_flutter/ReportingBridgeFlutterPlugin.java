@@ -25,12 +25,16 @@ public final class ReportingBridgeFlutterPlugin implements
     FlutterPlugin,
     MethodChannel.MethodCallHandler,
     ActivityAware,
-    PluginRegistry.ActivityResultListener {
+    PluginRegistry.ActivityResultListener,
+    PluginRegistry.RequestPermissionsResultListener {
 
   private MethodChannel channel;
   private Context applicationContext;
   private Activity activity;
   private TempPdfStore tempPdfStore;
+  private ActivityPluginBinding activityBinding;
+  private PrinterPermissionCoordinator printerPermissionCoordinator;
+  private ThermalPrinterApiHandler thermalPrinterApiHandler;
   private final ExternalPrintIntentFactory externalIntentFactory =
       new ExternalPrintIntentFactory();
 
@@ -49,15 +53,28 @@ public final class ReportingBridgeFlutterPlugin implements
         System.currentTimeMillis());
     channel = new MethodChannel(binding.getBinaryMessenger(), PrintContract.CHANNEL);
     channel.setMethodCallHandler(this);
+    printerPermissionCoordinator = new PrinterPermissionCoordinator(applicationContext);
+    thermalPrinterApiHandler = new ThermalPrinterApiHandler(
+        applicationContext, binding.getBinaryMessenger(), printerPermissionCoordinator);
+    thermalPrinterApiHandler.setUp();
   }
 
   @Override
   public void onDetachedFromEngine(@NonNull FlutterPluginBinding binding) {
+    detachActivityBinding();
     if (channel != null) {
       channel.setMethodCallHandler(null);
       channel = null;
     }
     failPendingExternal("pluginDetached", null);
+    if (thermalPrinterApiHandler != null) {
+      thermalPrinterApiHandler.tearDown();
+      thermalPrinterApiHandler = null;
+    }
+    if (printerPermissionCoordinator != null) {
+      printerPermissionCoordinator.detach();
+      printerPermissionCoordinator = null;
+    }
     applicationContext = null;
     tempPdfStore = null;
   }
@@ -65,23 +82,53 @@ public final class ReportingBridgeFlutterPlugin implements
   @Override
   public void onAttachedToActivity(@NonNull ActivityPluginBinding binding) {
     activity = binding.getActivity();
-    binding.addActivityResultListener(this);
+    attachActivityBinding(binding);
   }
 
   @Override
   public void onDetachedFromActivityForConfigChanges() {
-    activity = null;
+    detachActivityBinding();
   }
 
   @Override
   public void onReattachedToActivityForConfigChanges(@NonNull ActivityPluginBinding binding) {
     activity = binding.getActivity();
-    binding.addActivityResultListener(this);
+    attachActivityBinding(binding);
   }
 
   @Override
   public void onDetachedFromActivity() {
+    detachActivityBinding();
+  }
+
+  private void attachActivityBinding(@NonNull ActivityPluginBinding binding) {
+    activityBinding = binding;
+    binding.addActivityResultListener(this);
+    binding.addRequestPermissionsResultListener(this);
+    if (printerPermissionCoordinator != null) {
+      printerPermissionCoordinator.attach(binding.getActivity());
+    }
+  }
+
+  private void detachActivityBinding() {
+    final ActivityPluginBinding binding = activityBinding;
+    if (binding != null) {
+      binding.removeActivityResultListener(this);
+      binding.removeRequestPermissionsResultListener(this);
+    }
+    activityBinding = null;
     activity = null;
+    if (printerPermissionCoordinator != null) printerPermissionCoordinator.detach();
+  }
+
+  @Override
+  public boolean onRequestPermissionsResult(
+      int requestCode,
+      @NonNull String[] permissions,
+      @NonNull int[] grantResults) {
+    return printerPermissionCoordinator != null &&
+        printerPermissionCoordinator.onRequestPermissionsResult(
+            requestCode, permissions, grantResults);
   }
 
   @Override

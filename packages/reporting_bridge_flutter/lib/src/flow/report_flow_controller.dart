@@ -8,6 +8,7 @@ import '../contracts/report_open_request.dart';
 import '../contracts/template_compatibility_constraints.dart';
 import '../platform/bridge_platform_adapters.dart';
 import '../platform/presenter_surface_binding.dart';
+import '../printing/thermal_printer_controller.dart';
 import '../ui/bridge_ui_features.dart';
 import 'report_action_policy.dart';
 import 'report_flow_event.dart';
@@ -129,6 +130,11 @@ abstract interface class ReportFlowActionController {
   Future<ReportPrintResult> printPdf();
 }
 
+/// Optional access to the app-wide managed thermal-printer settings.
+abstract interface class ReportFlowThermalPrinterController {
+  ThermalPrinterSettingsController? get thermalPrinterSettings;
+}
+
 extension ReportFlowControllerActions on ReportFlowController {
   ReportFlowActionController? get _actions => this is ReportFlowActionController
       ? this as ReportFlowActionController
@@ -163,6 +169,11 @@ extension ReportFlowControllerActions on ReportFlowController {
     }
     return actions.printPdf();
   }
+
+  ThermalPrinterSettingsController? get thermalPrinterSettings =>
+      this is ReportFlowThermalPrinterController
+      ? (this as ReportFlowThermalPrinterController).thermalPrinterSettings
+      : null;
 }
 
 TemplateCompatibilityConstraints resolveTemplateCompatibilityConstraints(
