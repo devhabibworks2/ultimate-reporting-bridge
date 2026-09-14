@@ -7,6 +7,10 @@ import '../flow/report_flow_controller_impl.dart';
 import '../flow/report_flow_failure.dart';
 import '../flow/report_flow_runtime.dart';
 import '../flow/report_result.dart';
+import '../headless/headless_presenter_surface.dart';
+import '../headless/headless_report_print_progress.dart';
+import '../headless/headless_report_print_runner.dart';
+import '../headless/in_app_headless_presenter_surface.dart';
 import '../logging/bridge_diagnostics.dart';
 import '../persistence/report_flow_preference_store.dart';
 import '../platform/bridge_platform_adapters.dart';
@@ -30,6 +34,11 @@ abstract interface class ReportingBridgeFlutterClient {
     ReportOpenRequest request,
   );
 
+  Future<ReportPrintResult> printReportHeadless(
+    ReportOpenRequest request, {
+    HeadlessReportPrintProgressCallback? onProgress,
+  });
+
   Future<void> dispose();
 }
 
@@ -46,6 +55,7 @@ class DefaultReportingBridgeFlutterClient
     void Function()? managedPrintDispose,
     ReportSupportSharePlatform supportSharePlatform =
         const SharePlusReportSupportSharePlatform(),
+    HeadlessPresenterSurfaceFactory? headlessPresenterSurfaceFactory,
   }) : _connection = connection,
        _bridgeClient = bridgeClient,
        _preferences = preferences,
@@ -53,7 +63,9 @@ class DefaultReportingBridgeFlutterClient
        _printPlatform = printPlatform,
        _thermalPrinterSettings = thermalPrinterSettings,
        _managedPrintDispose = managedPrintDispose,
-       _supportSharePlatform = supportSharePlatform;
+       _supportSharePlatform = supportSharePlatform,
+       _headlessPresenterSurfaceFactory =
+           headlessPresenterSurfaceFactory ?? InAppHeadlessPresenterSurface.new;
 
   final ReportServerConnection _connection;
   final ReportingBridgeClient _bridgeClient;
@@ -63,6 +75,7 @@ class DefaultReportingBridgeFlutterClient
   final ThermalPrinterSettingsController? _thermalPrinterSettings;
   final void Function()? _managedPrintDispose;
   final ReportSupportSharePlatform _supportSharePlatform;
+  final HeadlessPresenterSurfaceFactory _headlessPresenterSurfaceFactory;
 
   @override
   final BridgeUiConfig ui;
@@ -155,6 +168,17 @@ class DefaultReportingBridgeFlutterClient
     } finally {
       await controller.dispose();
     }
+  }
+
+  @override
+  Future<ReportPrintResult> printReportHeadless(
+    ReportOpenRequest request, {
+    HeadlessReportPrintProgressCallback? onProgress,
+  }) {
+    return HeadlessReportPrintRunner(
+      createController: () => createController(request),
+      surfaceFactory: _headlessPresenterSurfaceFactory,
+    ).run(onProgress: onProgress);
   }
 
   @override

@@ -3,8 +3,8 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:reporting_bridge/reporting_bridge.dart';
 
 import '../flow/report_flow_controller.dart';
-import '../flow/report_flow_failure.dart';
 import '../platform/presenter_surface_binding.dart';
+import '../platform/presenter_web_surface_coordinator.dart';
 
 class BridgePresenterView extends StatefulWidget {
   const BridgePresenterView({
@@ -25,6 +25,8 @@ class BridgePresenterView extends StatefulWidget {
 }
 
 class _BridgePresenterViewState extends State<BridgePresenterView> {
+  static const _coordinator = PresenterWebSurfaceCoordinator();
+
   @override
   void didUpdateWidget(covariant BridgePresenterView oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -55,67 +57,25 @@ class _BridgePresenterViewState extends State<BridgePresenterView> {
         useShouldOverrideUrlLoading: true,
       ),
       onWebViewCreated: (webController) {
-        webController.addJavaScriptHandler(
-          handlerName: 'urbReportingBridge',
-          callback: (args) {
-            if (args.isNotEmpty) {
-              widget.surfaceBinding.acceptMessage(args.first);
-            }
-            return null;
-          },
-        );
-        widget.surfaceBinding.attach(
+        _coordinator.attach(
+          webController: webController,
           sessionId: widget.launch.sessionId,
           templateName: widget.templateName,
-          evaluateJavaScript: (source) =>
-              webController.evaluateJavascript(source: source),
-          reload: webController.reload,
-          onLifecycle: (event) {
-            switch (event.state) {
-              case PresenterWebLifecycleState.connected:
-                widget.controller.presenterProtocolDetected(
-                  event.contractVersion,
-                );
-                return;
-              case PresenterWebLifecycleState.loading:
-                widget.controller.presenterLoadStarted();
-                widget.controller.presenterProtocolDetected(
-                  event.contractVersion,
-                );
-                return;
-              case PresenterWebLifecycleState.ready:
-                widget.controller.presenterProtocolDetected(
-                  event.contractVersion,
-                );
-                widget.controller.completePresenterRender(
-                  sessionId: event.sessionId,
-                );
-                return;
-              case PresenterWebLifecycleState.failed:
-                widget.controller.presenterProtocolDetected(
-                  event.contractVersion,
-                );
-                widget.controller.dispatchPresenterRenderFailure(
-                  ReportFlowFailure.presenterRenderPayload(event.payload),
-                  sessionId: event.sessionId,
-                );
-                return;
-            }
-          },
+          controller: widget.controller,
+          surfaceBinding: widget.surfaceBinding,
         );
       },
-      onLoadStart: (_, __) => widget.controller.presenterLoadStarted(),
+      onLoadStart: (_, __) => _coordinator.handleLoadStart(widget.controller),
       onProgressChanged: (_, progress) =>
-          widget.controller.presenterLoadProgress(progress / 100),
+          _coordinator.handleProgress(widget.controller, progress),
       onReceivedError: (_, request, error) {
-        if (request.isForMainFrame != true) return;
-        widget.controller.failPresenterRender(error.description);
+        _coordinator.handleReceivedError(widget.controller, request, error);
       },
       onReceivedHttpError: (_, request, response) {
-        if (request.isForMainFrame != true) return;
-        if (request.url.toString().contains('favicon')) return;
-        widget.controller.failPresenterRender(
-          'HTTP ${response.statusCode} while loading ${request.url}',
+        _coordinator.handleReceivedHttpError(
+          widget.controller,
+          request,
+          response,
         );
       },
     );
