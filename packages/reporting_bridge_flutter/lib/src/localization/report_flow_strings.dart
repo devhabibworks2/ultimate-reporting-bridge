@@ -411,6 +411,10 @@ class ReportFlowStrings {
         arabic
             ? 'لا توجد قوالب متوافقة لهذا التقرير.'
             : 'No compatible templates are available for this report.',
+      ReportFlowFailureCode.templateSelectionRequired =>
+        arabic
+            ? 'يلزم حفظ قالب افتراضي متوافق قبل الطباعة.'
+            : 'A compatible default template must be saved before printing.',
       ReportFlowFailureCode.templateSyncFailed =>
         arabic ? 'تعذر تحديث القوالب.' : 'Template update failed.',
       ReportFlowFailureCode.presenterSyncFailed =>

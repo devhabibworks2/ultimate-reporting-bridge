@@ -1,6 +1,7 @@
 enum ReportFlowFailureCode {
   flowAlreadyActive,
   noCompatibleTemplates,
+  templateSelectionRequired,
   templateSyncFailed,
   presenterSyncFailed,
   previewPreparationFailed,
