@@ -1,12 +1,18 @@
 import 'package:flutter/material.dart';
 
+import '../localization/report_flow_strings.dart';
 import '../printing/thermal_printer_controller.dart';
 import '../printing/thermal_printer_models.dart';
 
 class ThermalPrinterSettingsScreen extends StatefulWidget {
-  const ThermalPrinterSettingsScreen({super.key, required this.controller});
+  const ThermalPrinterSettingsScreen({
+    super.key,
+    required this.controller,
+    this.localeOverride,
+  });
 
   final ThermalPrinterSettingsController controller;
+  final String? localeOverride;
 
   @override
   State<ThermalPrinterSettingsScreen> createState() =>
@@ -80,6 +86,9 @@ class _ThermalPrinterSettingsScreenState
   void _onDraftChanged() {
     if (mounted) setState(() {});
   }
+
+  ReportFlowStrings get _strings =>
+      ReportFlowStrings.of(context, override: widget.localeOverride);
 
   void _syncProfile() {
     final state = widget.controller.value;
@@ -182,11 +191,12 @@ class _ThermalPrinterSettingsScreenState
 
   @override
   Widget build(BuildContext context) {
+    final strings = _strings;
     final state = widget.controller.value;
     final profile = _profile();
     final busy = state.loading || state.testing;
     return Scaffold(
-      appBar: AppBar(title: const Text('إعدادات الطابعة الحرارية')),
+      appBar: AppBar(title: Text(strings.thermalPrinterSettings)),
       body: SafeArea(
         child: Form(
           autovalidateMode: AutovalidateMode.onUserInteraction,
@@ -196,15 +206,17 @@ class _ThermalPrinterSettingsScreenState
               DropdownButtonFormField<ThermalPrinterConnectionType>(
                 key: ValueKey<ThermalPrinterConnectionType>(_type),
                 initialValue: _type,
-                decoration: const InputDecoration(labelText: 'نوع الاتصال'),
+                decoration: InputDecoration(
+                  labelText: strings.printerConnectionType,
+                ),
                 items: ThermalPrinterConnectionType.values
                     .map(
                       (item) => DropdownMenuItem(
                         value: item,
                         child: Text(switch (item) {
-                          ThermalPrinterConnectionType.bluetooth => 'Bluetooth',
-                          ThermalPrinterConnectionType.usb => 'USB',
-                          ThermalPrinterConnectionType.tcp => 'TCP / Network',
+                          ThermalPrinterConnectionType.bluetooth => strings.bluetooth,
+                          ThermalPrinterConnectionType.usb => strings.usb,
+                          ThermalPrinterConnectionType.tcp => strings.tcpNetwork,
                         }),
                       ),
                     )
@@ -228,7 +240,7 @@ class _ThermalPrinterSettingsScreenState
                 controller: _name,
                 enabled: !busy,
                 onChanged: (_) => setState(() => _hasCustomPrinterName = true),
-                decoration: const InputDecoration(labelText: 'اسم الطابعة'),
+                decoration: InputDecoration(labelText: strings.printerName),
               ),
               const SizedBox(height: 12),
               if (state.profile != null) ...<Widget>[
@@ -243,8 +255,8 @@ class _ThermalPrinterSettingsScreenState
                     int.tryParse(_width.text) == ThermalPrinterProfile.width58mm
                     ? ThermalPrinterProfile.width58mm
                     : ThermalPrinterProfile.width80mm,
-                decoration: const InputDecoration(
-                  labelText: 'مقاس الورق المقترح',
+                decoration: InputDecoration(
+                  labelText: strings.suggestedPaperSize,
                 ),
                 items: const <DropdownMenuItem<int>>[
                   DropdownMenuItem(value: 384, child: Text('58mm — 384px')),
@@ -259,12 +271,10 @@ class _ThermalPrinterSettingsScreenState
                 controller: _width,
                 enabled: !busy,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'العرض القابل للطباعة (px)',
-                ),
+                decoration: InputDecoration(labelText: strings.printableWidth),
                 validator: (value) => (int.tryParse(value ?? '') ?? 0) > 0
                     ? null
-                    : 'أدخل عرض طباعة صالحًا.',
+                    : strings.invalidPrintableWidth,
               ),
               const SizedBox(height: 12),
               Row(
@@ -273,7 +283,7 @@ class _ThermalPrinterSettingsScreenState
                     child: DropdownButtonFormField<int>(
                       key: ValueKey<int>(_copies),
                       initialValue: _copies,
-                      decoration: const InputDecoration(labelText: 'النسخ'),
+                      decoration: InputDecoration(labelText: strings.copies),
                       items: List<DropdownMenuItem<int>>.generate(
                         9,
                         (index) => DropdownMenuItem(
@@ -289,7 +299,7 @@ class _ThermalPrinterSettingsScreenState
                   const SizedBox(width: 12),
                   Expanded(
                     child: InputDecorator(
-                      decoration: const InputDecoration(labelText: 'Feed dots'),
+                      decoration: InputDecoration(labelText: strings.feedDots),
                       child: Text('$_feed'),
                     ),
                   ),
@@ -307,16 +317,16 @@ class _ThermalPrinterSettingsScreenState
               ),
               SwitchListTile(
                 value: _gradient,
-                title: const Text('تدرج رمادي'),
-                subtitle: const Text('إيقافه يرسل أسود وأبيض'),
+                title: Text(strings.grayscale),
+                subtitle: Text(strings.grayscaleDescription),
                 onChanged: busy
                     ? null
                     : (value) => setState(() => _gradient = value),
               ),
               SwitchListTile(
                 value: _cut,
-                title: const Text('إرسال أمر قص الورق'),
-                subtitle: const Text('لا يمكن التحقق من وجود قاطع في الطابعة'),
+                title: Text(strings.sendCutCommand),
+                subtitle: Text(strings.sendCutCommandDescription),
                 onChanged: busy
                     ? null
                     : (value) => setState(() => _cut = value),
@@ -342,7 +352,7 @@ class _ThermalPrinterSettingsScreenState
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.print_outlined),
-                label: const Text('طباعة اختبار'),
+                label: Text(strings.testPrint),
               ),
               const SizedBox(height: 10),
               FilledButton(
@@ -355,12 +365,12 @@ class _ThermalPrinterSettingsScreenState
                           Navigator.of(context).pop();
                         }
                       },
-                child: const Text('حفظ الطابعة الافتراضية'),
+                child: Text(strings.saveDefaultPrinter),
               ),
               if (state.profile != null)
                 TextButton(
                   onPressed: busy ? null : widget.controller.remove,
-                  child: const Text('إزالة الطابعة الافتراضية'),
+                  child: Text(strings.removeDefaultPrinter),
                 ),
             ],
           ),
@@ -392,7 +402,7 @@ class _ThermalPrinterSettingsScreenState
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text(
-              'الطابعة الافتراضية',
+              _strings.defaultPrinter,
               style: Theme.of(context).textTheme.titleSmall,
             ),
             const SizedBox(height: 6),
@@ -400,14 +410,12 @@ class _ThermalPrinterSettingsScreenState
             Text(identity, textDirection: TextDirection.ltr),
             if (bluetoothUnavailable) ...<Widget>[
               const SizedBox(height: 8),
-              const Text(
-                'الطابعة المحفوظة غير متاحة الآن. اربطها من إعدادات Android ثم حدّث الأجهزة وأعد اختيارها.',
-              ),
+              Text(_strings.savedPrinterUnavailable),
               const SizedBox(height: 8),
               OutlinedButton.icon(
                 onPressed: widget.controller.refreshBluetoothDevices,
                 icon: const Icon(Icons.refresh),
-                label: const Text('تحديث الأجهزة'),
+                label: Text(_strings.refreshDevices),
               ),
             ],
           ],
@@ -429,33 +437,14 @@ class _ThermalPrinterSettingsScreenState
         null;
   }
 
-  String _errorMessage(String code) => switch (code) {
-    'savedBluetoothPrinterUnavailable' || 'bluetoothPrinterUnavailable' =>
-      'الطابعة المحفوظة غير متاحة. تأكد من ربطها عبر Bluetooth ثم حدّث الأجهزة.',
-    'bluetoothPermissionDenied' =>
-      'يلزم السماح بصلاحية الأجهزة القريبة لاستخدام طابعة Bluetooth.',
-    'bluetoothUnavailable' ||
-    'bluetoothDisabled' => 'Bluetooth غير متاح. فعّله ثم أعد المحاولة.',
-    'bluetoothConnectionFailed' =>
-      'تعذر الاتصال بطابعة Bluetooth. تأكد أنها قيد التشغيل وقريبة.',
-    'tcpConnectionTimeout' =>
-      'انتهت مهلة الاتصال بالشبكة. تحقق من عنوان IP والمنفذ والشبكة.',
-    'tcpHostNotFound' => 'تعذر العثور على عنوان الطابعة في الشبكة.',
-    'tcpConnectionRefused' =>
-      'رفضت الطابعة الاتصال. تأكد من المنفذ وأن الطابعة متصلة بالشبكة.',
-    'tcpSendFailed' || 'tcpConnectionFailed' =>
-      'تعذر الإرسال إلى طابعة الشبكة. تحقق من IP والمنفذ وأن الجهازين على الشبكة نفسها.',
-    'printerConnectionFailed' =>
-      'تعذر الاتصال بالطابعة. تأكد أنها قيد التشغيل.',
-    _ => 'تعذر تنفيذ الطباعة. راجع إعدادات الطابعة ثم أعد المحاولة.',
-  };
+  String _errorMessage(String code) => _strings.printerSettingsError(code);
 
   Widget _connectionSelector(ThermalPrinterSettingsState state) {
     final busy = state.loading || state.testing;
     switch (_type) {
       case ThermalPrinterConnectionType.bluetooth:
         return _deviceSelector(
-          label: 'الأجهزة المرتبطة عبر Bluetooth',
+          label: _strings.bluetoothPairedDevices,
           devices: state.bluetoothDevices,
           selectedId: _bluetoothAddress,
           onRefresh: widget.controller.refreshBluetoothDevices,
@@ -463,7 +452,7 @@ class _ThermalPrinterSettingsScreenState
         );
       case ThermalPrinterConnectionType.usb:
         return _deviceSelector(
-          label: 'طابعات USB المتصلة',
+          label: _strings.connectedUsbPrinters,
           devices: state.usbDevices,
           selectedId: _selectedUsbDevice?.id ?? _usbDeviceName,
           onRefresh: widget.controller.refreshUsbDevices,
@@ -476,9 +465,9 @@ class _ThermalPrinterSettingsScreenState
             TextFormField(
               controller: _host,
               enabled: !busy,
-              decoration: const InputDecoration(labelText: 'Host / IP'),
+              decoration: InputDecoration(labelText: _strings.hostOrIpAddress),
               validator: (value) => value == null || value.trim().isEmpty
-                  ? 'أدخل عنوان IP أو اسم المضيف.'
+                  ? _strings.hostRequired
                   : null,
             ),
             const SizedBox(height: 12),
@@ -486,12 +475,12 @@ class _ThermalPrinterSettingsScreenState
               controller: _port,
               enabled: !busy,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Port'),
+              decoration: InputDecoration(labelText: _strings.port),
               validator: (value) {
                 final port = int.tryParse(value ?? '');
                 return port != null && port >= 1 && port <= 65535
                     ? null
-                    : 'أدخل منفذًا بين 1 و65535.';
+                    : _strings.invalidPort;
               },
             ),
             const SizedBox(height: 12),
@@ -499,12 +488,12 @@ class _ThermalPrinterSettingsScreenState
               controller: _timeout,
               enabled: !busy,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Timeout (seconds)'),
+              decoration: InputDecoration(labelText: _strings.timeoutSeconds),
               validator: (value) {
                 final timeout = int.tryParse(value ?? '');
                 return timeout != null && timeout >= 1 && timeout <= 60
                     ? null
-                    : 'أدخل مهلة بين 1 و60 ثانية.';
+                    : _strings.invalidTimeout;
               },
             ),
           ],
@@ -548,9 +537,9 @@ class _ThermalPrinterSettingsScreenState
           ),
         ),
         if (devices.isEmpty)
-          const Padding(
-            padding: EdgeInsets.all(16),
-            child: Text('اضغط تحديث لعرض الأجهزة المتاحة.'),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(_strings.refreshToShowDevices),
           ),
       ],
     ),

@@ -1782,7 +1782,7 @@ class _SettingsPage extends StatelessWidget {
                 if (features.showPrint &&
                     controller.thermalPrinterSettings != null) ...<Widget>[
                   const SizedBox(height: 16),
-                  const _SettingsSectionTitle('الطباعة'),
+                  _SettingsSectionTitle(strings.printingSection),
                   const SizedBox(height: 8),
                   _SettingsSurface(
                     child: ValueListenableBuilder<ThermalPrinterSettingsState>(
@@ -1794,11 +1794,11 @@ class _SettingsPage extends StatelessWidget {
                             ),
                             icon: Icons.print_outlined,
                             title: printerState.profile == null
-                                ? 'إعداد الطابعة الحرارية'
+                                ? strings.configureThermalPrinter
                                 : printerState.profile!.displayName,
                             description: printerState.profile == null
-                                ? 'لم يتم إعداد طابعة افتراضية.'
-                                : 'تغيير الاتصال، عرض الطباعة، وخيارات الورق.',
+                                ? strings.noDefaultPrinterConfigured
+                                : strings.thermalPrinterSettingsDescription,
                             onTap: state.busy
                                 ? null
                                 : () => Navigator.of(context).push<void>(
@@ -1807,6 +1807,9 @@ class _SettingsPage extends StatelessWidget {
                                           ThermalPrinterSettingsScreen(
                                             controller: controller
                                                 .thermalPrinterSettings!,
+                                            localeOverride: controller
+                                                .request
+                                                .localeOverride,
                                           ),
                                     ),
                                   ),
@@ -2545,7 +2548,10 @@ class _PreviewPage extends StatelessWidget {
         await Navigator.of(context).push<void>(
           MaterialPageRoute<void>(
             builder: (_) =>
-                ThermalPrinterSettingsScreen(controller: printerSettings),
+                ThermalPrinterSettingsScreen(
+                  controller: printerSettings,
+                  localeOverride: controller.request.localeOverride,
+                ),
           ),
         );
         return;
@@ -2567,6 +2573,7 @@ class _PreviewPage extends StatelessWidget {
                     MaterialPageRoute<void>(
                       builder: (_) => ThermalPrinterSettingsScreen(
                         controller: printerSettings,
+                        localeOverride: controller.request.localeOverride,
                       ),
                     ),
                   );

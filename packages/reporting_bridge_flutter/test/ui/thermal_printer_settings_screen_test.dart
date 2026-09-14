@@ -43,6 +43,33 @@ void main() {
     );
     controller.dispose();
   });
+
+  testWidgets('uses the report locale override for printer-settings labels', (
+    tester,
+  ) async {
+    final controller = ThermalPrinterSettingsController(
+      settingsStore: MemoryThermalPrinterSettingsStore(),
+      nativeClient: _NativeClient(),
+      availabilitySink: _AvailabilitySink(),
+      testPlatform: _TestPlatform(),
+    );
+    await controller.ensureLoaded();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ThermalPrinterSettingsScreen(
+          controller: controller,
+          localeOverride: 'ar',
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('إعدادات الطابعة الحرارية'), findsOneWidget);
+    expect(find.text('نوع الاتصال'), findsOneWidget);
+    expect(find.text('تغذية الورق (نقطة)'), findsOneWidget);
+    controller.dispose();
+  });
 }
 
 final class _NativeClient implements ThermalPrinterNativeClient {
