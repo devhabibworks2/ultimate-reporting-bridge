@@ -40,15 +40,18 @@ class PresenterTemplateSyncService {
   PresenterTemplateSyncService({
     HttpClient Function()? httpClientFactory,
     Duration timeout = const Duration(seconds: 8),
+    this.closeClientAfterRequest = true,
   }) : _httpClientFactory = httpClientFactory ?? HttpClient.new,
        _timeout = timeout,
        _legacyHttp = BridgeHttpFetch(
          httpClientFactory: httpClientFactory,
          timeout: timeout,
+         closeClientAfterRequest: closeClientAfterRequest,
        );
 
   final HttpClient Function() _httpClientFactory;
   final Duration _timeout;
+  final bool closeClientAfterRequest;
   final BridgeHttpFetch _legacyHttp;
 
   static const String _queryPath = 'presenter/templates/query';
@@ -343,7 +346,7 @@ class PresenterTemplateSyncService {
     } catch (error) {
       throw _TemplateTransportException('Request failed ($uri): $error');
     } finally {
-      client.close(force: true);
+      if (closeClientAfterRequest) client.close(force: true);
     }
   }
 

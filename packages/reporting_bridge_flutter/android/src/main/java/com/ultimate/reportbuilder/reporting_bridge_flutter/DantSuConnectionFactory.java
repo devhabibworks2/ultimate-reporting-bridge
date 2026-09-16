@@ -12,7 +12,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.dantsu.escposprinter.connection.DeviceConnection;
-import com.dantsu.escposprinter.connection.bluetooth.BluetoothConnection;
 import com.dantsu.escposprinter.connection.usb.UsbConnection;
 
 import java.io.IOException;
@@ -61,7 +60,9 @@ final class DantSuConnectionFactory {
         if (address == null) throw new IOException("invalidBluetoothProfile");
         final List<BluetoothDevice> paired = pairedBluetoothDevices();
         for (BluetoothDevice device : paired) {
-          if (address.equalsIgnoreCase(device.getAddress())) return new BluetoothConnection(device);
+          if (address.equalsIgnoreCase(device.getAddress())) {
+            return new ReliableBluetoothConnection(device);
+          }
         }
         throw new IOException(
             "savedBluetoothPrinterUnavailable;address=" + address

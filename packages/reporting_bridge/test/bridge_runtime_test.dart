@@ -486,6 +486,49 @@ void main() {
   });
 
   group('LocalPresenterServer', () {
+    test('keeps one port while isolating overlapping sessions', () async {
+      final root = await Directory.systemTemp.createTemp(
+        'bridge_local_server_pool_',
+      );
+      addTearDown(() => root.delete(recursive: true));
+      final presenter = Directory('${root.path}/presenter');
+      final runtime = Directory('${root.path}/runtime');
+      await presenter.create(recursive: true);
+      await File('${presenter.path}/index.html').writeAsString('presenter');
+      for (final id in const <String>['first', 'second']) {
+        final directory = Directory('${runtime.path}/$id');
+        await directory.create(recursive: true);
+        await File('${directory.path}/payload.json').writeAsString(id);
+      }
+      final server = LocalPresenterServer(
+        presenterRoot: presenter,
+        runtimeRoot: runtime,
+      );
+      addTearDown(server.stop);
+
+      final first = await server.startRuntimeOnly(sessionId: 'first');
+      final second = await server.startRuntimeOnly(sessionId: 'second');
+
+      expect(second.port, first.port);
+      expect(
+        await _httpStatus('${first.baseUrl}/runtime/first/payload.json'),
+        HttpStatus.ok,
+      );
+      expect(
+        await _httpStatus('${second.baseUrl}/runtime/second/payload.json'),
+        HttpStatus.ok,
+      );
+
+      await first.stop();
+      expect(
+        await _httpStatus('${first.baseUrl}/runtime/first/payload.json'),
+        HttpStatus.notFound,
+      );
+      expect(
+        await _httpStatus('${second.baseUrl}/runtime/second/payload.json'),
+        HttpStatus.ok,
+      );
+    });
     test(
       'serves only approved files on 127.0.0.1 and disables directory listing',
       () async {
@@ -663,6 +706,17 @@ void main() {
       await controller.disposeBridge();
     });
   });
+}
+
+Future<int> _httpStatus(String url) async {
+  final client = HttpClient();
+  try {
+    final response = await (await client.getUrl(Uri.parse(url))).close();
+    await response.drain<void>();
+    return response.statusCode;
+  } finally {
+    client.close(force: true);
+  }
 }
 
 Map<String, dynamic> _canonicalTemplateFixture() {

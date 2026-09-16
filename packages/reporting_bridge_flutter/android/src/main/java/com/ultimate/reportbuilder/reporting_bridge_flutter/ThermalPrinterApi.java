@@ -267,7 +267,9 @@ public class ThermalPrinterApi {
   public enum ThermalPigeonProgressPhase {
     PREPARING(0),
     CONNECTING(1),
-    PRINTING(2);
+    RASTERIZING(2),
+    TRANSMITTING(3),
+    PRINTING(4);
 
     final int index;
 
@@ -1297,6 +1299,26 @@ public class ThermalPrinterApi {
       this.pageCount = setterArg;
     }
 
+    private @Nullable Long bytesSent;
+
+    public @Nullable Long getBytesSent() {
+      return bytesSent;
+    }
+
+    public void setBytesSent(@Nullable Long setterArg) {
+      this.bytesSent = setterArg;
+    }
+
+    private @Nullable Long totalBytes;
+
+    public @Nullable Long getTotalBytes() {
+      return totalBytes;
+    }
+
+    public void setTotalBytes(@Nullable Long setterArg) {
+      this.totalBytes = setterArg;
+    }
+
     /** Constructor is non-public to enforce null safety; use Builder. */
     ThermalPigeonProgress() {}
 
@@ -1305,12 +1327,12 @@ public class ThermalPrinterApi {
       if (this == o) { return true; }
       if (o == null || getClass() != o.getClass()) { return false; }
       ThermalPigeonProgress that = (ThermalPigeonProgress) o;
-      return pigeonDeepEquals(jobId, that.jobId) && pigeonDeepEquals(phase, that.phase) && pigeonDeepEquals(copyIndex, that.copyIndex) && pigeonDeepEquals(copyCount, that.copyCount) && pigeonDeepEquals(pageIndex, that.pageIndex) && pigeonDeepEquals(pageCount, that.pageCount);
+      return pigeonDeepEquals(jobId, that.jobId) && pigeonDeepEquals(phase, that.phase) && pigeonDeepEquals(copyIndex, that.copyIndex) && pigeonDeepEquals(copyCount, that.copyCount) && pigeonDeepEquals(pageIndex, that.pageIndex) && pigeonDeepEquals(pageCount, that.pageCount) && pigeonDeepEquals(bytesSent, that.bytesSent) && pigeonDeepEquals(totalBytes, that.totalBytes);
     }
 
     @Override
     public int hashCode() {
-      Object[] fields = new Object[] {getClass(), jobId, phase, copyIndex, copyCount, pageIndex, pageCount};
+      Object[] fields = new Object[] {getClass(), jobId, phase, copyIndex, copyCount, pageIndex, pageCount, bytesSent, totalBytes};
       return pigeonDeepHashCode(fields);
     }
 
@@ -1364,6 +1386,22 @@ public class ThermalPrinterApi {
         return this;
       }
 
+      private @Nullable Long bytesSent;
+
+      @CanIgnoreReturnValue
+      public @NonNull Builder setBytesSent(@Nullable Long setterArg) {
+        this.bytesSent = setterArg;
+        return this;
+      }
+
+      private @Nullable Long totalBytes;
+
+      @CanIgnoreReturnValue
+      public @NonNull Builder setTotalBytes(@Nullable Long setterArg) {
+        this.totalBytes = setterArg;
+        return this;
+      }
+
       public @NonNull ThermalPigeonProgress build() {
         ThermalPigeonProgress pigeonReturn = new ThermalPigeonProgress();
         pigeonReturn.setJobId(jobId);
@@ -1372,19 +1410,23 @@ public class ThermalPrinterApi {
         pigeonReturn.setCopyCount(copyCount);
         pigeonReturn.setPageIndex(pageIndex);
         pigeonReturn.setPageCount(pageCount);
+        pigeonReturn.setBytesSent(bytesSent);
+        pigeonReturn.setTotalBytes(totalBytes);
         return pigeonReturn;
       }
     }
 
     @NonNull
     ArrayList<Object> toList() {
-      ArrayList<Object> toListResult = new ArrayList<>(6);
+      ArrayList<Object> toListResult = new ArrayList<>(8);
       toListResult.add(jobId);
       toListResult.add(phase);
       toListResult.add(copyIndex);
       toListResult.add(copyCount);
       toListResult.add(pageIndex);
       toListResult.add(pageCount);
+      toListResult.add(bytesSent);
+      toListResult.add(totalBytes);
       return toListResult;
     }
 
@@ -1402,6 +1444,10 @@ public class ThermalPrinterApi {
       pigeonResult.setPageIndex((Long) pageIndex);
       Object pageCount = pigeonVar_list.get(5);
       pigeonResult.setPageCount((Long) pageCount);
+      Object bytesSent = pigeonVar_list.get(6);
+      pigeonResult.setBytesSent((Long) bytesSent);
+      Object totalBytes = pigeonVar_list.get(7);
+      pigeonResult.setTotalBytes((Long) totalBytes);
       return pigeonResult;
     }
   }

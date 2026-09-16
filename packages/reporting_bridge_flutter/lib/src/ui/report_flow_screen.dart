@@ -2547,11 +2547,10 @@ class _PreviewPage extends StatelessWidget {
           printerSettings != null) {
         await Navigator.of(context).push<void>(
           MaterialPageRoute<void>(
-            builder: (_) =>
-                ThermalPrinterSettingsScreen(
-                  controller: printerSettings,
-                  localeOverride: controller.request.localeOverride,
-                ),
+            builder: (_) => ThermalPrinterSettingsScreen(
+              controller: printerSettings,
+              localeOverride: controller.request.localeOverride,
+            ),
           ),
         );
         return;
@@ -2666,6 +2665,8 @@ class _PreviewPage extends StatelessWidget {
               printLabel: switch (state.printProgress?.phase) {
                 ThermalPrintPhase.preparing => strings.preparingPrint,
                 ThermalPrintPhase.connecting => strings.connectingPrinter,
+                ThermalPrintPhase.rasterizing => strings.preparingPrint,
+                ThermalPrintPhase.transmitting => strings.sendingToPrinter,
                 ThermalPrintPhase.printing => strings.sendingToPrinter,
                 null => strings.print,
               },

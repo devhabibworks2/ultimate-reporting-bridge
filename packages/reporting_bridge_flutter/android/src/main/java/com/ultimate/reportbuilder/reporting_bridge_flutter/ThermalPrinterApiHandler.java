@@ -134,9 +134,11 @@ final class ThermalPrinterApiHandler implements
           return;
         }
         final File pdf = validatedPdf(request.getPdfPath());
-        emit(request.getJobId(), ThermalPrinterApi.ThermalPigeonProgressPhase.PREPARING, null, null, null, null);
+        emit(request.getJobId(), ThermalPrinterApi.ThermalPigeonProgressPhase.PREPARING,
+            null, null, null, null, null, null);
         validateProfile(request.getProfile());
-        emit(request.getJobId(), ThermalPrinterApi.ThermalPigeonProgressPhase.CONNECTING, null, null, null, null);
+        emit(request.getJobId(), ThermalPrinterApi.ThermalPigeonProgressPhase.CONNECTING,
+            null, null, null, null, null, null);
         connection = connections.create(request.getProfile());
         connection.connect();
         final ThermalPrinterApi.ThermalPigeonProfile profile = request.getProfile();
@@ -149,9 +151,32 @@ final class ThermalPrinterApiHandler implements
             profile.getFeedDots().intValue(),
             profile.getCutAfterPrint(),
             profile.getUseEscAsteriskCommand(),
-            (copy, copies, page, pages) -> emit(
-                request.getJobId(), ThermalPrinterApi.ThermalPigeonProgressPhase.PRINTING,
-                (long) copy, (long) copies, (long) page, (long) pages));
+            ThermalTransportPolicy.stripeHeight(profile.getConnectionType()),
+            new PdfStripeRasterizer.Progress() {
+              @Override public void onPrinting(
+                  int copy, int copies, int page, int pages) {
+                emit(request.getJobId(), ThermalPrinterApi.ThermalPigeonProgressPhase.PRINTING,
+                    (long) copy, (long) copies, (long) page, (long) pages, null, null);
+              }
+
+              @Override public void onRasterizing(
+                  int copy, int copies, int page, int pages) {
+                emit(request.getJobId(), ThermalPrinterApi.ThermalPigeonProgressPhase.RASTERIZING,
+                    (long) copy, (long) copies, (long) page, (long) pages, null, null);
+              }
+
+              @Override public void onTransmitting(
+                  int copy,
+                  int copies,
+                  int page,
+                  int pages,
+                  long bytesSent,
+                  long totalBytes) {
+                emit(request.getJobId(), ThermalPrinterApi.ThermalPigeonProgressPhase.TRANSMITTING,
+                    (long) copy, (long) copies, (long) page, (long) pages,
+                    bytesSent, totalBytes);
+              }
+            });
         result.success(printResult(ThermalPrinterApi.ThermalPigeonResultStatus.SUBMITTED, null, null));
       } catch (Throwable error) {
         result.success(mapError(error, request.getProfile().getConnectionType()));
@@ -186,11 +211,12 @@ final class ThermalPrinterApiHandler implements
 
   private void emit(@NonNull String jobId,
       @NonNull ThermalPrinterApi.ThermalPigeonProgressPhase phase,
-      Long copy, Long copies, Long page, Long pages) {
+      Long copy, Long copies, Long page, Long pages, Long bytesSent, Long totalBytes) {
     final ThermalPrinterApi.ThermalPigeonProgress progress =
         new ThermalPrinterApi.ThermalPigeonProgress.Builder()
             .setJobId(jobId).setPhase(phase).setCopyIndex(copy).setCopyCount(copies)
-            .setPageIndex(page).setPageCount(pages).build();
+            .setPageIndex(page).setPageCount(pages)
+            .setBytesSent(bytesSent).setTotalBytes(totalBytes).build();
     mainHandler.post(() -> flutterApi.onPrintProgress(progress, new ThermalPrinterApi.VoidResult() {
       @Override public void success() {}
       @Override public void error(@NonNull Throwable error) {}

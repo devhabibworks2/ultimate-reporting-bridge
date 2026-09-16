@@ -47,6 +47,32 @@ void main() {
       expect(factoryCalls, 1);
     });
 
+    test('shared client keeps the socket alive between requests', () async {
+      final remotePorts = <int>{};
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        remotePorts.add(request.connectionInfo!.remotePort);
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..write('ok');
+        await request.response.close();
+      });
+
+      final client = HttpClient();
+      addTearDown(() => client.close(force: true));
+      final fetch = BridgeHttpFetch(
+        httpClientFactory: () => client,
+        closeClientAfterRequest: false,
+      );
+      final uri = Uri.parse('http://127.0.0.1:${server.port}/');
+
+      await fetch.getBytes(uri, headers: const <String, String>{});
+      await fetch.getBytes(uri, headers: const <String, String>{});
+
+      expect(remotePorts, hasLength(1));
+    });
+
     test('getBytes throws BridgeRuntimeException on non-2xx', () async {
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       addTearDown(() => server.close(force: true));

@@ -19,8 +19,8 @@ import java.net.UnknownHostException;
  * bitmap stripe.
  */
 final class ReliableTcpConnection extends DeviceConnection {
-  static final int CHUNK_BYTES = 4096;
-  static final int BYTES_PER_SECOND = 32 * 1024;
+  static final int CHUNK_BYTES = ThermalTransportPolicy.TCP_CHUNK_BYTES;
+  static final int BYTES_PER_SECOND = ThermalTransportPolicy.TCP_BYTES_PER_SECOND;
   private static final int CONNECT_RETRY_DELAY_MS = 300;
   private static final int CONNECT_ATTEMPTS = 2;
 
@@ -114,8 +114,8 @@ final class ReliableTcpConnection extends DeviceConnection {
     }
   }
 
-  private static long pacingDelayMillis(int length) {
-    return Math.max(1L, ((long) length * 1000L + BYTES_PER_SECOND - 1L) / BYTES_PER_SECOND);
+  static long pacingDelayMillis(int length) {
+    return ThermalTransportPolicy.pacingDelayMillis(length, BYTES_PER_SECOND);
   }
 
   private void waitBeforeRetry() throws EscPosConnectionException {

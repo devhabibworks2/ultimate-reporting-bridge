@@ -37,6 +37,12 @@ abstract interface class ReportingBridgeFlutterClient {
   Future<ReportPrintResult> printReportHeadless(
     ReportOpenRequest request, {
     HeadlessReportPrintProgressCallback? onProgress,
+    HeadlessReportPrintTimingCallback? onTiming,
+  });
+
+  Future<HeadlessPrintWarmupResult> warmUpHeadlessPrinting(
+    ReportOpenRequest request, {
+    bool refreshResources = false,
   });
 
   Future<void> dispose();
@@ -56,6 +62,7 @@ class DefaultReportingBridgeFlutterClient
     ReportSupportSharePlatform supportSharePlatform =
         const SharePlusReportSupportSharePlatform(),
     HeadlessPresenterSurfaceFactory? headlessPresenterSurfaceFactory,
+    WarmableHeadlessPresenterSurface? headlessPresenterSurface,
   }) : _connection = connection,
        _bridgeClient = bridgeClient,
        _preferences = preferences,
@@ -63,9 +70,21 @@ class DefaultReportingBridgeFlutterClient
        _printPlatform = printPlatform,
        _thermalPrinterSettings = thermalPrinterSettings,
        _managedPrintDispose = managedPrintDispose,
-       _supportSharePlatform = supportSharePlatform,
-       _headlessPresenterSurfaceFactory =
-           headlessPresenterSurfaceFactory ?? InAppHeadlessPresenterSurface.new;
+       _supportSharePlatform = supportSharePlatform {
+    assert(
+      headlessPresenterSurfaceFactory == null ||
+          headlessPresenterSurface == null,
+      'Provide a surface or a surface factory, not both.',
+    );
+    final managedSurface =
+        headlessPresenterSurface ??
+        (headlessPresenterSurfaceFactory == null
+            ? InAppHeadlessPresenterSurface()
+            : null);
+    _managedHeadlessSurface = managedSurface;
+    _headlessPresenterSurfaceFactory =
+        headlessPresenterSurfaceFactory ?? (() => managedSurface!);
+  }
 
   final ReportServerConnection _connection;
   final ReportingBridgeClient _bridgeClient;
@@ -75,13 +94,17 @@ class DefaultReportingBridgeFlutterClient
   final ThermalPrinterSettingsController? _thermalPrinterSettings;
   final void Function()? _managedPrintDispose;
   final ReportSupportSharePlatform _supportSharePlatform;
-  final HeadlessPresenterSurfaceFactory _headlessPresenterSurfaceFactory;
+  late final HeadlessPresenterSurfaceFactory _headlessPresenterSurfaceFactory;
+  late final WarmableHeadlessPresenterSurface? _managedHeadlessSurface;
 
   @override
   final BridgeUiConfig ui;
 
   ReportFlowController? _activeController;
   bool _disposed = false;
+  bool _surfaceReady = false;
+  Future<bool>? _surfaceWarmupFuture;
+  Future<bool>? _resourceRefreshFuture;
 
   @override
   bool get hasActiveFlow => _activeController != null;
@@ -174,11 +197,155 @@ class DefaultReportingBridgeFlutterClient
   Future<ReportPrintResult> printReportHeadless(
     ReportOpenRequest request, {
     HeadlessReportPrintProgressCallback? onProgress,
-  }) {
+    HeadlessReportPrintTimingCallback? onTiming,
+  }) async {
+    // Resource synchronization is deliberately background-only. A paid sale
+    // must never wait for an update that can safely activate after this print.
+    await _ensureSurfaceWarm();
     return HeadlessReportPrintRunner(
       createController: () => createController(request),
       surfaceFactory: _headlessPresenterSurfaceFactory,
-    ).run(onProgress: onProgress);
+    ).run(onProgress: onProgress, onTiming: onTiming);
+  }
+
+  @override
+  Future<HeadlessPrintWarmupResult> warmUpHeadlessPrinting(
+    ReportOpenRequest request, {
+    bool refreshResources = false,
+  }) {
+    return _warmUp(request, refreshResources: refreshResources);
+  }
+
+  Future<HeadlessPrintWarmupResult> _warmUp(
+    ReportOpenRequest request, {
+    required bool refreshResources,
+  }) async {
+    if (_disposed) {
+      return const HeadlessPrintWarmupResult(
+        webViewReady: false,
+        resourcesRefreshed: false,
+        diagnostic: 'disposed',
+      );
+    }
+    try {
+      final webViewReady = await _ensureSurfaceWarm();
+      if (!refreshResources) {
+        return HeadlessPrintWarmupResult(
+          webViewReady: webViewReady,
+          resourcesRefreshed: false,
+        );
+      }
+      final refresh = await _refreshResourcesInBackground(request);
+      return HeadlessPrintWarmupResult(
+        webViewReady: webViewReady,
+        resourcesRefreshed: refresh.refreshed,
+        presenterMode: refresh.mode?.name,
+        diagnostic: refresh.diagnostic,
+      );
+    } catch (error) {
+      return HeadlessPrintWarmupResult(
+        webViewReady: false,
+        resourcesRefreshed: false,
+        diagnostic: error.toString(),
+      );
+    }
+  }
+
+  Future<bool> _ensureSurfaceWarm() {
+    if (_surfaceReady) return Future<bool>.value(true);
+    final ready = _surfaceWarmupFuture;
+    if (ready != null) return ready;
+    late final Future<bool> future;
+    future =
+        () async {
+          await _managedHeadlessSurface?.warmUp();
+          _surfaceReady = _managedHeadlessSurface != null;
+          return _surfaceReady;
+        }().whenComplete(() {
+          if (identical(_surfaceWarmupFuture, future)) {
+            _surfaceWarmupFuture = null;
+          }
+        });
+    _surfaceWarmupFuture = future;
+    return future;
+  }
+
+  Future<({bool refreshed, PresenterModePreference? mode, String? diagnostic})>
+  _refreshResourcesInBackground(ReportOpenRequest request) async {
+    final running = _resourceRefreshFuture;
+    if (running != null) {
+      final refreshed = await running;
+      return (refreshed: refreshed, mode: null, diagnostic: null);
+    }
+    late final Future<bool> future;
+    PresenterModePreference? selectedMode;
+    String? diagnostic;
+    future =
+        () async {
+          final scope = _preferenceScopeFor(request);
+          final saved = await _preferences.load(scope);
+          selectedMode =
+              request.presenterMode ??
+              saved?.mode ??
+              PresenterModePreference.online;
+          final identity = request.templateSyncRequest.identity;
+          final refreshClient = ReportingBridgeClient(
+            apiBaseUrl: _connection.endpoints.apiBaseUrl,
+            cacheIdentityBaseUrl: _connection.endpoints.cacheIdentityBaseUrl,
+            presenterEntryUrl: _connection.endpoints.presenterEntryUrl,
+            bridgeRoot: _connection.cacheRoot,
+            bundleManifestUrl: _connection.bundleManifestUrl,
+            headers: _connection.headers,
+            headersProvider: _connection.headersProvider,
+            httpClientFactory: _connection.httpClientFactory,
+          );
+          try {
+            await refreshClient.updateIdentityContext(
+              BridgeIdentityContext(
+                userId: identity.userId,
+                branchId: identity.branchId,
+                systemUnit: identity.systemUnit,
+              ),
+            );
+            await refreshClient.syncTemplates(
+              systemCode: request.templateSyncRequest.systemCode.value,
+              filter: request.templateSyncRequest.filter,
+              extra: request.templateSyncRequest.extra,
+            );
+            if (selectedMode == PresenterModePreference.offline) {
+              await refreshClient.syncPresenter();
+            }
+            return true;
+          } catch (error) {
+            diagnostic = error.toString();
+            return false;
+          } finally {
+            await refreshClient.dispose();
+          }
+        }().whenComplete(() {
+          if (identical(_resourceRefreshFuture, future)) {
+            _resourceRefreshFuture = null;
+          }
+        });
+    _resourceRefreshFuture = future;
+    final refreshed = await future;
+    return (refreshed: refreshed, mode: selectedMode, diagnostic: diagnostic);
+  }
+
+  ReportPreferenceScope _preferenceScopeFor(ReportOpenRequest request) {
+    final identity = request.selectedTemplateCriteria.identity;
+    return ReportPreferenceScope(
+      connectionKey: _connection.preferenceSourceKey,
+      system: request.templateSyncRequest.systemCode.value,
+      reportType: request.reportType.value,
+      branchId: identity.branchId,
+      userId: identity.userId,
+      systemUnit: identity.systemUnit,
+      language: request.compatibility.language?.value,
+      layout: request.compatibility.layout?.value,
+      size: request.compatibility.size?.value,
+      customType: request.selectedTemplateCriteria.customType,
+    );
   }
 
   @override
@@ -187,6 +354,8 @@ class DefaultReportingBridgeFlutterClient
     _disposed = true;
     await _activeController?.dispose();
     _activeController = null;
+    await _managedHeadlessSurface?.shutdown();
+    _surfaceReady = false;
     await _bridgeClient.dispose();
     _thermalPrinterSettings?.dispose();
     _managedPrintDispose?.call();

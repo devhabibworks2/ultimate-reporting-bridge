@@ -15,7 +15,13 @@ enum ThermalPrinterPermissionState {
 /// A saved profile is intentionally retained when this becomes unavailable.
 enum ThermalPrinterAvailability { unknown, available, unavailable }
 
-enum ThermalPrintPhase { preparing, connecting, printing }
+enum ThermalPrintPhase {
+  preparing,
+  connecting,
+  rasterizing,
+  transmitting,
+  printing,
+}
 
 enum ThermalPrintResultStatus {
   submitted,
@@ -228,6 +234,8 @@ final class ThermalPrintProgress {
     this.copyCount,
     this.pageIndex,
     this.pageCount,
+    this.bytesSent,
+    this.totalBytes,
   });
 
   final String jobId;
@@ -236,6 +244,8 @@ final class ThermalPrintProgress {
   final int? copyCount;
   final int? pageIndex;
   final int? pageCount;
+  final int? bytesSent;
+  final int? totalBytes;
 }
 
 final class ThermalPrintOperationResult {

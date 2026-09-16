@@ -22,7 +22,22 @@ final class HeadlessReportPrintRunner {
 
   Future<ReportPrintResult> run({
     HeadlessReportPrintProgressCallback? onProgress,
+    HeadlessReportPrintTimingCallback? onTiming,
   }) async {
+    final totalWatch = Stopwatch()..start();
+    var stageWatch = Stopwatch()..start();
+    void timing(HeadlessReportPrintTimingStage stage) {
+      _emitTiming(
+        HeadlessReportPrintTiming(
+          stage: stage,
+          stageElapsed: stageWatch.elapsed,
+          totalElapsed: totalWatch.elapsed,
+        ),
+        onTiming,
+      );
+      stageWatch = Stopwatch()..start();
+    }
+
     _emit(
       const HeadlessReportPrintProgress(
         phase: HeadlessReportPrintPhase.preparingReport,
@@ -45,6 +60,7 @@ final class HeadlessReportPrintRunner {
     controller.addListener(listener);
     try {
       await controller.initialize();
+      timing(HeadlessReportPrintTimingStage.preparingTemplate);
       if (controller.value.failure != null) {
         throw controller.value.failure!;
       }
@@ -52,6 +68,7 @@ final class HeadlessReportPrintRunner {
       final template =
           controller.value.committedTemplate ??
           controller.value.selectedTemplate!;
+      timing(HeadlessReportPrintTimingStage.preparingSession);
 
       _emit(
         HeadlessReportPrintProgress(
@@ -68,8 +85,10 @@ final class HeadlessReportPrintRunner {
         controller: controller,
         surfaceBinding: controller.presenterSurface,
       );
+      timing(HeadlessReportPrintTimingStage.startingWebView);
 
       await _waitForOutputReady(controller);
+      timing(HeadlessReportPrintTimingStage.rendering);
 
       printStarted = true;
       _emit(
@@ -79,12 +98,14 @@ final class HeadlessReportPrintRunner {
         onProgress,
       );
       final result = await controller.printPdf();
+      timing(HeadlessReportPrintTimingStage.generatingPdf);
       _emit(
         const HeadlessReportPrintProgress(
           phase: HeadlessReportPrintPhase.completed,
         ),
         onProgress,
       );
+      timing(HeadlessReportPrintTimingStage.completed);
       return result;
     } finally {
       controller.removeListener(listener);
@@ -185,10 +206,14 @@ final class HeadlessReportPrintRunner {
           HeadlessReportPrintPhase.preparingPrinter,
         ThermalPrintPhase.connecting =>
           HeadlessReportPrintPhase.connectingPrinter,
+        ThermalPrintPhase.rasterizing => HeadlessReportPrintPhase.rasterizing,
+        ThermalPrintPhase.transmitting => HeadlessReportPrintPhase.transmitting,
         ThermalPrintPhase.printing => HeadlessReportPrintPhase.sendingToPrinter,
       },
       current: progress.pageIndex ?? progress.copyIndex,
       total: progress.pageCount ?? progress.copyCount,
+      bytesSent: progress.bytesSent,
+      totalBytes: progress.totalBytes,
     );
   }
 
@@ -201,6 +226,18 @@ final class HeadlessReportPrintRunner {
       onProgress(progress);
     } catch (_) {
       // Host progress callbacks must not fail the print operation.
+    }
+  }
+
+  void _emitTiming(
+    HeadlessReportPrintTiming timing,
+    HeadlessReportPrintTimingCallback? onTiming,
+  ) {
+    if (onTiming == null) return;
+    try {
+      onTiming(timing);
+    } catch (_) {
+      // Host diagnostics must not fail the print operation.
     }
   }
 }

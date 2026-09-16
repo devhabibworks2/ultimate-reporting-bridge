@@ -43,7 +43,7 @@ class PresenterSurfaceBinding {
     final lifecycle = PresenterWebLifecycleEvent.tryParse(message);
     if (lifecycle != null) {
       final current = _sessionId;
-      if (lifecycle.sessionId == null || lifecycle.sessionId == current) {
+      if (current != null && lifecycle.sessionId == current) {
         _lifecycleCallback?.call(lifecycle);
       }
       return true;

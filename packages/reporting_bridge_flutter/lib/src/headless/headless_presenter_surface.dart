@@ -14,4 +14,11 @@ abstract interface class HeadlessPresenterSurface {
   Future<void> dispose();
 }
 
+abstract interface class WarmableHeadlessPresenterSurface
+    implements HeadlessPresenterSurface {
+  Future<void> warmUp();
+
+  Future<void> shutdown();
+}
+
 typedef HeadlessPresenterSurfaceFactory = HeadlessPresenterSurface Function();

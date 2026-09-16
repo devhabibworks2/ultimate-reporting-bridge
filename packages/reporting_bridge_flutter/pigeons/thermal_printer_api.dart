@@ -6,17 +6,47 @@ import 'package:pigeon/pigeon.dart';
     dartOptions: DartOptions(),
     javaOut:
         'android/src/main/java/com/ultimate/reportbuilder/reporting_bridge_flutter/ThermalPrinterApi.java',
-    javaOptions: JavaOptions(package: 'com.ultimate.reportbuilder.reporting_bridge_flutter'),
+    javaOptions: JavaOptions(
+      package: 'com.ultimate.reportbuilder.reporting_bridge_flutter',
+    ),
     dartPackageName: 'reporting_bridge_flutter',
   ),
 )
 // ignore: unused_element
-class _Config { late String sentinel; }
+class _Config {
+  late String sentinel;
+}
 
 enum ThermalPigeonConnectionType { bluetooth, usb, tcp }
-enum ThermalPigeonPermissionState { granted, denied, permanentlyDenied, activityUnavailable, unsupported }
-enum ThermalPigeonResultStatus { submitted, setupRequired, permissionDenied, deviceUnavailable, connectionFailed, invalidRequest, invalidPdf, rasterizationFailed, busy, nativeFailure }
-enum ThermalPigeonProgressPhase { preparing, connecting, printing }
+
+enum ThermalPigeonPermissionState {
+  granted,
+  denied,
+  permanentlyDenied,
+  activityUnavailable,
+  unsupported,
+}
+
+enum ThermalPigeonResultStatus {
+  submitted,
+  setupRequired,
+  permissionDenied,
+  deviceUnavailable,
+  connectionFailed,
+  invalidRequest,
+  invalidPdf,
+  rasterizationFailed,
+  busy,
+  nativeFailure,
+}
+
+enum ThermalPigeonProgressPhase {
+  preparing,
+  connecting,
+  rasterizing,
+  transmitting,
+  printing,
+}
 
 class ThermalPigeonDevice {
   late String id;
@@ -68,6 +98,8 @@ class ThermalPigeonProgress {
   int? copyCount;
   int? pageIndex;
   int? pageCount;
+  int? bytesSent;
+  int? totalBytes;
 }
 
 @HostApi()

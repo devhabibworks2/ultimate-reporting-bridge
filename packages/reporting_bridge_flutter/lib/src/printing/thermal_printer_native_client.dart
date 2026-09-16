@@ -42,9 +42,8 @@ final class PigeonThermalPrinterNativeClient
   @override
   Future<ThermalPrinterPermissionState> requestUsbPermission(
     ThermalPrinterDevice device,
-  ) async => _permission(
-    await _permissions.requestUsbPermission(_device(device)),
-  );
+  ) async =>
+      _permission(await _permissions.requestUsbPermission(_device(device)));
 
   @override
   Future<ThermalPrinterPermissionState> usbPermission(
@@ -89,12 +88,16 @@ final class PigeonThermalPrinterNativeClient
         copyCount: progress.copyCount,
         pageIndex: progress.pageIndex,
         pageCount: progress.pageCount,
+        bytesSent: progress.bytesSent,
+        totalBytes: progress.totalBytes,
       ),
     );
   }
 
   @override
-  void setProgressListener(void Function(ThermalPrintProgress progress)? value) {
+  void setProgressListener(
+    void Function(ThermalPrintProgress progress)? value,
+  ) {
     _onProgress = value;
   }
 

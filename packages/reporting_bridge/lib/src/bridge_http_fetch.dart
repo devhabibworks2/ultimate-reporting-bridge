@@ -12,10 +12,12 @@ class BridgeHttpFetch {
   BridgeHttpFetch({
     HttpClient Function()? httpClientFactory,
     this.timeout = const Duration(seconds: 8),
+    this.closeClientAfterRequest = true,
   }) : _httpClientFactory = httpClientFactory ?? HttpClient.new;
 
   final HttpClient Function() _httpClientFactory;
   final Duration timeout;
+  final bool closeClientAfterRequest;
 
   Future<List<int>> getBytes(
     Uri uri, {
@@ -61,7 +63,7 @@ class BridgeHttpFetch {
         'Request failed ($uri): $error',
       );
     } finally {
-      client.close(force: true);
+      if (closeClientAfterRequest) client.close(force: true);
     }
   }
 

@@ -32,7 +32,7 @@ class LocalPresenterServer {
   final Directory runtimeRoot;
   static const String _presenterRoutePrefix = '/UltimateReport/apps/presenter/';
   HttpServer? _server;
-  String? _activeSessionId;
+  final Set<String> _sessionIds = <String>{};
   bool _servePresenter = false;
 
   Future<LocalServerHandle> start({
@@ -62,10 +62,6 @@ class LocalPresenterServer {
     required PortPolicy portPolicy,
     required bool servePresenter,
   }) async {
-    if (_server != null) {
-      await stop();
-    }
-
     final activeSessionId = _validatedSessionId(sessionId);
     if (servePresenter &&
         !await File('${presenterRoot.path}/index.html').exists()) {
@@ -76,14 +72,17 @@ class LocalPresenterServer {
     }
 
     try {
-      final server = await HttpServer.bind(
-        InternetAddress.loopbackIPv4,
-        portPolicy.preferredPort,
-      );
-      _server = server;
-      _activeSessionId = activeSessionId;
-      _servePresenter = servePresenter;
-      server.listen(_handleRequest);
+      var server = _server;
+      if (server == null) {
+        server = await HttpServer.bind(
+          InternetAddress.loopbackIPv4,
+          portPolicy.preferredPort,
+        );
+        _server = server;
+        server.listen(_handleRequest);
+      }
+      _sessionIds.add(activeSessionId);
+      _servePresenter = _servePresenter || servePresenter;
       final baseUrl = 'http://127.0.0.1:${server.port}';
       return LocalServerHandle(
         port: server.port,
@@ -91,10 +90,10 @@ class LocalPresenterServer {
         presenterUrl: servePresenter
             ? '$baseUrl/UltimateReport/apps/presenter/index.html?sessionId=$activeSessionId'
             : baseUrl,
-        stop: stop,
+        stop: () => releaseSession(activeSessionId),
       );
     } on Object catch (error) {
-      await stop();
+      _sessionIds.remove(activeSessionId);
       throw BridgeRuntimeException(
         BridgeRuntimeErrorCodes.localhostServerUnavailable,
         'Failed to start local Presenter server: $error',
@@ -102,10 +101,14 @@ class LocalPresenterServer {
     }
   }
 
+  Future<void> releaseSession(String sessionId) async {
+    _sessionIds.remove(_validatedSessionId(sessionId));
+  }
+
   Future<void> stop() async {
     final server = _server;
     _server = null;
-    _activeSessionId = null;
+    _sessionIds.clear();
     _servePresenter = false;
     await server?.close(force: true);
   }
@@ -154,10 +157,8 @@ class LocalPresenterServer {
     if (path.startsWith('/runtime/')) {
       final relative = path.substring('/runtime/'.length);
       final separator = relative.indexOf('/');
-      final activeSessionId = _activeSessionId;
-      if (activeSessionId == null ||
-          separator <= 0 ||
-          relative.substring(0, separator) != activeSessionId) {
+      if (separator <= 0 ||
+          !_sessionIds.contains(relative.substring(0, separator))) {
         return null;
       }
       return _safeFile(root: runtimeRoot, relativePath: relative);

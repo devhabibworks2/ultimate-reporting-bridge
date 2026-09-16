@@ -137,6 +137,8 @@ enum ThermalPigeonResultStatus {
 enum ThermalPigeonProgressPhase {
   preparing,
   connecting,
+  rasterizing,
+  transmitting,
   printing,
 }
 
@@ -483,6 +485,8 @@ class ThermalPigeonProgress {
     this.copyCount,
     this.pageIndex,
     this.pageCount,
+    this.bytesSent,
+    this.totalBytes,
   });
 
   String jobId;
@@ -497,6 +501,10 @@ class ThermalPigeonProgress {
 
   int? pageCount;
 
+  int? bytesSent;
+
+  int? totalBytes;
+
   List<Object?> _toList() {
     return <Object?>[
       jobId,
@@ -505,6 +513,8 @@ class ThermalPigeonProgress {
       copyCount,
       pageIndex,
       pageCount,
+      bytesSent,
+      totalBytes,
     ];
   }
 
@@ -520,6 +530,8 @@ class ThermalPigeonProgress {
       copyCount: result[3] as int?,
       pageIndex: result[4] as int?,
       pageCount: result[5] as int?,
+      bytesSent: result[6] as int?,
+      totalBytes: result[7] as int?,
     );
   }
 
@@ -532,7 +544,7 @@ class ThermalPigeonProgress {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(jobId, other.jobId) && _deepEquals(phase, other.phase) && _deepEquals(copyIndex, other.copyIndex) && _deepEquals(copyCount, other.copyCount) && _deepEquals(pageIndex, other.pageIndex) && _deepEquals(pageCount, other.pageCount);
+    return _deepEquals(jobId, other.jobId) && _deepEquals(phase, other.phase) && _deepEquals(copyIndex, other.copyIndex) && _deepEquals(copyCount, other.copyCount) && _deepEquals(pageIndex, other.pageIndex) && _deepEquals(pageCount, other.pageCount) && _deepEquals(bytesSent, other.bytesSent) && _deepEquals(totalBytes, other.totalBytes);
   }
 
   @override

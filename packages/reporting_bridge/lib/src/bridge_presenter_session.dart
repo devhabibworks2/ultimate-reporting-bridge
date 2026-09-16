@@ -209,7 +209,6 @@ class PresenterSessionCoordinator {
       );
     }
 
-    final previousServer = _localServer;
     final previousHandle = _localHandle;
     final previousSessionId = _activeSessionId;
     final requestedSessionId = request.sessionId;
@@ -234,7 +233,7 @@ class PresenterSessionCoordinator {
         apiHeaders: request.apiHeaders,
       ),
     );
-    final candidateServer = LocalPresenterServer(
+    final candidateServer = _localServer ??= LocalPresenterServer(
       presenterRoot: presenterCache.presenterRoot,
       runtimeRoot: runtimeStorage.runtimeRoot,
     );
@@ -270,7 +269,6 @@ class PresenterSessionCoordinator {
       );
       if (deferReplacementCommit && previousSessionId != null) {
         _stagedSession = _StagedPresenterSession(
-          server: candidateServer,
           handle: candidateHandle,
           sessionId: runtimeSession.sessionId,
         );
@@ -280,7 +278,6 @@ class PresenterSessionCoordinator {
       _localHandle = candidateHandle;
       _activeSessionId = runtimeSession.sessionId;
       await _cleanupReplacedSession(
-        server: previousServer,
         handle: previousHandle,
         sessionId: previousSessionId,
       );
@@ -288,7 +285,6 @@ class PresenterSessionCoordinator {
     } catch (error, stackTrace) {
       try {
         await candidateHandle?.stop();
-        await candidateServer.stop();
         await runtimeStorage.deleteRuntimeSession(runtimeSession.sessionId);
       } catch (_) {
         // Preserve the preparation failure.
@@ -301,14 +297,11 @@ class PresenterSessionCoordinator {
     final staged = _stagedSession;
     if (staged == null) return;
     _stagedSession = null;
-    final previousServer = _localServer;
     final previousHandle = _localHandle;
     final previousSessionId = _activeSessionId;
-    _localServer = staged.server;
     _localHandle = staged.handle;
     _activeSessionId = staged.sessionId;
     await _cleanupReplacedSession(
-      server: previousServer,
       handle: previousHandle,
       sessionId: previousSessionId,
     );
@@ -320,20 +313,17 @@ class PresenterSessionCoordinator {
     _stagedSession = null;
     try {
       await staged.handle.stop();
-      await staged.server.stop();
     } finally {
       await runtimeStorage.deleteRuntimeSession(staged.sessionId);
     }
   }
 
   Future<void> _cleanupReplacedSession({
-    required LocalPresenterServer? server,
     required LocalServerHandle? handle,
     required String? sessionId,
   }) async {
     try {
       await handle?.stop();
-      await server?.stop();
     } catch (_) {}
     if (sessionId != null && sessionId != _activeSessionId) {
       try {
@@ -439,12 +429,10 @@ class PresenterSessionCoordinator {
 
 class _StagedPresenterSession {
   const _StagedPresenterSession({
-    required this.server,
     required this.handle,
     required this.sessionId,
   });
 
-  final LocalPresenterServer server;
   final LocalServerHandle handle;
   final String sessionId;
 }

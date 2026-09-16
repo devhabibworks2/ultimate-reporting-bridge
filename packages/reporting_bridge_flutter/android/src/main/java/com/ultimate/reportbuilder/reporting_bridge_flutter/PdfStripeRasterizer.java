@@ -21,6 +21,14 @@ final class PdfStripeRasterizer {
 
   interface Progress {
     void onPrinting(int copyIndex, int copyCount, int pageIndex, int pageCount);
+    void onRasterizing(int copyIndex, int copyCount, int pageIndex, int pageCount);
+    void onTransmitting(
+        int copyIndex,
+        int copyCount,
+        int pageIndex,
+        int pageCount,
+        long bytesSent,
+        long totalBytes);
   }
 
   private PdfStripeRasterizer() {}
@@ -34,6 +42,7 @@ final class PdfStripeRasterizer {
       int feedDots,
       boolean cutAfterPrint,
       boolean useEscAsteriskCommand,
+      int preferredStripeHeight,
       @NonNull Progress progress) throws Exception {
     if (printableWidthPx <= 0) throw new IOException("invalidRasterWidth");
     try (ParcelFileDescriptor descriptor = ParcelFileDescriptor.open(
@@ -43,11 +52,26 @@ final class PdfStripeRasterizer {
       if (pageCount <= 0) throw new IOException("emptyPdf");
       final EscPosPrinterCommands commands = new EscPosPrinterCommands(connection);
       commands.useEscAsteriskCommand(useEscAsteriskCommand);
+      final long estimatedBytes = estimateRasterBytes(
+          renderer, printableWidthPx, copies, preferredStripeHeight);
+      final long[] bytesSent = new long[] {0L};
       for (int copy = 1; copy <= copies; copy++) {
         for (int pageIndex = 0; pageIndex < pageCount; pageIndex++) {
           progress.onPrinting(copy, copies, pageIndex + 1, pageCount);
           try (PdfRenderer.Page page = renderer.openPage(pageIndex)) {
-            printPage(page, printableWidthPx, gradient, commands);
+            printPage(
+                page,
+                printableWidthPx,
+                gradient,
+                commands,
+                preferredStripeHeight,
+                copy,
+                copies,
+                pageIndex + 1,
+                pageCount,
+                bytesSent,
+                estimatedBytes,
+                progress);
           }
         }
         if (feedDots > 0) commands.feedPaper(feedDots);
@@ -60,13 +84,24 @@ final class PdfStripeRasterizer {
       @NonNull PdfRenderer.Page page,
       int printableWidthPx,
       boolean gradient,
-      @NonNull EscPosPrinterCommands commands) throws Exception {
+      @NonNull EscPosPrinterCommands commands,
+      int preferredStripeHeight,
+      int copyIndex,
+      int copyCount,
+      int pageIndex,
+      int pageCount,
+      @NonNull long[] bytesSent,
+      long totalBytes,
+      @NonNull Progress progress) throws Exception {
     final float scale = printableWidthPx / (float) page.getWidth();
     final int renderedHeight = Math.max(1, (int) Math.ceil(page.getHeight() * scale));
     final int stripeHeight = Math.max(
         1,
-        Math.min(renderedHeight, MAX_BITMAP_BYTES / Math.max(4, printableWidthPx * 4)));
+        Math.min(
+            Math.min(renderedHeight, preferredStripeHeight),
+            MAX_BITMAP_BYTES / Math.max(4, printableWidthPx * 4)));
     for (int top = 0; top < renderedHeight; top += stripeHeight) {
+      progress.onRasterizing(copyIndex, copyCount, pageIndex, pageCount);
       final int height = Math.min(stripeHeight, renderedHeight - top);
       final Bitmap bitmap = Bitmap.createBitmap(
           printableWidthPx, height, Bitmap.Config.ARGB_8888);
@@ -80,10 +115,43 @@ final class PdfStripeRasterizer {
             new Rect(0, 0, printableWidthPx, height),
             matrix,
             PdfRenderer.Page.RENDER_MODE_FOR_PRINT);
-        commands.printImage(EscPosPrinterCommands.bitmapToBytes(bitmap, gradient));
+        final byte[] raster = EscPosPrinterCommands.bitmapToBytes(bitmap, gradient);
+        commands.printImage(raster);
+        bytesSent[0] += raster.length;
+        progress.onTransmitting(
+            copyIndex,
+            copyCount,
+            pageIndex,
+            pageCount,
+            bytesSent[0],
+            Math.max(totalBytes, bytesSent[0]));
       } finally {
         bitmap.recycle();
       }
     }
+  }
+
+  private static long estimateRasterBytes(
+      @NonNull PdfRenderer renderer,
+      int printableWidthPx,
+      int copies,
+      int preferredStripeHeight) {
+    long oneCopy = 0L;
+    for (int pageIndex = 0; pageIndex < renderer.getPageCount(); pageIndex++) {
+      try (PdfRenderer.Page page = renderer.openPage(pageIndex)) {
+        final float scale = printableWidthPx / (float) page.getWidth();
+        final int renderedHeight = Math.max(1, (int) Math.ceil(page.getHeight() * scale));
+        final int memoryHeight = MAX_BITMAP_BYTES / Math.max(4, printableWidthPx * 4);
+        final int stripeHeight = Math.max(
+            1,
+            Math.min(Math.min(renderedHeight, preferredStripeHeight), memoryHeight));
+        final int rowBytes = (printableWidthPx + 7) / 8;
+        for (int top = 0; top < renderedHeight; top += stripeHeight) {
+          final int height = Math.min(stripeHeight, renderedHeight - top);
+          oneCopy += 8L + (long) rowBytes * height;
+        }
+      }
+    }
+    return Math.max(1L, oneCopy * copies);
   }
 }

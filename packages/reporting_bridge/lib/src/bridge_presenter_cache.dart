@@ -62,7 +62,11 @@ class PresenterCacheService {
   PresenterCacheService({
     required this.presenterRoot,
     HttpClient Function()? httpClientFactory,
-  }) : _http = BridgeHttpFetch(httpClientFactory: httpClientFactory);
+    bool closeClientAfterRequest = true,
+  }) : _http = BridgeHttpFetch(
+         httpClientFactory: httpClientFactory,
+         closeClientAfterRequest: closeClientAfterRequest,
+       );
 
   final Directory presenterRoot;
   final BridgeHttpFetch _http;

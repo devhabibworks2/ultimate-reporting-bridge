@@ -47,6 +47,36 @@ void main() {
     expect(filePlatform.shareCalls, 0);
   });
 
+  test('headless warm surface is reused and shut down once', () async {
+    final surface = _FakeWarmHeadlessSurface();
+    final printPlatform = _FakePrintPlatform();
+    final fixture = _createClient(
+      root: root,
+      bridge: bridge,
+      filePlatform: filePlatform,
+      printPlatform: printPlatform,
+      headlessPresenterSurface: surface,
+    );
+    final request = _request(
+      initialTemplateId: 'thermal-en',
+      entryPolicy: ReportEntryPolicy.smart,
+    );
+
+    final warmup = await fixture.client.warmUpHeadlessPrinting(request);
+    final first = await fixture.client.printReportHeadless(request);
+    final second = await fixture.client.printReportHeadless(request);
+    await fixture.client.dispose();
+
+    expect(warmup.webViewReady, isTrue);
+    expect(first.status, ReportPrintStatus.submitted);
+    expect(second.status, ReportPrintStatus.submitted);
+    expect(surface.warmUpCalls, 1);
+    expect(surface.startCalls, 2);
+    expect(surface.releaseCalls, 2);
+    expect(surface.shutdownCalls, 1);
+    expect(printPlatform.calls, 2);
+  });
+
   test(
     'selected English template drives en/2 without Host language override',
     () async {
@@ -224,6 +254,7 @@ _ClientFixture _createClient({
   required ReportingBridgeClient bridge,
   required ReportFilePlatform filePlatform,
   ReportPrintPlatform? printPlatform,
+  WarmableHeadlessPresenterSurface? headlessPresenterSurface,
 }) {
   final connection = ReportServerConnection(
     endpoints: ReportServerEndpoints.deployed(
@@ -252,6 +283,7 @@ _ClientFixture _createClient({
           preferences: MemoryReportFlowPreferenceStore(),
           filePlatform: filePlatform,
           printPlatform: printPlatform,
+          headlessPresenterSurface: headlessPresenterSurface,
           ui: ui,
         );
   return _ClientFixture(client);
@@ -259,10 +291,13 @@ _ClientFixture _createClient({
 
 ReportOpenRequest _request({
   ReportActionPolicy actionPolicy = const ReportActionPolicy(),
+  String? initialTemplateId,
+  ReportEntryPolicy entryPolicy = ReportEntryPolicy.alwaysPrepare,
 }) => ReportOpenRequest(
   seedData: const <String, dynamic>{'id': 1},
   reportName: 'Invoice',
-  entryPolicy: ReportEntryPolicy.alwaysPrepare,
+  initialTemplateId: initialTemplateId,
+  entryPolicy: entryPolicy,
   actionPolicy: actionPolicy,
   featuresOverride: const BridgeUiFeatures(
     showPrint: true,
@@ -333,6 +368,64 @@ final class _FakePrintPlatform implements ReportPrintPlatform {
     calls += 1;
     lastRequest = request;
     return const ReportPrintResult.submitted();
+  }
+}
+
+final class _FakeWarmHeadlessSurface
+    implements WarmableHeadlessPresenterSurface {
+  int warmUpCalls = 0;
+  int startCalls = 0;
+  int releaseCalls = 0;
+  int shutdownCalls = 0;
+
+  @override
+  Future<void> warmUp() async {
+    warmUpCalls += 1;
+  }
+
+  @override
+  Future<void> start({
+    required PresenterSessionLaunch launch,
+    required String templateName,
+    required ReportFlowController controller,
+    required PresenterSurfaceBinding surfaceBinding,
+  }) async {
+    startCalls += 1;
+    surfaceBinding.attach(
+      sessionId: launch.sessionId,
+      templateName: templateName,
+      evaluateJavaScript: (source) async {
+        final correlationId = RegExp(
+          r'"correlationId":"([^"]+)"',
+        ).firstMatch(source)!.group(1)!;
+        surfaceBinding.acceptMessage(<String, dynamic>{
+          'channel': bridgeWebMessageChannel,
+          'method': BridgeWebMethods.exportPdf,
+          'correlationId': correlationId,
+          'type': 'result',
+          'ok': true,
+          'base64': base64Encode(<int>[1, 2, 3]),
+          'filename': 'invoice.pdf',
+          'byteLength': 3,
+        });
+        return null;
+      },
+      reload: () async {},
+      onLifecycle: (_) {},
+    );
+    controller.presenterLoadProgress(1);
+    controller.presenterProtocolDetected(BridgeContract.payloadVersion);
+    controller.completePresenterRender(sessionId: launch.sessionId);
+  }
+
+  @override
+  Future<void> dispose() async {
+    releaseCalls += 1;
+  }
+
+  @override
+  Future<void> shutdown() async {
+    shutdownCalls += 1;
   }
 }
 
