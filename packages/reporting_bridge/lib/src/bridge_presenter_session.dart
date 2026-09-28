@@ -246,8 +246,9 @@ class PresenterSessionCoordinator {
       }
       candidateHandle = request.mode == PresenterSessionMode.offline
           ? await candidateServer.start(sessionId: runtimeSession.sessionId)
-          : await candidateServer.startRuntimeOnly(
+          : await candidateServer.startProxy(
               sessionId: runtimeSession.sessionId,
+              presenterUrl: onlinePresenterUrl,
             );
 
       final launch = PresenterSessionLaunch(
@@ -258,8 +259,8 @@ class PresenterSessionCoordinator {
                 direction: request.direction,
               )
             : _onlineSessionUrl(
+                presenterUrl: candidateHandle.presenterUrl,
                 sessionId: runtimeSession.sessionId,
-                runtimeBaseUrl: candidateHandle.baseUrl,
                 locale: request.locale,
                 direction: request.direction,
               ),
@@ -382,17 +383,17 @@ class PresenterSessionCoordinator {
   }
 
   String _onlineSessionUrl({
+    required String presenterUrl,
     required String sessionId,
-    required String runtimeBaseUrl,
     required String locale,
     required String direction,
   }) {
-    final base = onlinePresenterUrl
+    final uri = Uri.parse(presenterUrl);
+    final base = uri
         .replace(
           queryParameters: <String, String>{
-            ...onlinePresenterUrl.queryParameters,
+            ...uri.queryParameters,
             'sessionId': sessionId,
-            'runtimeBaseUrl': runtimeBaseUrl,
           },
         )
         .toString();

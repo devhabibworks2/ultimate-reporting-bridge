@@ -45,15 +45,14 @@ void main() {
       );
 
       final firstUri = Uri.parse(first.presenterUrl);
+      expect(firstUri.scheme, 'http');
+      expect(firstUri.host, '127.0.0.1');
       expect(firstUri.path, '/UltimateReport/apps/presenter/index.html');
       expect(firstUri.queryParameters['existing'], '1');
       expect(firstUri.queryParameters['sessionId'], 'online-first');
       expect(firstUri.queryParameters['locale'], 'ar');
       expect(firstUri.queryParameters['dir'], 'rtl');
-      expect(
-        firstUri.queryParameters['runtimeBaseUrl'],
-        startsWith('http://127.0.0.1:'),
-      );
+      expect(firstUri.queryParameters['runtimeBaseUrl'], isNull);
       expect(first.presenterVersion, '1.2.3');
       expect(first.presenterDevVersion, 12);
 
