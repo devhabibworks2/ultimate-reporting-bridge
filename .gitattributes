@@ -1,0 +1,5 @@
+# Generated Pigeon Java preserves upstream generator whitespace.
+packages/reporting_bridge_flutter/android/src/main/java/com/ultimate/reportbuilder/reporting_bridge_flutter/ThermalPrinterApi.java whitespace=-trailing-space
+
+# Packaged PDF xref records intentionally contain trailing spaces; keep bytes exact.
+packages/reporting_bridge_flutter/assets/printing/thermal_printer_test.pdf binary whitespace=-trailing-space

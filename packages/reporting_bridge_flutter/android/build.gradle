@@ -14,6 +14,12 @@ buildscript {
 
 apply plugin: 'com.android.library'
 
+repositories {
+    google()
+    mavenCentral()
+    maven { url 'https://jitpack.io' }
+}
+
 android {
     namespace 'com.ultimate.reportbuilder.reporting_bridge_flutter'
     compileSdk 35
@@ -36,6 +42,7 @@ android {
 dependencies {
     implementation 'androidx.annotation:annotation:1.9.1'
     implementation 'androidx.core:core:1.15.0'
+    implementation 'com.github.DantSu:ESCPOS-ThermalPrinter-Android:3.4.0'
 
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'androidx.test:core:1.6.1'
