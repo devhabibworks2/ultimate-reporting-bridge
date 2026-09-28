@@ -4,6 +4,8 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reporting_bridge_flutter/reporting_bridge_flutter.dart';
+import 'package:reporting_bridge_flutter/src/printing/thermal_printer_native_client.dart';
+import 'package:reporting_bridge_flutter/src/printing/thermal_report_print_platform.dart';
 
 void main() {
   late Directory root;
@@ -134,6 +136,79 @@ void main() {
       ),
     );
   });
+
+  test(
+    'managed print dispose callback runs exactly once across repeated client dispose',
+    () async {
+      var disposeCalls = 0;
+      final client = DefaultReportingBridgeFlutterClient(
+        connection: _connection(root),
+        bridgeClient: bridge,
+        preferences: MemoryReportFlowPreferenceStore(),
+        filePlatform: _FakeFilePlatform(),
+        printPlatform: _FakePrintPlatform(),
+        managedPrintDispose: () {
+          disposeCalls += 1;
+        },
+        ui: const BridgeUiConfig.inheritHost(
+          features: BridgeUiFeatures(showPrint: true),
+        ),
+      );
+
+      await client.dispose();
+      await client.dispose();
+      await client.dispose();
+
+      expect(disposeCalls, 1);
+    },
+  );
+
+  test(
+    'ReportingBridgeFlutter accepts print config and keeps explicit printPlatform override',
+    () {
+      final override = _FakePrintPlatform();
+      final composed = ReportingBridgeFlutter(
+        connection: _connection(root),
+        printPlatform: override,
+        androidPrintConfiguration: const AndroidPrintConfiguration.escPos(
+          maximumPdfBytes: 1024,
+        ),
+        iosPrintMode: IosPrintMode.airPrint,
+      );
+
+      expect(composed.printPlatform, same(override));
+    },
+  );
+
+  test(
+    'Default client forwards thermalPrinterSettings into created flow controller',
+    () {
+      final settings = ThermalPrinterSettingsController(
+        settingsStore: MemoryThermalPrinterSettingsStore(),
+        nativeClient: _CompositionNativeClient(),
+        availabilitySink: _CompositionAvailabilitySink(),
+        testPlatform: _CompositionTestPlatform(),
+      );
+      final client = DefaultReportingBridgeFlutterClient(
+        connection: _connection(root),
+        bridgeClient: bridge,
+        preferences: MemoryReportFlowPreferenceStore(),
+        filePlatform: _FakeFilePlatform(),
+        printPlatform: _FakePrintPlatform(),
+        thermalPrinterSettings: settings,
+        ui: const BridgeUiConfig.inheritHost(
+          features: BridgeUiFeatures(showPrint: true),
+        ),
+      );
+      addTearDown(client.dispose);
+
+      final controller = client.createController(_request());
+      addTearDown(controller.dispose);
+
+      expect(controller, isA<ReportFlowThermalPrinterController>());
+      expect(controller.thermalPrinterSettings, same(settings));
+    },
+  );
 }
 
 ReportServerConnection _connection(
@@ -215,6 +290,66 @@ final class _FakeFilePlatform implements ReportFilePlatform {
 
   @override
   Future<void> sharePdf(Uint8List bytes, String filename) async {}
+}
+
+final class _CompositionNativeClient implements ThermalPrinterNativeClient {
+  @override
+  Future<ThermalPrinterPermissionState> bluetoothPermissionState() async =>
+      ThermalPrinterPermissionState.granted;
+
+  @override
+  void dispose() {}
+
+  @override
+  Future<List<ThermalPrinterDevice>> listConnectedUsbPrinters() async =>
+      const <ThermalPrinterDevice>[];
+
+  @override
+  Future<List<ThermalPrinterDevice>> listPairedBluetoothDevices() async =>
+      const <ThermalPrinterDevice>[];
+
+  @override
+  Future<ThermalPrintOperationResult> printPdf({
+    required String jobId,
+    required String pdfPath,
+    required ThermalPrinterProfile profile,
+  }) async => const ThermalPrintOperationResult(
+    status: ThermalPrintResultStatus.submitted,
+  );
+
+  @override
+  Future<ThermalPrinterPermissionState> requestBluetoothPermissions() async =>
+      ThermalPrinterPermissionState.granted;
+
+  @override
+  Future<ThermalPrinterPermissionState> requestUsbPermission(
+    ThermalPrinterDevice device,
+  ) async => ThermalPrinterPermissionState.granted;
+
+  @override
+  void setProgressListener(
+    void Function(ThermalPrintProgress progress)? value,
+  ) {}
+
+  @override
+  Future<ThermalPrinterPermissionState> usbPermission(
+    ThermalPrinterDevice device,
+  ) async => ThermalPrinterPermissionState.granted;
+}
+
+final class _CompositionAvailabilitySink
+    implements ThermalBluetoothAvailabilitySink {
+  @override
+  void setKnownBluetoothAvailability(
+    ThermalPrinterProfile? profile,
+    ThermalPrinterAvailability availability,
+  ) {}
+}
+
+final class _CompositionTestPlatform implements ThermalPrinterTestPlatform {
+  @override
+  Future<ReportPrintResult> testPrint(ThermalPrinterProfile profile) async =>
+      const ReportPrintResult.submitted();
 }
 
 final class _FakeBridgeClient extends ReportingBridgeClient {

@@ -11,6 +11,7 @@ import '../logging/bridge_diagnostics.dart';
 import '../persistence/report_flow_preference_store.dart';
 import '../platform/bridge_platform_adapters.dart';
 import '../platform/presenter_surface_binding.dart';
+import '../printing/thermal_printer_controller.dart';
 import '../ui/bridge_ui_config.dart';
 import '../ui/report_flow_screen.dart';
 import 'report_server_connection.dart';
@@ -41,6 +42,8 @@ class DefaultReportingBridgeFlutterClient
     required ReportFilePlatform filePlatform,
     required this.ui,
     ReportPrintPlatform printPlatform = const UnsupportedReportPrintPlatform(),
+    ThermalPrinterSettingsController? thermalPrinterSettings,
+    void Function()? managedPrintDispose,
     ReportSupportSharePlatform supportSharePlatform =
         const SharePlusReportSupportSharePlatform(),
   }) : _connection = connection,
@@ -48,6 +51,8 @@ class DefaultReportingBridgeFlutterClient
        _preferences = preferences,
        _filePlatform = filePlatform,
        _printPlatform = printPlatform,
+       _thermalPrinterSettings = thermalPrinterSettings,
+       _managedPrintDispose = managedPrintDispose,
        _supportSharePlatform = supportSharePlatform;
 
   final ReportServerConnection _connection;
@@ -55,6 +60,8 @@ class DefaultReportingBridgeFlutterClient
   final ReportFlowPreferenceStore _preferences;
   final ReportFilePlatform _filePlatform;
   final ReportPrintPlatform _printPlatform;
+  final ThermalPrinterSettingsController? _thermalPrinterSettings;
+  final void Function()? _managedPrintDispose;
   final ReportSupportSharePlatform _supportSharePlatform;
 
   @override
@@ -119,6 +126,7 @@ class DefaultReportingBridgeFlutterClient
         filePlatform: _filePlatform,
         surfaceBinding: PresenterSurfaceBinding(),
         printPlatform: _printPlatform,
+        thermalPrinterSettings: _thermalPrinterSettings,
         supportSharePlatform: _supportSharePlatform,
       ),
       onDisposed: () {
@@ -156,5 +164,7 @@ class DefaultReportingBridgeFlutterClient
     await _activeController?.dispose();
     _activeController = null;
     await _bridgeClient.dispose();
+    _thermalPrinterSettings?.dispose();
+    _managedPrintDispose?.call();
   }
 }
