@@ -3,12 +3,14 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:reporting_bridge/reporting_bridge.dart';
 
 import '../flow/report_flow_controller.dart';
-import '../flow/report_flow_failure.dart';
 import '../platform/presenter_surface_binding.dart';
+import '../platform/presenter_web_surface_coordinator.dart';
 import 'headless_presenter_surface.dart';
 
 final class InAppHeadlessPresenterSurface
     implements WarmableHeadlessPresenterSurface {
+  static const _coordinator = PresenterWebSurfaceCoordinator();
+
   HeadlessInAppWebView? _webView;
   InAppWebViewController? _webController;
   ReportFlowController? _controller;
@@ -57,19 +59,29 @@ final class InAppHeadlessPresenterSurface
         _webController = webController;
         _attach(webController);
       },
-      onLoadStart: (_, __) => _controller?.presenterLoadStarted(),
-      onProgressChanged: (_, progress) =>
-          _controller?.presenterLoadProgress(progress / 100),
+      onLoadStart: (_, __) {
+        final controller = _controller;
+        if (controller != null) {
+          _coordinator.handleLoadStart(controller);
+        }
+      },
+      onProgressChanged: (_, progress) {
+        final controller = _controller;
+        if (controller != null) {
+          _coordinator.handleProgress(controller, progress);
+        }
+      },
       onReceivedError: (_, request, error) {
-        if (request.isForMainFrame != true) return;
-        _controller?.failPresenterRender(error.description);
+        final controller = _controller;
+        if (controller != null) {
+          _coordinator.handleReceivedError(controller, request, error);
+        }
       },
       onReceivedHttpError: (_, request, response) {
-        if (request.isForMainFrame != true) return;
-        if (request.url.toString().contains('favicon')) return;
-        _controller?.failPresenterRender(
-          'HTTP ${response.statusCode} while loading ${request.url}',
-        );
+        final controller = _controller;
+        if (controller != null) {
+          _coordinator.handleReceivedHttpError(controller, request, response);
+        }
       },
     );
     _webView = webView;
@@ -89,47 +101,13 @@ final class InAppHeadlessPresenterSurface
     }
 
     webController.removeJavaScriptHandler(handlerName: 'urbReportingBridge');
-    webController.addJavaScriptHandler(
-      handlerName: 'urbReportingBridge',
-      callback: (args) {
-        if (args.isNotEmpty) surfaceBinding.acceptMessage(args.first);
-        return null;
-      },
-    );
-    surfaceBinding.attach(
+    _coordinator.attach(
+      webController: webController,
       sessionId: launch.sessionId,
       templateName: templateName,
-      evaluateJavaScript: (source) =>
-          webController.evaluateJavascript(source: source),
-      reload: webController.reload,
-      onLifecycle: (event) => _handleLifecycle(event, controller),
+      controller: controller,
+      surfaceBinding: surfaceBinding,
     );
-  }
-
-  void _handleLifecycle(
-    PresenterWebLifecycleEvent event,
-    ReportFlowController controller,
-  ) {
-    switch (event.state) {
-      case PresenterWebLifecycleState.connected:
-        controller.presenterProtocolDetected(event.contractVersion);
-        return;
-      case PresenterWebLifecycleState.loading:
-        controller.presenterLoadStarted();
-        controller.presenterProtocolDetected(event.contractVersion);
-        return;
-      case PresenterWebLifecycleState.ready:
-        controller.presenterProtocolDetected(event.contractVersion);
-        controller.completePresenterRender(sessionId: event.sessionId);
-        return;
-      case PresenterWebLifecycleState.failed:
-        controller.presenterProtocolDetected(event.contractVersion);
-        controller.dispatchPresenterRenderFailure(
-          ReportFlowFailure.presenterRenderPayload(event.payload),
-          sessionId: event.sessionId,
-        );
-        return;
-    }
   }
 
   @override
