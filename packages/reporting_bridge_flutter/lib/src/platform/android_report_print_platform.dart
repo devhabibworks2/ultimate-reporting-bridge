@@ -204,6 +204,13 @@ final class AndroidReportPrintPlatform extends WidgetsBindingObserver
   }) : _nativeClient =
            nativeClient ?? const MethodChannelAndroidPrintNativeClient(),
        _observeLifecycle = observeLifecycle {
+    if (configuration.mode == AndroidPrintMode.escPos) {
+      throw ArgumentError.value(
+        configuration.mode,
+        'configuration',
+        'ESC/POS requires a thermal print platform.',
+      );
+    }
     if (_observeLifecycle) {
       WidgetsBinding.instance.addObserver(this);
     }

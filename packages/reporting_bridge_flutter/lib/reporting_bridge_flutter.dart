@@ -24,6 +24,7 @@ export 'src/logging/bridge_diagnostics.dart';
 export 'src/persistence/report_flow_preference_store.dart';
 export 'src/platform/android_print_configuration.dart';
 export 'src/platform/bridge_platform_adapters.dart';
+export 'src/platform/ios_print_configuration.dart';
 export 'src/platform/platform_printing.dart';
 export 'src/platform/presenter_surface_binding.dart';
 export 'src/ui/bridge_presenter_view.dart';

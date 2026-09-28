@@ -11,6 +11,16 @@ import 'package:reporting_bridge_flutter/src/platform/bridge_platform_adapters.d
 import 'test_print_request.dart';
 
 void main() {
+  test('rejects ESC/POS mode before any Android app print path', () {
+    expect(
+      () => AndroidReportPrintPlatform(
+        configuration: const AndroidPrintConfiguration.escPos(),
+        observeLifecycle: false,
+      ),
+      throwsArgumentError,
+    );
+  });
+
   group('system PrintManager mode', () {
     test('invokes PrintManager and maps submitted result', () async {
       final native = _FakeAndroidPrintNativeClient();

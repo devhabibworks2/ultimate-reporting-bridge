@@ -3,6 +3,10 @@ import 'package:reporting_bridge_flutter/src/contracts/external_printer_contract
 import 'package:reporting_bridge_flutter/src/platform/platform_printing.dart';
 
 void main() {
+  test('platform printing exports the iOS AirPrint mode', () {
+    expect(IosPrintMode.values, <IosPrintMode>[IosPrintMode.airPrint]);
+  });
+
   test(
     'platform_printing re-exports Android configuration and print types',
     () {

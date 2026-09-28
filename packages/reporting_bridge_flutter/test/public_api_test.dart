@@ -5,6 +5,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:reporting_bridge_flutter/reporting_bridge_flutter.dart';
 
 void main() {
+  test('public API exports Android and iOS print modes', () {
+    expect(AndroidPrintMode.values.first, AndroidPrintMode.escPos);
+    expect(IosPrintMode.values, <IosPrintMode>[IosPrintMode.airPrint]);
+  });
+
   test('barrel exposes every type required by the public client contract', () {
     final root = Directory.systemTemp.createTempSync('urb-public-api-');
     addTearDown(() => root.deleteSync(recursive: true));

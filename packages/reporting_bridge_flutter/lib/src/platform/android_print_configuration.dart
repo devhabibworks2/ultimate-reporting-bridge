@@ -3,7 +3,7 @@ import '../contracts/external_printer_contract.dart';
 const int defaultMaximumPdfBytes = 50 * 1024 * 1024;
 const String ultimatePrinterContractVersion = '1';
 
-enum AndroidPrintMode { systemPrintManager, externalApp }
+enum AndroidPrintMode { escPos, systemPrintManager, externalApp }
 
 final class AndroidExternalPrinterConfiguration {
   AndroidExternalPrinterConfiguration({
@@ -61,6 +61,12 @@ final class AndroidExternalPrinterConfiguration {
 }
 
 final class AndroidPrintConfiguration {
+  const AndroidPrintConfiguration.escPos({
+    this.maximumPdfBytes = defaultMaximumPdfBytes,
+  }) : assert(maximumPdfBytes > 0),
+       mode = AndroidPrintMode.escPos,
+       externalApp = null;
+
   const AndroidPrintConfiguration.systemPrintManager({
     this.maximumPdfBytes = defaultMaximumPdfBytes,
   }) : assert(maximumPdfBytes > 0),
