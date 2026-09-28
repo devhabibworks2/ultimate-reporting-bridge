@@ -7,6 +7,7 @@ import '../flow/report_flow_controller_impl.dart';
 import '../flow/report_flow_failure.dart';
 import '../flow/report_flow_runtime.dart';
 import '../flow/report_result.dart';
+import '../headless/headless_report_print_progress.dart';
 import '../logging/bridge_diagnostics.dart';
 import '../persistence/report_flow_preference_store.dart';
 import '../platform/bridge_platform_adapters.dart';
@@ -29,6 +30,17 @@ abstract interface class ReportingBridgeFlutterClient {
     BuildContext context,
     ReportOpenRequest request,
   );
+
+  Future<ReportPrintResult> printReportHeadless(
+    ReportOpenRequest request, {
+    HeadlessReportPrintProgressCallback? onProgress,
+    HeadlessReportPrintTimingCallback? onTiming,
+  });
+
+  Future<HeadlessPrintWarmupResult> warmUpHeadlessPrinting(
+    ReportOpenRequest request, {
+    bool refreshResources = false,
+  });
 
   Future<void> dispose();
 }
@@ -156,6 +168,25 @@ class DefaultReportingBridgeFlutterClient
       await controller.dispose();
     }
   }
+
+  @override
+  Future<ReportPrintResult> printReportHeadless(
+    ReportOpenRequest request, {
+    HeadlessReportPrintProgressCallback? onProgress,
+    HeadlessReportPrintTimingCallback? onTiming,
+  }) => Future<ReportPrintResult>.error(
+    UnsupportedError('Headless print runner is not available yet.'),
+  );
+
+  @override
+  Future<HeadlessPrintWarmupResult> warmUpHeadlessPrinting(
+    ReportOpenRequest request, {
+    bool refreshResources = false,
+  }) async => const HeadlessPrintWarmupResult(
+    webViewReady: false,
+    resourcesRefreshed: false,
+    diagnostic: 'headlessPrintRunnerUnavailable',
+  );
 
   @override
   Future<void> dispose() async {

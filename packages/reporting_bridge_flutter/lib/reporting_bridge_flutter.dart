@@ -18,6 +18,8 @@ export 'src/flow/report_flow_event.dart';
 export 'src/flow/report_flow_failure.dart';
 export 'src/flow/report_flow_state.dart';
 export 'src/flow/report_result.dart';
+export 'src/headless/headless_presenter_surface.dart';
+export 'src/headless/headless_report_print_progress.dart';
 export 'src/flow/report_template_metadata.dart';
 export 'src/flow/urb_identifiers.dart';
 export 'src/logging/bridge_diagnostics.dart';

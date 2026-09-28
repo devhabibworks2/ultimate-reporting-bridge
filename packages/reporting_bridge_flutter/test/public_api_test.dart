@@ -123,4 +123,74 @@ void main() {
     expect(iosPrintPlatform, isNull);
     expect(filePlatform, isNull);
   });
+
+  test('public API exports headless print contracts and client signatures', () {
+    expect(
+      ReportFlowFailureCode.values,
+      contains(ReportFlowFailureCode.templateSelectionRequired),
+    );
+
+    const progress = HeadlessReportPrintProgress(
+      phase: HeadlessReportPrintPhase.preparingReport,
+      fraction: 0.25,
+      current: 1,
+      total: 4,
+      bytesSent: 10,
+      totalBytes: 40,
+    );
+    expect(progress.phase, HeadlessReportPrintPhase.preparingReport);
+    expect(
+      HeadlessReportPrintPhase.values,
+      containsAll(<HeadlessReportPrintPhase>[
+        HeadlessReportPrintPhase.rasterizing,
+        HeadlessReportPrintPhase.transmitting,
+      ]),
+    );
+
+    const timing = HeadlessReportPrintTiming(
+      stage: HeadlessReportPrintTimingStage.preparingTemplate,
+      stageElapsed: Duration(milliseconds: 5),
+      totalElapsed: Duration(milliseconds: 5),
+    );
+    expect(timing.stage, HeadlessReportPrintTimingStage.preparingTemplate);
+    expect(
+      HeadlessReportPrintTimingStage.values,
+      contains(HeadlessReportPrintTimingStage.transmitting),
+    );
+
+    const warmup = HeadlessPrintWarmupResult(
+      webViewReady: true,
+      resourcesRefreshed: false,
+      presenterMode: 'online',
+    );
+    expect(warmup.webViewReady, isTrue);
+    expect(warmup.resourcesRefreshed, isFalse);
+
+    // Compile-time export presence for presenter surface contracts.
+    final HeadlessPresenterSurface? surface = null;
+    final WarmableHeadlessPresenterSurface? warmable = null;
+    final HeadlessPresenterSurfaceFactory? surfaceFactory = null;
+    expect(surface, isNull);
+    expect(warmable, isNull);
+    expect(surfaceFactory, isNull);
+
+    // Compile-time signature contracts on ReportingBridgeFlutterClient.
+    Future<ReportPrintResult> Function(
+      ReportOpenRequest request, {
+      HeadlessReportPrintProgressCallback? onProgress,
+      HeadlessReportPrintTimingCallback? onTiming,
+    })
+    printHeadless(ReportingBridgeFlutterClient client) =>
+        client.printReportHeadless;
+
+    Future<HeadlessPrintWarmupResult> Function(
+      ReportOpenRequest request, {
+      bool refreshResources,
+    })
+    warmUp(ReportingBridgeFlutterClient client) =>
+        client.warmUpHeadlessPrinting;
+
+    expect(printHeadless, isA<Function>());
+    expect(warmUp, isA<Function>());
+  });
 }
