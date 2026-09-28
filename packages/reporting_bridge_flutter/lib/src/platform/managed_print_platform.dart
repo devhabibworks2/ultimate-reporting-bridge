@@ -5,6 +5,18 @@ import 'android_print_configuration.dart';
 import 'bridge_platform_adapters.dart';
 import 'ios_print_configuration.dart';
 
+Future<T> runManagedResourceCreation<T>({
+  required Future<T> Function() create,
+  required void Function() disposeOnFailure,
+}) async {
+  try {
+    return await create();
+  } catch (_) {
+    disposeOnFailure();
+    rethrow;
+  }
+}
+
 final class ManagedPrintPlatformResources {
   const ManagedPrintPlatformResources({
     required this.platform,

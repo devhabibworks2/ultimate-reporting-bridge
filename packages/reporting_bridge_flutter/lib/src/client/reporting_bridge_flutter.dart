@@ -62,22 +62,27 @@ class ReportingBridgeFlutter {
         final settingsStore =
             await SharedPreferencesThermalPrinterSettingsStore.create();
         final nativeClient = PigeonThermalPrinterNativeClient();
-        final thermalPlatform = ThermalReportPrintPlatform(
-          settingsStore: settingsStore,
-          artifactStore: await ThermalPdfArtifactStore.create(),
-          nativeClient: nativeClient,
-        );
-        final thermalPrinterSettings = ThermalPrinterSettingsController(
-          settingsStore: settingsStore,
-          nativeClient: nativeClient,
-          availabilitySink: thermalPlatform,
-          testPlatform: thermalPlatform,
-        );
-        await thermalPrinterSettings.ensureLoaded();
-        return ManagedPrintPlatformResources(
-          platform: thermalPlatform,
-          thermalPrinterSettings: thermalPrinterSettings,
-          dispose: thermalPlatform.dispose,
+        return runManagedResourceCreation<ManagedPrintPlatformResources>(
+          disposeOnFailure: nativeClient.dispose,
+          create: () async {
+            final thermalPlatform = ThermalReportPrintPlatform(
+              settingsStore: settingsStore,
+              artifactStore: await ThermalPdfArtifactStore.create(),
+              nativeClient: nativeClient,
+            );
+            final thermalPrinterSettings = ThermalPrinterSettingsController(
+              settingsStore: settingsStore,
+              nativeClient: nativeClient,
+              availabilitySink: thermalPlatform,
+              testPlatform: thermalPlatform,
+            );
+            await thermalPrinterSettings.ensureLoaded();
+            return ManagedPrintPlatformResources(
+              platform: thermalPlatform,
+              thermalPrinterSettings: thermalPrinterSettings,
+              dispose: thermalPlatform.dispose,
+            );
+          },
         );
       },
       androidFactory: (configuration) async {

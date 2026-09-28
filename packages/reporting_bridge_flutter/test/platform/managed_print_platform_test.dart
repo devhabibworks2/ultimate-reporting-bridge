@@ -6,6 +6,25 @@ import 'package:reporting_bridge_flutter/src/platform/ios_print_configuration.da
 import 'package:reporting_bridge_flutter/src/platform/managed_print_platform.dart';
 
 void main() {
+  test(
+    'managed resource creation disposes owned resource when creation fails',
+    () async {
+      var disposeCalls = 0;
+
+      await expectLater(
+        runManagedResourceCreation<int>(
+          create: () async => throw StateError('creation failed'),
+          disposeOnFailure: () {
+            disposeCalls += 1;
+          },
+        ),
+        throwsStateError,
+      );
+
+      expect(disposeCalls, 1);
+    },
+  );
+
   test('explicit override bypasses every managed factory', () async {
     final override = _Platform();
     var factoryCalls = 0;
