@@ -107,6 +107,118 @@ class ReportFlowStrings {
   String get adoptAndOpenReport =>
       arabic ? 'اعتماد القالب وفتح التقرير' : 'Adopt and open report';
   String get print => arabic ? 'طباعة' : 'Print';
+  String get preparingPrint =>
+      arabic ? 'جارٍ تجهيز الطباعة' : 'Preparing print';
+  String get connectingPrinter =>
+      arabic ? 'جارٍ الاتصال بالطابعة' : 'Connecting printer';
+  String get sendingToPrinter =>
+      arabic ? 'جارٍ إرسال الطباعة' : 'Sending to printer';
+  String get thermalPrinterSettings =>
+      arabic ? 'إعدادات الطابعة الحرارية' : 'Thermal printer settings';
+  String get printingSection => arabic ? 'الطباعة' : 'Printing';
+  String get configureThermalPrinter =>
+      arabic ? 'إعداد الطابعة الحرارية' : 'Set up thermal printer';
+  String get noDefaultPrinterConfigured => arabic
+      ? 'لم يتم إعداد طابعة افتراضية.'
+      : 'No default printer has been configured.';
+  String get thermalPrinterSettingsDescription => arabic
+      ? 'تغيير الاتصال، عرض الطباعة، وخيارات الورق.'
+      : 'Change the connection, print width, and paper options.';
+  String get printerConnectionType =>
+      arabic ? 'نوع الاتصال' : 'Connection type';
+  String get printerName => arabic ? 'اسم الطابعة' : 'Printer name';
+  String get bluetooth => 'Bluetooth';
+  String get usb => 'USB';
+  String get tcpNetwork => arabic ? 'الشبكة (TCP)' : 'TCP / Network';
+  String get suggestedPaperSize =>
+      arabic ? 'مقاس الورق المقترح' : 'Suggested paper size';
+  String get printableWidth =>
+      arabic ? 'العرض القابل للطباعة (بكسل)' : 'Printable width (px)';
+  String get copies => arabic ? 'النسخ' : 'Copies';
+  String get feedDots => arabic ? 'تغذية الورق (نقطة)' : 'Feed dots';
+  String get grayscale => arabic ? 'تدرج رمادي' : 'Grayscale';
+  String get grayscaleDescription =>
+      arabic ? 'إيقافه يرسل أسود وأبيض' : 'When off, black and white is sent';
+  String get sendCutCommand =>
+      arabic ? 'إرسال أمر قص الورق' : 'Send paper-cut command';
+  String get sendCutCommandDescription => arabic
+      ? 'لا يمكن التحقق من وجود قاطع في الطابعة'
+      : 'The printer cutter cannot be detected';
+  String get testPrint => arabic ? 'طباعة اختبار' : 'Test print';
+  String get saveDefaultPrinter =>
+      arabic ? 'حفظ الطابعة الافتراضية' : 'Save default printer';
+  String get removeDefaultPrinter =>
+      arabic ? 'إزالة الطابعة الافتراضية' : 'Remove default printer';
+  String get defaultPrinter =>
+      arabic ? 'الطابعة الافتراضية' : 'Default printer';
+  String get refreshDevices => arabic ? 'تحديث الأجهزة' : 'Refresh devices';
+  String get bluetoothPairedDevices =>
+      arabic ? 'الأجهزة المقترنة عبر Bluetooth' : 'Paired Bluetooth devices';
+  String get connectedUsbPrinters =>
+      arabic ? 'طابعات USB المتصلة' : 'Connected USB printers';
+  String get hostOrIpAddress =>
+      arabic ? 'عنوان المضيف أو IP' : 'Host / IP address';
+  String get port => arabic ? 'المنفذ' : 'Port';
+  String get timeoutSeconds =>
+      arabic ? 'مهلة الاتصال (ثوانٍ)' : 'Timeout (seconds)';
+  String get refreshToShowDevices => arabic
+      ? 'اضغط «تحديث الأجهزة» لعرض الأجهزة المتاحة.'
+      : 'Refresh devices to show available devices.';
+  String get invalidPrintableWidth =>
+      arabic ? 'أدخل عرض طباعة صالحًا.' : 'Enter a valid printable width.';
+  String get hostRequired => arabic
+      ? 'أدخل عنوان IP أو اسم المضيف.'
+      : 'Enter an IP address or hostname.';
+  String get invalidPort =>
+      arabic ? 'أدخل منفذًا بين 1 و65535.' : 'Enter a port from 1 to 65535.';
+  String get invalidTimeout => arabic
+      ? 'أدخل مهلة بين 1 و60 ثانية.'
+      : 'Enter a timeout from 1 to 60 seconds.';
+  String get savedPrinterUnavailable => arabic
+      ? 'الطابعة المحفوظة غير متاحة الآن. اربطها من إعدادات Android ثم حدّث الأجهزة وأعد اختيارها.'
+      : 'The saved printer is unavailable. Pair it in Android settings, refresh devices, then select it again.';
+  String printerSettingsError(String code) => switch (code) {
+    'savedBluetoothPrinterUnavailable' || 'bluetoothPrinterUnavailable' =>
+      arabic
+          ? 'الطابعة المحفوظة غير متاحة. تأكد من ربطها عبر Bluetooth ثم حدّث الأجهزة.'
+          : 'The saved Bluetooth printer is unavailable. Pair it, then refresh devices.',
+    'bluetoothPermissionDenied' =>
+      arabic
+          ? 'يلزم السماح بصلاحية الأجهزة القريبة لاستخدام طابعة Bluetooth.'
+          : 'Nearby devices permission is required for Bluetooth printing.',
+    'bluetoothUnavailable' || 'bluetoothDisabled' =>
+      arabic
+          ? 'Bluetooth غير متاح. فعّله ثم أعد المحاولة.'
+          : 'Bluetooth is unavailable. Enable it and try again.',
+    'bluetoothConnectionFailed' =>
+      arabic
+          ? 'تعذر الاتصال بطابعة Bluetooth. تأكد أنها قيد التشغيل وقريبة.'
+          : 'The Bluetooth printer could not be connected. Check that it is powered on and nearby.',
+    'tcpConnectionTimeout' =>
+      arabic
+          ? 'انتهت مهلة الاتصال بالشبكة. تحقق من عنوان IP والمنفذ والشبكة.'
+          : 'The network connection timed out. Check the IP address, port, and network.',
+    'tcpHostNotFound' =>
+      arabic
+          ? 'تعذر العثور على عنوان الطابعة في الشبكة.'
+          : 'The network printer address could not be found.',
+    'tcpConnectionRefused' =>
+      arabic
+          ? 'رفضت الطابعة الاتصال. تأكد من المنفذ وأن الطابعة متصلة بالشبكة.'
+          : 'The printer refused the connection. Check the port and network connection.',
+    'tcpSendFailed' || 'tcpConnectionFailed' =>
+      arabic
+          ? 'تعذر الإرسال إلى طابعة الشبكة. تحقق من IP والمنفذ وأن الجهازين على الشبكة نفسها.'
+          : 'Data could not be sent to the network printer. Check the IP address, port, and network.',
+    'printerConnectionFailed' =>
+      arabic
+          ? 'تعذر الاتصال بالطابعة. تأكد أنها قيد التشغيل.'
+          : 'The printer could not be connected. Check that it is powered on.',
+    _ =>
+      arabic
+          ? 'تعذر تنفيذ الطباعة. راجع إعدادات الطابعة ثم أعد المحاولة.'
+          : 'Printing could not be completed. Review the printer settings and try again.',
+  };
   String get savePdf => arabic ? 'حفظ PDF' : 'Save PDF';
   String get share => arabic ? 'مشاركة' : 'Share';
   String get language => arabic ? 'اللغة' : 'Language';
@@ -364,6 +476,42 @@ class ReportFlowStrings {
         arabic
             ? 'لا يمكن تحويل حجم الورق المحدد للطباعة.'
             : 'The selected paper size cannot be converted for printing.',
+      ReportFlowFailureCode.savedBluetoothPrinterUnavailable =>
+        arabic
+            ? 'الطابعة المحفوظة غير متاحة. تأكد من ربطها عبر Bluetooth ثم حدّث إعداداتها.'
+            : 'The saved Bluetooth printer is unavailable. Pair it, then refresh its settings.',
+      ReportFlowFailureCode.bluetoothPermissionDenied =>
+        arabic
+            ? 'يلزم السماح بصلاحية الأجهزة القريبة لاستخدام طابعة Bluetooth.'
+            : 'Nearby devices permission is required for Bluetooth printing.',
+      ReportFlowFailureCode.bluetoothPrinterConnectionFailed =>
+        arabic
+            ? 'تعذر الاتصال بطابعة Bluetooth. تأكد أنها قيد التشغيل وقريبة.'
+            : 'The Bluetooth printer could not be connected. Check that it is powered on and nearby.',
+      ReportFlowFailureCode.tcpPrinterConnectionTimeout =>
+        arabic
+            ? 'انتهت مهلة الاتصال بالشبكة. تحقق من عنوان IP والمنفذ وأن الجهازين على الشبكة نفسها.'
+            : 'The network printer connection timed out. Check its IP address, port, and network.',
+      ReportFlowFailureCode.tcpPrinterHostNotFound =>
+        arabic
+            ? 'تعذر العثور على عنوان طابعة الشبكة. تحقق من IP أو اسم المضيف.'
+            : 'The network printer host could not be found. Check its IP address or hostname.',
+      ReportFlowFailureCode.tcpPrinterConnectionRefused =>
+        arabic
+            ? 'رفضت طابعة الشبكة الاتصال. تحقق من المنفذ وأنها متصلة بالشبكة.'
+            : 'The network printer refused the connection. Check its port and network connection.',
+      ReportFlowFailureCode.tcpPrinterSendFailed =>
+        arabic
+            ? 'انقطع الإرسال إلى طابعة الشبكة قبل اكتماله. أعد المحاولة.'
+            : 'Sending data to the network printer did not complete. Please try again.',
+      ReportFlowFailureCode.tcpPrinterConnectionFailed =>
+        arabic
+            ? 'تعذر الاتصال بطابعة الشبكة. تحقق من IP والمنفذ والشبكة نفسها.'
+            : 'The network printer could not be connected. Check its IP address, port, and network.',
+      ReportFlowFailureCode.thermalPrinterConnectionFailed =>
+        arabic
+            ? 'تعذر الاتصال بالطابعة. تأكد أنها قيد التشغيل وقريبة.'
+            : 'The printer could not be connected. Check that it is powered on and nearby.',
       ReportFlowFailureCode.printFailed =>
         arabic ? 'تعذرت طباعة التقرير.' : 'Report printing failed.',
       ReportFlowFailureCode.cleanupFailed => cleanupWarning,

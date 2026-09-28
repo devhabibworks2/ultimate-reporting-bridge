@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reporting_bridge_flutter/reporting_bridge_flutter.dart';
+import 'package:reporting_bridge_flutter/src/printing/thermal_printer_native_client.dart';
+import 'package:reporting_bridge_flutter/src/printing/thermal_report_print_platform.dart';
 import '../test_open_request.dart';
 
 void main() {
@@ -897,6 +899,64 @@ void main() {
       expect(find.text('Current template'), findsNothing);
     },
   );
+
+  testWidgets(
+    'thermal printer row appears only when print is enabled and a thermal controller exists',
+    (WidgetTester tester) async {
+      final thermal = ThermalPrinterSettingsController(
+        settingsStore: MemoryThermalPrinterSettingsStore(),
+        nativeClient: _ThermalNativeClient(),
+        availabilitySink: _ThermalAvailabilitySink(),
+        testPlatform: _ThermalTestPlatform(),
+      );
+      await thermal.ensureLoaded();
+      addTearDown(thermal.dispose);
+
+      final controller = _ThermalFakeController(
+        _settingsState(),
+        thermalPrinterSettings: thermal,
+        featuresOverride: const BridgeUiFeatures(showPrint: true),
+      );
+      await _pumpDirectFlow(tester, controller);
+
+      expect(
+        find.byKey(const ValueKey<String>('settings-thermal-printer-row')),
+        findsOneWidget,
+      );
+
+      final noThermalController = _FakeController(
+        _settingsState(),
+        featuresOverride: const BridgeUiFeatures(showPrint: true),
+      );
+      await _pumpDirectFlow(tester, noThermalController);
+
+      expect(
+        find.byKey(const ValueKey<String>('settings-thermal-printer-row')),
+        findsNothing,
+      );
+    },
+  );
+
+  testWidgets('thermal print progress replaces the preview Print label', (
+    WidgetTester tester,
+  ) async {
+    InAppWebViewPlatform.instance = _TestInAppWebViewPlatform();
+    final controller = _FakeController(
+      _previewState().copyWith(
+        printProgress: const ThermalPrintProgress(
+          jobId: 'job-progress',
+          phase: ThermalPrintPhase.transmitting,
+          bytesSent: 128,
+          totalBytes: 256,
+        ),
+      ),
+      featuresOverride: const BridgeUiFeatures(showPrint: true),
+    );
+
+    await _pumpFlow(tester, controller);
+
+    expect(find.text('Sending to printer'), findsOneWidget);
+  });
 
   testWidgets(
     'Preview does not enable navigation override without an allow policy',
@@ -2135,6 +2195,78 @@ class _FakeController extends ChangeNotifier implements ReportFlowController {
   Future<void> syncTemplates() async {
     syncTemplatesCalls += 1;
   }
+}
+
+class _ThermalFakeController extends _FakeController
+    implements ReportFlowThermalPrinterController {
+  _ThermalFakeController(
+    super.value, {
+    required this.thermalPrinterSettings,
+    super.featuresOverride,
+  });
+
+  @override
+  final ThermalPrinterSettingsController thermalPrinterSettings;
+}
+
+final class _ThermalNativeClient implements ThermalPrinterNativeClient {
+  @override
+  Future<ThermalPrinterPermissionState> bluetoothPermissionState() async =>
+      ThermalPrinterPermissionState.granted;
+
+  @override
+  void dispose() {}
+
+  @override
+  Future<List<ThermalPrinterDevice>> listConnectedUsbPrinters() async =>
+      const <ThermalPrinterDevice>[];
+
+  @override
+  Future<List<ThermalPrinterDevice>> listPairedBluetoothDevices() async =>
+      const <ThermalPrinterDevice>[];
+
+  @override
+  Future<ThermalPrintOperationResult> printPdf({
+    required String jobId,
+    required String pdfPath,
+    required ThermalPrinterProfile profile,
+  }) async => const ThermalPrintOperationResult(
+    status: ThermalPrintResultStatus.submitted,
+  );
+
+  @override
+  Future<ThermalPrinterPermissionState> requestBluetoothPermissions() async =>
+      ThermalPrinterPermissionState.granted;
+
+  @override
+  Future<ThermalPrinterPermissionState> requestUsbPermission(
+    ThermalPrinterDevice device,
+  ) async => ThermalPrinterPermissionState.granted;
+
+  @override
+  void setProgressListener(
+    void Function(ThermalPrintProgress progress)? value,
+  ) {}
+
+  @override
+  Future<ThermalPrinterPermissionState> usbPermission(
+    ThermalPrinterDevice device,
+  ) async => ThermalPrinterPermissionState.granted;
+}
+
+final class _ThermalAvailabilitySink
+    implements ThermalBluetoothAvailabilitySink {
+  @override
+  void setKnownBluetoothAvailability(
+    ThermalPrinterProfile? profile,
+    ThermalPrinterAvailability availability,
+  ) {}
+}
+
+final class _ThermalTestPlatform implements ThermalPrinterTestPlatform {
+  @override
+  Future<ReportPrintResult> testPrint(ThermalPrinterProfile profile) async =>
+      const ReportPrintResult.submitted();
 }
 
 class _SupportFakeController extends _FakeController

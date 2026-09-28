@@ -24,6 +24,7 @@ export 'src/logging/bridge_diagnostics.dart';
 export 'src/persistence/report_flow_preference_store.dart';
 export 'src/persistence/thermal_printer_settings_store.dart';
 export 'src/printing/thermal_printer_models.dart';
+export 'src/printing/thermal_printer_controller.dart';
 export 'src/platform/android_print_configuration.dart';
 export 'src/platform/bridge_platform_adapters.dart';
 export 'src/platform/ios_print_configuration.dart';

@@ -2,6 +2,7 @@ import 'package:reporting_bridge/reporting_bridge.dart';
 
 import '../contracts/report_open_request.dart';
 import 'report_flow_failure.dart';
+import '../printing/thermal_printer_models.dart';
 
 enum ReportFlowStage {
   initializing,
@@ -74,6 +75,7 @@ class ReportFlowState {
     this.previewLoad = ReportOperationStatus.idle,
     this.renderStatus = PresenterRenderStatus.idle,
     this.exportAction,
+    this.printProgress,
     this.failure,
     this.templateSyncFailure,
     this.presenterSyncFailure,
@@ -117,6 +119,7 @@ class ReportFlowState {
   final ReportOperationStatus previewLoad;
   final PresenterRenderStatus renderStatus;
   final ReportExportAction? exportAction;
+  final ThermalPrintProgress? printProgress;
   final ReportFlowFailure? failure;
 
   /// Resource-scoped synchronization failures stay attached to their owning
@@ -216,6 +219,7 @@ class ReportFlowState {
     ReportOperationStatus? previewLoad,
     PresenterRenderStatus? renderStatus,
     ReportExportAction? exportAction,
+    ThermalPrintProgress? printProgress,
     ReportFlowFailure? failure,
     ReportFlowFailure? templateSyncFailure,
     ReportFlowFailure? presenterSyncFailure,
@@ -234,6 +238,7 @@ class ReportFlowState {
     bool clearSelectedTemplate = false,
     bool clearPresenterLaunch = false,
     bool clearExportAction = false,
+    bool clearPrintProgress = false,
     bool clearFailure = false,
     bool clearTemplateSyncFailure = false,
     bool clearPresenterSyncFailure = false,
@@ -265,6 +270,9 @@ class ReportFlowState {
     exportAction: clearExportAction
         ? null
         : (exportAction ?? this.exportAction),
+    printProgress: clearPrintProgress
+        ? null
+        : (printProgress ?? this.printProgress),
     failure: clearFailure ? null : (failure ?? this.failure),
     templateSyncFailure: clearTemplateSyncFailure
         ? null

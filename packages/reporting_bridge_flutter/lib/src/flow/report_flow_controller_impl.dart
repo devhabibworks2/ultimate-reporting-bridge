@@ -8,6 +8,9 @@ import '../contracts/template_sync_request.dart';
 import '../logging/bridge_diagnostics.dart';
 import '../persistence/report_flow_preference_store.dart';
 import '../platform/bridge_platform_adapters.dart';
+import '../printing/thermal_printer_controller.dart';
+import '../printing/thermal_printer_models.dart';
+import '../printing/thermal_report_print_platform.dart';
 import '../ui/bridge_ui_features.dart';
 import 'report_action_policy.dart';
 import 'report_flow_controller.dart';
@@ -26,7 +29,7 @@ import 'report_template_metadata.dart';
 /// `ReportFlowFailureCode.cleanupFailed`, and
 /// `ReportFlowFailureCode.persistenceFailed`.
 class ReportFlowControllerImpl extends base.ReportFlowControllerImpl
-    implements ReportFlowActionController {
+    implements ReportFlowActionController, ReportFlowThermalPrinterController {
   factory ReportFlowControllerImpl({
     required ReportOpenRequest request,
     required ReportFlowRuntime runtime,
@@ -56,6 +59,7 @@ class ReportFlowControllerImpl extends base.ReportFlowControllerImpl
       filePlatform: runtime.filePlatform,
       surfaceBinding: runtime.surfaceBinding,
       printPlatform: runtime.printPlatform,
+      thermalPrinterSettings: runtime.thermalPrinterSettings,
       supportSharePlatform: runtime.supportSharePlatform,
     );
     return ReportFlowControllerImpl._(
@@ -102,6 +106,10 @@ class ReportFlowControllerImpl extends base.ReportFlowControllerImpl
   final BridgeUiFeatures _effectiveFeatures;
   final TemplateCompatibilityConstraints _compatibilityConstraints;
   Future<ReportPrintResult>? _printFuture;
+
+  @override
+  ThermalPrinterSettingsController? get thermalPrinterSettings =>
+      _runtime.thermalPrinterSettings;
 
   @override
   Future<void> initialize() async {
@@ -221,11 +229,27 @@ class ReportFlowControllerImpl extends base.ReportFlowControllerImpl
     }
 
     late final Future<ReportPrintResult> future;
+    final platform = _runtime.printPlatform;
+    final ThermalPrintProgressSource? thermalProgress =
+        platform is ThermalPrintProgressSource
+        ? platform as ThermalPrintProgressSource
+        : null;
+    if (thermalProgress != null) {
+      thermalProgress.setPrintProgressListener(_onThermalPrintProgress);
+    }
     future = _submitPrint().whenComplete(() {
+      if (thermalProgress != null) {
+        thermalProgress.setPrintProgressListener(null);
+      }
+      setPrintProgress(null);
       if (identical(_printFuture, future)) _printFuture = null;
     });
     _printFuture = future;
     return future;
+  }
+
+  void _onThermalPrintProgress(ThermalPrintProgress progress) {
+    setPrintProgress(progress);
   }
 
   void _logPrintRejected(Object error, {StackTrace? stackTrace}) {
@@ -368,8 +392,9 @@ class ReportFlowControllerImpl extends base.ReportFlowControllerImpl
               );
             case ReportPrintStatus.failed:
               throw ReportFlowFailure(
-                code: ReportFlowFailureCode.printFailed,
+                code: _thermalPrintFailureCode(result.errorCode),
                 diagnostic: result.diagnostic ?? result.errorCode,
+                technicalCode: result.errorCode,
               );
           }
         },
@@ -378,6 +403,27 @@ class ReportFlowControllerImpl extends base.ReportFlowControllerImpl
       endOutputAction();
     }
   }
+
+  ReportFlowFailureCode _thermalPrintFailureCode(
+    String? errorCode,
+  ) => switch (errorCode) {
+    'savedBluetoothPrinterUnavailable' ||
+    'bluetoothPrinterUnavailable' ||
+    'bluetoothUnavailable' =>
+      ReportFlowFailureCode.savedBluetoothPrinterUnavailable,
+    'bluetoothPermissionDenied' =>
+      ReportFlowFailureCode.bluetoothPermissionDenied,
+    'bluetoothConnectionFailed' =>
+      ReportFlowFailureCode.bluetoothPrinterConnectionFailed,
+    'tcpConnectionTimeout' => ReportFlowFailureCode.tcpPrinterConnectionTimeout,
+    'tcpHostNotFound' => ReportFlowFailureCode.tcpPrinterHostNotFound,
+    'tcpConnectionRefused' => ReportFlowFailureCode.tcpPrinterConnectionRefused,
+    'tcpSendFailed' => ReportFlowFailureCode.tcpPrinterSendFailed,
+    'tcpConnectionFailed' => ReportFlowFailureCode.tcpPrinterConnectionFailed,
+    'printerConnectionFailed' =>
+      ReportFlowFailureCode.thermalPrinterConnectionFailed,
+    _ => ReportFlowFailureCode.printFailed,
+  };
 
   @override
   Future<void> dispose() async {

@@ -14,6 +14,7 @@ import 'report_flow_event.dart';
 import 'report_flow_failure.dart';
 import 'report_flow_runtime.dart';
 import 'report_flow_state.dart';
+import '../printing/thermal_printer_models.dart';
 import 'report_result.dart';
 import 'report_template_metadata.dart';
 
@@ -1164,7 +1165,22 @@ class ReportFlowControllerImpl
   /// Clears the flow-level output busy state.
   @protected
   void endOutputAction() {
-    if (!_disposed) _set(_value.copyWith(clearExportAction: true));
+    if (!_disposed) {
+      _set(_value.copyWith(clearExportAction: true, clearPrintProgress: true));
+    }
+  }
+
+  /// Allows a platform print implementation to expose work phases while the
+  /// existing export-action gate remains the owner of busy state.
+  void setPrintProgress(ThermalPrintProgress? progress) {
+    if (!_disposed) {
+      _set(
+        _value.copyWith(
+          printProgress: progress,
+          clearPrintProgress: progress == null,
+        ),
+      );
+    }
   }
 
   /// Emits a flow event from derived controllers (e.g. Print lifecycle).
