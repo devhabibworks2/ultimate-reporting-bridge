@@ -34,6 +34,8 @@ class LocalPresenterServer {
   HttpServer? _server;
   String? _activeSessionId;
   bool _servePresenter = false;
+  Uri? _proxyPresenterUrl;
+  HttpClient? _proxyClient;
 
   Future<LocalServerHandle> start({
     required String sessionId,
@@ -57,10 +59,30 @@ class LocalPresenterServer {
     );
   }
 
+  Future<LocalServerHandle> startProxy({
+    required String sessionId,
+    required Uri presenterUrl,
+    PortPolicy portPolicy = const PortPolicy(),
+  }) async {
+    if (!presenterUrl.path.startsWith(_presenterRoutePrefix)) {
+      throw const BridgeRuntimeException(
+        BridgeRuntimeErrorCodes.localhostServerUnavailable,
+        'Online Presenter URL must use the deployment-aligned Presenter route.',
+      );
+    }
+    return _start(
+      sessionId: sessionId,
+      portPolicy: portPolicy,
+      servePresenter: false,
+      proxyPresenterUrl: presenterUrl,
+    );
+  }
+
   Future<LocalServerHandle> _start({
     required String sessionId,
     required PortPolicy portPolicy,
     required bool servePresenter,
+    Uri? proxyPresenterUrl,
   }) async {
     if (_server != null) {
       await stop();
@@ -83,14 +105,24 @@ class LocalPresenterServer {
       _server = server;
       _activeSessionId = activeSessionId;
       _servePresenter = servePresenter;
+      _proxyPresenterUrl = proxyPresenterUrl;
+      _proxyClient = proxyPresenterUrl == null ? null : HttpClient();
       server.listen(_handleRequest);
       final baseUrl = 'http://127.0.0.1:${server.port}';
+      final proxyLaunchUrl = proxyPresenterUrl == null
+          ? null
+          : Uri.parse(baseUrl).replace(
+              path: proxyPresenterUrl.path,
+              query: proxyPresenterUrl.hasQuery
+                  ? proxyPresenterUrl.query
+                  : null,
+            );
       return LocalServerHandle(
         port: server.port,
         baseUrl: baseUrl,
         presenterUrl: servePresenter
             ? '$baseUrl/UltimateReport/apps/presenter/index.html?sessionId=$activeSessionId'
-            : baseUrl,
+            : proxyLaunchUrl?.toString() ?? baseUrl,
         stop: stop,
       );
     } on Object catch (error) {
@@ -104,9 +136,13 @@ class LocalPresenterServer {
 
   Future<void> stop() async {
     final server = _server;
+    final proxyClient = _proxyClient;
     _server = null;
     _activeSessionId = null;
     _servePresenter = false;
+    _proxyPresenterUrl = null;
+    _proxyClient = null;
+    proxyClient?.close(force: true);
     await server?.close(force: true);
   }
 
@@ -130,6 +166,16 @@ class LocalPresenterServer {
       return;
     }
 
+    if (_proxyPresenterUrl != null && path.startsWith(_presenterRoutePrefix)) {
+      final relative = path.substring(_presenterRoutePrefix.length);
+      if (!_isSafeRelativePath(relative.isEmpty ? 'index.html' : relative)) {
+        await _sendNotFound(request);
+        return;
+      }
+      await _proxyPresenterRequest(request, relative);
+      return;
+    }
+
     final file = _resolveFile(path);
     if (file == null || !await file.exists()) {
       await _sendNotFound(request);
@@ -148,6 +194,40 @@ class LocalPresenterServer {
       return;
     }
     await file.openRead().pipe(request.response);
+  }
+
+  Future<void> _proxyPresenterRequest(
+    HttpRequest request,
+    String relativePath,
+  ) async {
+    final proxyBase = _proxyPresenterUrl;
+    final client = _proxyClient;
+    if (proxyBase == null || client == null) {
+      await _sendNotFound(request);
+      return;
+    }
+
+    final target = proxyBase
+        .resolve(relativePath.isEmpty ? 'index.html' : relativePath)
+        .replace(query: request.uri.hasQuery ? request.uri.query : null);
+    try {
+      final upstreamRequest = await client.openUrl(request.method, target);
+      final upstreamResponse = await upstreamRequest.close();
+      request.response.statusCode = upstreamResponse.statusCode;
+      final contentType = upstreamResponse.headers.contentType;
+      if (contentType != null) {
+        request.response.headers.contentType = contentType;
+      }
+      if (request.method == 'HEAD') {
+        await upstreamResponse.drain<void>();
+        await request.response.close();
+        return;
+      }
+      await upstreamResponse.pipe(request.response);
+    } on Object {
+      request.response.statusCode = HttpStatus.badGateway;
+      await request.response.close();
+    }
   }
 
   File? _resolveFile(String path) {
@@ -181,12 +261,14 @@ class LocalPresenterServer {
   }
 
   File? _safeFile({required Directory root, required String relativePath}) {
-    if (relativePath.isEmpty ||
-        relativePath.contains('\\') ||
-        relativePath.split('/').contains('..')) {
-      return null;
-    }
+    if (!_isSafeRelativePath(relativePath)) return null;
     return File('${root.path}/$relativePath');
+  }
+
+  bool _isSafeRelativePath(String relativePath) {
+    return relativePath.isNotEmpty &&
+        !relativePath.contains('\\') &&
+        !relativePath.split('/').contains('..');
   }
 
   Future<void> _sendNotFound(HttpRequest request) async {
