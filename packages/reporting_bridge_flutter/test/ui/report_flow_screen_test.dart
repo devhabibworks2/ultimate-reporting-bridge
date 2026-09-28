@@ -899,6 +899,23 @@ void main() {
   );
 
   testWidgets(
+    'Preview does not enable navigation override without an allow policy',
+    (WidgetTester tester) async {
+      final platform = _TestInAppWebViewPlatform();
+      InAppWebViewPlatform.instance = platform;
+      final controller = _FakeController(_previewState());
+      await _pumpFlow(tester, controller);
+
+      final webView = tester.widget<InAppWebView>(find.byType(InAppWebView));
+      expect(
+        webView.platform.params.initialSettings?.useShouldOverrideUrlLoading,
+        isNot(true),
+      );
+      expect(webView.platform.params.shouldOverrideUrlLoading, isNull);
+    },
+  );
+
+  testWidgets(
     'Preview disables native WebView zoom so Presenter is the only zoom authority',
     (WidgetTester tester) async {
       final platform = _TestInAppWebViewPlatform();

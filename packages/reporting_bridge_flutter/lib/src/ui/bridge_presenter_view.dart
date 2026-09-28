@@ -52,7 +52,6 @@ class _BridgePresenterViewState extends State<BridgePresenterView> {
         // InteractiveViewer. Native WebView zoom would create a second scale
         // authority around that surface and can make gestures inconsistent.
         supportZoom: false,
-        useShouldOverrideUrlLoading: true,
       ),
       onWebViewCreated: (webController) {
         webController.addJavaScriptHandler(
