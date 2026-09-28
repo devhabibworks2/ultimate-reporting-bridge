@@ -20,6 +20,153 @@ void main() {
     if (await root.exists()) await root.delete(recursive: true);
   });
 
+  test(
+    'reuses one WarmableHeadlessPresenterSurface across warm-up and sequential headless prints',
+    () async {
+      final surface = _RecordingWarmableSurface();
+      final preferences = MemoryReportFlowPreferenceStore();
+      final fixture = _createClient(
+        root: root,
+        bridge: bridge,
+        filePlatform: filePlatform,
+        printPlatform: _FakePrintPlatform(),
+        preferences: preferences,
+        headlessPresenterSurface: surface,
+      );
+      addTearDown(fixture.client.dispose);
+      await _seedSavedTemplate(fixture.connection, preferences);
+
+      final warmup = await fixture.client.warmUpHeadlessPrinting(
+        _request(entryPolicy: ReportEntryPolicy.smart),
+      );
+      expect(warmup.webViewReady, isTrue);
+      expect(surface.warmUpCalls, 1);
+
+      final first = await fixture.client.printReportHeadless(
+        _request(entryPolicy: ReportEntryPolicy.smart),
+      );
+      final second = await fixture.client.printReportHeadless(
+        _request(entryPolicy: ReportEntryPolicy.smart),
+      );
+
+      expect(first.status, ReportPrintStatus.submitted);
+      expect(second.status, ReportPrintStatus.submitted);
+      expect(surface.warmUpCalls, 1);
+      expect(surface.startCalls, 2);
+      expect(identical(surface.lastStartedSurface, surface), isTrue);
+    },
+  );
+
+  test('active interactive flow excludes headless flow', () async {
+    final fixture = _createClient(
+      root: root,
+      bridge: bridge,
+      filePlatform: filePlatform,
+      printPlatform: _FakePrintPlatform(),
+      headlessPresenterSurface: _RecordingWarmableSurface(),
+    );
+    addTearDown(fixture.client.dispose);
+    final controller = fixture.client.createController(_request());
+    addTearDown(controller.dispose);
+
+    await expectLater(
+      fixture.client.printReportHeadless(_request()),
+      throwsA(
+        isA<ReportFlowFailure>().having(
+          (failure) => failure.code,
+          'code',
+          ReportFlowFailureCode.flowAlreadyActive,
+        ),
+      ),
+    );
+  });
+
+  test(
+    'headless path reaches the same injected ReportPrintPlatform as interactive',
+    () async {
+      final printPlatform = _FakePrintPlatform();
+      final preferences = MemoryReportFlowPreferenceStore();
+      final fixture = _createClient(
+        root: root,
+        bridge: bridge,
+        filePlatform: filePlatform,
+        printPlatform: printPlatform,
+        preferences: preferences,
+        headlessPresenterSurface: _RecordingWarmableSurface(),
+      );
+      addTearDown(fixture.client.dispose);
+      await _seedSavedTemplate(fixture.connection, preferences);
+
+      final result = await fixture.client.printReportHeadless(
+        _request(entryPolicy: ReportEntryPolicy.smart),
+      );
+
+      expect(result.status, ReportPrintStatus.submitted);
+      expect(printPlatform.calls, 1);
+      expect(
+        printPlatform.lastRequest?.extra['system'],
+        'motakamel_transactions',
+      );
+    },
+  );
+
+  test('client dispose shuts down reusable headless surface once', () async {
+    final surface = _RecordingWarmableSurface();
+    final fixture = _createClient(
+      root: root,
+      bridge: bridge,
+      filePlatform: filePlatform,
+      printPlatform: _FakePrintPlatform(),
+      headlessPresenterSurface: surface,
+    );
+
+    await fixture.client.dispose();
+    await fixture.client.dispose();
+
+    expect(surface.shutdownCalls, 1);
+  });
+
+  test(
+    'background refresh uses a separate Bridge client and reports the result',
+    () async {
+      var httpClientFactoryCalls = 0;
+      final surface = _RecordingWarmableSurface();
+      final fixture = _createClient(
+        root: root,
+        bridge: bridge,
+        filePlatform: filePlatform,
+        printPlatform: _FakePrintPlatform(),
+        headlessPresenterSurface: surface,
+        httpClientFactory: () {
+          httpClientFactoryCalls += 1;
+          return HttpClient();
+        },
+      );
+      addTearDown(fixture.client.dispose);
+
+      final syncBefore = bridge.syncTemplatesCalls;
+      final disposeBefore = bridge.disposeCalls;
+
+      final result = await fixture.client.warmUpHeadlessPrinting(
+        _request(entryPolicy: ReportEntryPolicy.smart),
+        refreshResources: true,
+      );
+
+      expect(result.webViewReady, isTrue);
+      // Refresh constructs a separate ReportingBridgeClient that shares only
+      // connection config (including httpClientFactory), not the paid/print
+      // Bridge client instance injected into DefaultReportingBridgeFlutterClient.
+      expect(httpClientFactoryCalls, greaterThan(0));
+      expect(bridge.syncTemplatesCalls, syncBefore);
+      expect(bridge.disposeCalls, disposeBefore);
+      expect(
+        result.resourcesRefreshed ||
+            (result.diagnostic != null && result.diagnostic!.isNotEmpty),
+        isTrue,
+      );
+    },
+  );
+
   test('injected print gateway reaches the created flow runtime', () async {
     final printPlatform = _FakePrintPlatform();
     final fixture = _createClient(
@@ -224,12 +371,16 @@ _ClientFixture _createClient({
   required ReportingBridgeClient bridge,
   required ReportFilePlatform filePlatform,
   ReportPrintPlatform? printPlatform,
+  ReportFlowPreferenceStore? preferences,
+  WarmableHeadlessPresenterSurface? headlessPresenterSurface,
+  HttpClient Function()? httpClientFactory,
 }) {
   final connection = ReportServerConnection(
     endpoints: ReportServerEndpoints.deployed(
       Uri.parse('https://example.test'),
     ),
     cacheRoot: root,
+    httpClientFactory: httpClientFactory,
   );
   const ui = BridgeUiConfig.inheritHost(
     features: BridgeUiFeatures(
@@ -238,31 +389,35 @@ _ClientFixture _createClient({
       showSharePdf: true,
     ),
   );
+  final store = preferences ?? MemoryReportFlowPreferenceStore();
   final client = printPlatform == null
       ? DefaultReportingBridgeFlutterClient(
           connection: connection,
           bridgeClient: bridge,
-          preferences: MemoryReportFlowPreferenceStore(),
+          preferences: store,
           filePlatform: filePlatform,
           ui: ui,
+          headlessPresenterSurface: headlessPresenterSurface,
         )
       : DefaultReportingBridgeFlutterClient(
           connection: connection,
           bridgeClient: bridge,
-          preferences: MemoryReportFlowPreferenceStore(),
+          preferences: store,
           filePlatform: filePlatform,
           printPlatform: printPlatform,
           ui: ui,
+          headlessPresenterSurface: headlessPresenterSurface,
         );
-  return _ClientFixture(client);
+  return _ClientFixture(client, connection);
 }
 
 ReportOpenRequest _request({
   ReportActionPolicy actionPolicy = const ReportActionPolicy(),
+  ReportEntryPolicy entryPolicy = ReportEntryPolicy.alwaysPrepare,
 }) => ReportOpenRequest(
   seedData: const <String, dynamic>{'id': 1},
   reportName: 'Invoice',
-  entryPolicy: ReportEntryPolicy.alwaysPrepare,
+  entryPolicy: entryPolicy,
   actionPolicy: actionPolicy,
   featuresOverride: const BridgeUiFeatures(
     showPrint: true,
@@ -276,6 +431,26 @@ ReportOpenRequest _request({
     systemCode: UrbSystem.motakamelTransactions,
   ),
 );
+
+Future<void> _seedSavedTemplate(
+  ReportServerConnection connection,
+  ReportFlowPreferenceStore preferences,
+) {
+  return preferences.save(
+    ReportPreferenceScope(
+      connectionKey: connection.preferenceSourceKey,
+      system: 'motakamel_transactions',
+      reportType: 'sales_invoice',
+    ),
+    const ReportFlowPreferences(
+      templateId: 'thermal-en',
+      mode: PresenterModePreference.online,
+      language: 'en',
+      layout: 'thermal',
+      size: '80mm',
+    ),
+  );
+}
 
 Future<void> _ready(
   ReportFlowController controller, {
@@ -319,9 +494,69 @@ Future<void> _ready(
 }
 
 final class _ClientFixture {
-  const _ClientFixture(this.client);
+  const _ClientFixture(this.client, this.connection);
 
   final DefaultReportingBridgeFlutterClient client;
+  final ReportServerConnection connection;
+}
+
+final class _RecordingWarmableSurface
+    implements WarmableHeadlessPresenterSurface {
+  int warmUpCalls = 0;
+  int startCalls = 0;
+  int disposeCalls = 0;
+  int shutdownCalls = 0;
+  WarmableHeadlessPresenterSurface? lastStartedSurface;
+
+  @override
+  Future<void> warmUp() async {
+    warmUpCalls += 1;
+  }
+
+  @override
+  Future<void> start({
+    required PresenterSessionLaunch launch,
+    required String templateName,
+    required ReportFlowController controller,
+    required PresenterSurfaceBinding surfaceBinding,
+  }) async {
+    startCalls += 1;
+    lastStartedSurface = this;
+    surfaceBinding.attach(
+      sessionId: launch.sessionId,
+      templateName: templateName,
+      evaluateJavaScript: (source) async {
+        final correlationId = RegExp(
+          r'"correlationId":"([^"]+)"',
+        ).firstMatch(source)!.group(1)!;
+        surfaceBinding.acceptMessage(<String, dynamic>{
+          'channel': bridgeWebMessageChannel,
+          'method': BridgeWebMethods.exportPdf,
+          'correlationId': correlationId,
+          'type': 'result',
+          'ok': true,
+          'base64': base64Encode(<int>[1, 2, 3]),
+          'filename': 'invoice.pdf',
+          'byteLength': 3,
+        });
+        return null;
+      },
+      reload: () async {},
+      onLifecycle: (_) {},
+    );
+    controller.presenterProtocolDetected(BridgeContract.payloadVersion);
+    controller.completePresenterRender(sessionId: launch.sessionId);
+  }
+
+  @override
+  Future<void> dispose() async {
+    disposeCalls += 1;
+  }
+
+  @override
+  Future<void> shutdown() async {
+    shutdownCalls += 1;
+  }
 }
 
 final class _FakePrintPlatform implements ReportPrintPlatform {
@@ -362,6 +597,8 @@ final class _FakeBridgeClient extends ReportingBridgeClient {
 
   final List<CachedTemplate> templates = <CachedTemplate>[_template()];
   int prepareCalls = 0;
+  int syncTemplatesCalls = 0;
+  int disposeCalls = 0;
 
   @override
   Future<List<CachedTemplate>> listTemplates({
@@ -377,11 +614,14 @@ final class _FakeBridgeClient extends ReportingBridgeClient {
     int? systemId,
     TemplateSyncFilter? filter,
     Map<String, Object?> extra = const <String, Object?>{},
-  }) async => TemplateSyncSummary(
-    syncedCount: templates.length,
-    listCount: templates.length,
-    errors: const <String>[],
-  );
+  }) async {
+    syncTemplatesCalls += 1;
+    return TemplateSyncSummary(
+      syncedCount: templates.length,
+      listCount: templates.length,
+      errors: const <String>[],
+    );
+  }
 
   @override
   Future<ReportingBridgeStatus> getStatus() async => ReportingBridgeStatus(
@@ -416,6 +656,12 @@ final class _FakeBridgeClient extends ReportingBridgeClient {
 
   @override
   Future<void> stopSession() async {}
+
+  @override
+  Future<void> dispose() async {
+    disposeCalls += 1;
+    await super.dispose();
+  }
 }
 
 CachedTemplate _template() => CachedTemplate(
