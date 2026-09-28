@@ -234,4 +234,165 @@ void main() {
     await response.drain<void>();
     expect(response.statusCode, HttpStatus.badGateway);
   });
+
+  test(
+    'compatible offline sessions reuse one port and isolate runtime trees',
+    () async {
+      final temp = await Directory.systemTemp.createTemp(
+        'bridge_offline_multi_',
+      );
+      addTearDown(() => temp.delete(recursive: true));
+      final presenterRoot = Directory('${temp.path}/presenter');
+      final runtimeRoot = Directory('${temp.path}/runtime');
+      await presenterRoot.create(recursive: true);
+      await File(
+        '${presenterRoot.path}/index.html',
+      ).writeAsString('<html>offline</html>');
+      for (final id in const <String>['first', 'second']) {
+        final directory = Directory('${runtimeRoot.path}/$id');
+        await directory.create(recursive: true);
+        await File('${directory.path}/payload.json').writeAsString(id);
+      }
+
+      final server = LocalPresenterServer(
+        presenterRoot: presenterRoot,
+        runtimeRoot: runtimeRoot,
+      );
+      addTearDown(server.stop);
+
+      final first = await server.start(sessionId: 'first');
+      final second = await server.start(sessionId: 'second');
+
+      expect(second.port, first.port);
+      expect(second.baseUrl, first.baseUrl);
+      expect(
+        await _httpStatus('${first.baseUrl}/runtime/first/payload.json'),
+        HttpStatus.ok,
+      );
+      expect(
+        await _httpStatus('${second.baseUrl}/runtime/second/payload.json'),
+        HttpStatus.ok,
+      );
+      expect(
+        await _httpStatus(
+          '${first.baseUrl}/UltimateReport/apps/presenter/index.html',
+        ),
+        HttpStatus.ok,
+      );
+
+      // Path traversal must stay rejected under multi-session registration.
+      expect(
+        await _httpStatus('${first.baseUrl}/runtime/first/../secret.json'),
+        HttpStatus.notFound,
+      );
+
+      await first.stop();
+      expect(
+        await _httpStatus('${first.baseUrl}/runtime/first/payload.json'),
+        HttpStatus.notFound,
+      );
+      expect(
+        await _httpStatus('${second.baseUrl}/runtime/second/payload.json'),
+        HttpStatus.ok,
+      );
+      expect(
+        await _httpStatus(
+          '${second.baseUrl}/UltimateReport/apps/presenter/index.html',
+        ),
+        HttpStatus.ok,
+      );
+    },
+  );
+
+  test(
+    'compatible online-proxy sessions reuse one port with isolated runtimes',
+    () async {
+      final upstream = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      upstream.listen((request) async {
+        if (request.uri.path.startsWith('/UltimateReport/apps/presenter/')) {
+          request.response.headers.contentType = ContentType.html;
+          request.response.write('<html>online presenter</html>');
+        } else {
+          request.response.statusCode = HttpStatus.notFound;
+        }
+        await request.response.close();
+      });
+      addTearDown(() => upstream.close(force: true));
+
+      final temp = await Directory.systemTemp.createTemp('bridge_proxy_multi_');
+      addTearDown(() => temp.delete(recursive: true));
+      final presenterRoot = Directory('${temp.path}/presenter')..createSync();
+      final runtimeRoot = Directory('${temp.path}/runtime')..createSync();
+      for (final id in const <String>['s1', 's2']) {
+        final directory = Directory('${runtimeRoot.path}/$id');
+        await directory.create(recursive: true);
+        await File(
+          '${directory.path}/seed_report_data.json',
+        ).writeAsString('{"session":"$id"}');
+      }
+
+      final presenterUrl = Uri.parse(
+        'http://127.0.0.1:${upstream.port}'
+        '/UltimateReport/apps/presenter/index.html?existing=1',
+      );
+      final server = LocalPresenterServer(
+        presenterRoot: presenterRoot,
+        runtimeRoot: runtimeRoot,
+      );
+      addTearDown(server.stop);
+
+      final first = await server.startProxy(
+        sessionId: 's1',
+        presenterUrl: presenterUrl,
+      );
+      final second = await server.startProxy(
+        sessionId: 's2',
+        presenterUrl: presenterUrl,
+      );
+
+      expect(second.port, first.port);
+      expect(
+        await _httpStatus('${first.baseUrl}/runtime/s1/seed_report_data.json'),
+        HttpStatus.ok,
+      );
+      expect(
+        await _httpStatus('${second.baseUrl}/runtime/s2/seed_report_data.json'),
+        HttpStatus.ok,
+      );
+      expect(
+        await _httpStatus(
+          '${first.baseUrl}/UltimateReport/apps/presenter/index.html',
+        ),
+        HttpStatus.ok,
+      );
+
+      await first.stop();
+      expect(
+        await _httpStatus('${first.baseUrl}/runtime/s1/seed_report_data.json'),
+        HttpStatus.notFound,
+      );
+      expect(
+        await _httpStatus('${second.baseUrl}/runtime/s2/seed_report_data.json'),
+        HttpStatus.ok,
+      );
+      expect(
+        await _httpStatus(
+          '${second.baseUrl}/UltimateReport/apps/presenter/index.html',
+        ),
+        HttpStatus.ok,
+      );
+    },
+  );
+}
+
+Future<int> _httpStatus(String url) async {
+  final client = HttpClient();
+  try {
+    final request = await client.getUrl(Uri.parse(url));
+    final response = await request.close();
+    await response.drain<void>();
+    return response.statusCode;
+  } finally {
+    client.close(force: true);
+  }
 }

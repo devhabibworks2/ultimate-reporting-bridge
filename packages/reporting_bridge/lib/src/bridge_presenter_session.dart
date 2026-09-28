@@ -82,6 +82,7 @@ class PresenterSessionCoordinator {
   LocalPresenterServer? _localServer;
   LocalServerHandle? _localHandle;
   String? _activeSessionId;
+  PresenterSessionMode? _activeMode;
   PresenterCacheManifest? _cachedManifest;
   _StagedPresenterSession? _stagedSession;
 
@@ -212,6 +213,7 @@ class PresenterSessionCoordinator {
     final previousServer = _localServer;
     final previousHandle = _localHandle;
     final previousSessionId = _activeSessionId;
+    final previousMode = _activeMode;
     final requestedSessionId = request.sessionId;
     final replacementSessionId =
         requestedSessionId != null && requestedSessionId == previousSessionId
@@ -234,10 +236,15 @@ class PresenterSessionCoordinator {
         apiHeaders: request.apiHeaders,
       ),
     );
-    final candidateServer = LocalPresenterServer(
-      presenterRoot: presenterCache.presenterRoot,
-      runtimeRoot: runtimeStorage.runtimeRoot,
-    );
+    final canReusePreviousServer =
+        previousServer != null &&
+        (previousSessionId == null || previousMode == request.mode);
+    final candidateServer = canReusePreviousServer
+        ? previousServer
+        : LocalPresenterServer(
+            presenterRoot: presenterCache.presenterRoot,
+            runtimeRoot: runtimeStorage.runtimeRoot,
+          );
     LocalServerHandle? candidateHandle;
 
     try {
@@ -274,22 +281,27 @@ class PresenterSessionCoordinator {
           server: candidateServer,
           handle: candidateHandle,
           sessionId: runtimeSession.sessionId,
+          mode: request.mode,
         );
         return launch;
       }
       _localServer = candidateServer;
       _localHandle = candidateHandle;
       _activeSessionId = runtimeSession.sessionId;
+      _activeMode = request.mode;
       await _cleanupReplacedSession(
         server: previousServer,
         handle: previousHandle,
         sessionId: previousSessionId,
+        retainedServer: candidateServer,
       );
       return launch;
     } catch (error, stackTrace) {
       try {
         await candidateHandle?.stop();
-        await candidateServer.stop();
+        if (!identical(candidateServer, previousServer)) {
+          await candidateServer.stop();
+        }
         await runtimeStorage.deleteRuntimeSession(runtimeSession.sessionId);
       } catch (_) {
         // Preserve the preparation failure.
@@ -308,10 +320,12 @@ class PresenterSessionCoordinator {
     _localServer = staged.server;
     _localHandle = staged.handle;
     _activeSessionId = staged.sessionId;
+    _activeMode = staged.mode;
     await _cleanupReplacedSession(
       server: previousServer,
       handle: previousHandle,
       sessionId: previousSessionId,
+      retainedServer: staged.server,
     );
   }
 
@@ -321,7 +335,9 @@ class PresenterSessionCoordinator {
     _stagedSession = null;
     try {
       await staged.handle.stop();
-      await staged.server.stop();
+      if (!identical(staged.server, _localServer)) {
+        await staged.server.stop();
+      }
     } finally {
       await runtimeStorage.deleteRuntimeSession(staged.sessionId);
     }
@@ -331,10 +347,13 @@ class PresenterSessionCoordinator {
     required LocalPresenterServer? server,
     required LocalServerHandle? handle,
     required String? sessionId,
+    required LocalPresenterServer retainedServer,
   }) async {
     try {
       await handle?.stop();
-      await server?.stop();
+      if (server != null && !identical(server, retainedServer)) {
+        await server.stop();
+      }
     } catch (_) {}
     if (sessionId != null && sessionId != _activeSessionId) {
       try {
@@ -345,10 +364,13 @@ class PresenterSessionCoordinator {
 
   Future<void> stop() async {
     await discardStaged();
+    final server = _localServer;
     final handle = _localHandle;
     final sessionId = _activeSessionId;
+    _localServer = null;
     _localHandle = null;
     _activeSessionId = null;
+    _activeMode = null;
 
     Object? failure;
     StackTrace? failureStackTrace;
@@ -357,6 +379,13 @@ class PresenterSessionCoordinator {
     } catch (error, stackTrace) {
       failure = error;
       failureStackTrace = stackTrace;
+    }
+
+    try {
+      await server?.stop();
+    } catch (error, stackTrace) {
+      failure ??= error;
+      failureStackTrace ??= stackTrace;
     }
 
     if (sessionId != null) {
@@ -443,11 +472,13 @@ class _StagedPresenterSession {
     required this.server,
     required this.handle,
     required this.sessionId,
+    required this.mode,
   });
 
   final LocalPresenterServer server;
   final LocalServerHandle handle;
   final String sessionId;
+  final PresenterSessionMode mode;
 }
 
 Uri _withTrailingSlash(Uri value) =>

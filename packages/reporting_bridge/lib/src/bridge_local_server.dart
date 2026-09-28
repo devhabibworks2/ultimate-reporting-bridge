@@ -32,7 +32,7 @@ class LocalPresenterServer {
   final Directory runtimeRoot;
   static const String _presenterRoutePrefix = '/UltimateReport/apps/presenter/';
   HttpServer? _server;
-  String? _activeSessionId;
+  final Set<String> _sessionIds = <String>{};
   bool _servePresenter = false;
   Uri? _proxyPresenterUrl;
   HttpClient? _proxyClient;
@@ -84,10 +84,6 @@ class LocalPresenterServer {
     required bool servePresenter,
     Uri? proxyPresenterUrl,
   }) async {
-    if (_server != null) {
-      await stop();
-    }
-
     final activeSessionId = _validatedSessionId(sessionId);
     if (servePresenter &&
         !await File('${presenterRoot.path}/index.html').exists()) {
@@ -97,17 +93,47 @@ class LocalPresenterServer {
       );
     }
 
-    try {
-      final server = await HttpServer.bind(
-        InternetAddress.loopbackIPv4,
-        portPolicy.preferredPort,
+    final existing = _server;
+    if (existing != null && _sessionIds.isEmpty) {
+      if (portPolicy.preferredPort != 0 &&
+          portPolicy.preferredPort != existing.port) {
+        await stop();
+      } else {
+        _replaceRouting(
+          servePresenter: servePresenter,
+          proxyPresenterUrl: proxyPresenterUrl,
+        );
+      }
+    } else if (existing != null &&
+        !_isCompatibleReuse(
+          server: existing,
+          portPolicy: portPolicy,
+          servePresenter: servePresenter,
+          proxyPresenterUrl: proxyPresenterUrl,
+        )) {
+      throw const BridgeRuntimeException(
+        BridgeRuntimeErrorCodes.localhostServerUnavailable,
+        'Existing localhost Presenter server uses incompatible routing.',
       );
-      _server = server;
-      _activeSessionId = activeSessionId;
-      _servePresenter = servePresenter;
-      _proxyPresenterUrl = proxyPresenterUrl;
-      _proxyClient = proxyPresenterUrl == null ? null : HttpClient();
-      server.listen(_handleRequest);
+    }
+
+    var createdServer = false;
+    try {
+      var server = _server;
+      if (server == null) {
+        server = await HttpServer.bind(
+          InternetAddress.loopbackIPv4,
+          portPolicy.preferredPort,
+        );
+        createdServer = true;
+        _server = server;
+        _servePresenter = servePresenter;
+        _proxyPresenterUrl = proxyPresenterUrl;
+        _proxyClient = proxyPresenterUrl == null ? null : HttpClient();
+        server.listen(_handleRequest);
+      }
+
+      _sessionIds.add(activeSessionId);
       final baseUrl = 'http://127.0.0.1:${server.port}';
       final proxyLaunchUrl = proxyPresenterUrl == null
           ? null
@@ -123,10 +149,14 @@ class LocalPresenterServer {
         presenterUrl: servePresenter
             ? '$baseUrl/UltimateReport/apps/presenter/index.html?sessionId=$activeSessionId'
             : proxyLaunchUrl?.toString() ?? baseUrl,
-        stop: stop,
+        stop: () => releaseSession(activeSessionId),
       );
     } on Object catch (error) {
-      await stop();
+      _sessionIds.remove(activeSessionId);
+      if (createdServer) {
+        await stop();
+      }
+      if (error is BridgeRuntimeException) rethrow;
       throw BridgeRuntimeException(
         BridgeRuntimeErrorCodes.localhostServerUnavailable,
         'Failed to start local Presenter server: $error',
@@ -134,11 +164,44 @@ class LocalPresenterServer {
     }
   }
 
+  void _replaceRouting({
+    required bool servePresenter,
+    required Uri? proxyPresenterUrl,
+  }) {
+    final oldProxyClient = _proxyClient;
+    _servePresenter = servePresenter;
+    _proxyPresenterUrl = proxyPresenterUrl;
+    _proxyClient = proxyPresenterUrl == null ? null : HttpClient();
+    oldProxyClient?.close(force: true);
+  }
+
+  bool _isCompatibleReuse({
+    required HttpServer server,
+    required PortPolicy portPolicy,
+    required bool servePresenter,
+    required Uri? proxyPresenterUrl,
+  }) {
+    if (portPolicy.preferredPort != 0 &&
+        portPolicy.preferredPort != server.port) {
+      return false;
+    }
+    if (_servePresenter != servePresenter) return false;
+    final currentProxy = _proxyPresenterUrl;
+    if (currentProxy == null || proxyPresenterUrl == null) {
+      return currentProxy == null && proxyPresenterUrl == null;
+    }
+    return currentProxy == proxyPresenterUrl;
+  }
+
+  Future<void> releaseSession(String sessionId) async {
+    _sessionIds.remove(_validatedSessionId(sessionId));
+  }
+
   Future<void> stop() async {
     final server = _server;
     final proxyClient = _proxyClient;
     _server = null;
-    _activeSessionId = null;
+    _sessionIds.clear();
     _servePresenter = false;
     _proxyPresenterUrl = null;
     _proxyClient = null;
@@ -234,10 +297,8 @@ class LocalPresenterServer {
     if (path.startsWith('/runtime/')) {
       final relative = path.substring('/runtime/'.length);
       final separator = relative.indexOf('/');
-      final activeSessionId = _activeSessionId;
-      if (activeSessionId == null ||
-          separator <= 0 ||
-          relative.substring(0, separator) != activeSessionId) {
+      if (separator <= 0 ||
+          !_sessionIds.contains(relative.substring(0, separator))) {
         return null;
       }
       return _safeFile(root: runtimeRoot, relativePath: relative);

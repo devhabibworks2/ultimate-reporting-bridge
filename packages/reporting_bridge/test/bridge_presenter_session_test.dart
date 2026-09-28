@@ -86,6 +86,55 @@ void main() {
   );
 
   test(
+    'coordinator.stop terminal-stops the shared localhost proxy server',
+    () async {
+      final api = await _startManifestServer();
+      addTearDown(() => api.close(force: true));
+      final upstream = await _startOnlinePresenterUpstream();
+      addTearDown(() => upstream.close(force: true));
+      final root = await Directory.systemTemp.createTemp(
+        'bridge_session_stop_terminal_',
+      );
+      addTearDown(() => root.delete(recursive: true));
+      final coordinator = _coordinator(
+        root: root,
+        apiBaseUrl: Uri.parse('http://127.0.0.1:${api.port}/'),
+        onlinePresenterUrl: Uri.parse(
+          'http://127.0.0.1:${upstream.port}'
+          '/UltimateReport/apps/presenter/index.html?existing=1',
+        ),
+      );
+      addTearDown(coordinator.dispose);
+
+      final launch = await coordinator.prepare(
+        PresenterSessionRequest(
+          sessionId: 'stop-online',
+          reportType: 'invoice',
+          reportName: 'Invoice',
+          mode: PresenterSessionMode.online,
+          seedData: const <String, dynamic>{'value': 1},
+          template: _template('invoice-template'),
+        ),
+      );
+      final launchUri = Uri.parse(launch.presenterUrl);
+      expect(
+        await _httpStatus(_runtimeSeedUrl(launchUri, 'stop-online')),
+        HttpStatus.ok,
+      );
+      expect(await _httpStatus(launch.presenterUrl), HttpStatus.ok);
+
+      await coordinator.stop();
+
+      expect(
+        await Directory('${root.path}/runtime/stop-online').exists(),
+        isFalse,
+      );
+      expect(coordinator.activeSessionId, isNull);
+      await _expectLocalhostUnreachable(launch.presenterUrl);
+    },
+  );
+
+  test(
     'offline session uses cached presenter and cleans runtime files',
     () async {
       final root = await Directory.systemTemp.createTemp(
@@ -461,11 +510,248 @@ void main() {
       );
     },
   );
+
+  test(
+    'same-mode online staged candidate shares localhost port before commit',
+    () async {
+      final api = await _startManifestServer();
+      addTearDown(() => api.close(force: true));
+      final upstream = await _startOnlinePresenterUpstream();
+      addTearDown(() => upstream.close(force: true));
+      final root = await Directory.systemTemp.createTemp(
+        'bridge_session_staged_share_commit_',
+      );
+      addTearDown(() => root.delete(recursive: true));
+      final coordinator = _coordinator(
+        root: root,
+        apiBaseUrl: Uri.parse('http://127.0.0.1:${api.port}/'),
+        onlinePresenterUrl: Uri.parse(
+          'http://127.0.0.1:${upstream.port}'
+          '/UltimateReport/apps/presenter/index.html?existing=1',
+        ),
+      );
+      addTearDown(coordinator.dispose);
+
+      final active = await coordinator.prepare(
+        PresenterSessionRequest(
+          sessionId: 'active',
+          reportType: 'invoice',
+          reportName: 'Invoice',
+          mode: PresenterSessionMode.online,
+          seedData: const <String, dynamic>{'value': 1},
+          template: _template('invoice-template'),
+        ),
+      );
+      final candidate = await coordinator.prepare(
+        PresenterSessionRequest(
+          sessionId: 'candidate',
+          reportType: 'invoice',
+          reportName: 'Invoice',
+          mode: PresenterSessionMode.online,
+          seedData: const <String, dynamic>{'value': 2},
+          template: _template('invoice-template'),
+        ),
+        deferReplacementCommit: true,
+      );
+
+      final activeUri = Uri.parse(active.presenterUrl);
+      final candidateUri = Uri.parse(candidate.presenterUrl);
+      expect(candidateUri.port, activeUri.port);
+      expect(candidateUri.origin, activeUri.origin);
+      expect(
+        await _httpStatus(_runtimeSeedUrl(activeUri, 'active')),
+        HttpStatus.ok,
+      );
+      expect(
+        await _httpStatus(_runtimeSeedUrl(candidateUri, 'candidate')),
+        HttpStatus.ok,
+      );
+      expect(await _httpStatus(active.presenterUrl), HttpStatus.ok);
+      expect(await _httpStatus(candidate.presenterUrl), HttpStatus.ok);
+
+      await coordinator.commitStaged();
+
+      expect(coordinator.activeSessionId, 'candidate');
+      expect(await Directory('${root.path}/runtime/active').exists(), isFalse);
+      expect(
+        await Directory('${root.path}/runtime/candidate').exists(),
+        isTrue,
+      );
+      expect(
+        await _httpStatus(_runtimeSeedUrl(activeUri, 'active')),
+        HttpStatus.notFound,
+      );
+      expect(
+        await _httpStatus(_runtimeSeedUrl(candidateUri, 'candidate')),
+        HttpStatus.ok,
+      );
+      expect(await _httpStatus(candidate.presenterUrl), HttpStatus.ok);
+    },
+  );
+
+  test(
+    'same-mode online staged discard releases only the candidate session',
+    () async {
+      final api = await _startManifestServer();
+      addTearDown(() => api.close(force: true));
+      final upstream = await _startOnlinePresenterUpstream();
+      addTearDown(() => upstream.close(force: true));
+      final root = await Directory.systemTemp.createTemp(
+        'bridge_session_staged_share_discard_',
+      );
+      addTearDown(() => root.delete(recursive: true));
+      final coordinator = _coordinator(
+        root: root,
+        apiBaseUrl: Uri.parse('http://127.0.0.1:${api.port}/'),
+        onlinePresenterUrl: Uri.parse(
+          'http://127.0.0.1:${upstream.port}'
+          '/UltimateReport/apps/presenter/index.html?existing=1',
+        ),
+      );
+      addTearDown(coordinator.dispose);
+
+      final active = await coordinator.prepare(
+        PresenterSessionRequest(
+          sessionId: 'active',
+          reportType: 'invoice',
+          reportName: 'Invoice',
+          mode: PresenterSessionMode.online,
+          seedData: const <String, dynamic>{'value': 1},
+          template: _template('invoice-template'),
+        ),
+      );
+      final candidate = await coordinator.prepare(
+        PresenterSessionRequest(
+          sessionId: 'candidate',
+          reportType: 'invoice',
+          reportName: 'Invoice',
+          mode: PresenterSessionMode.online,
+          seedData: const <String, dynamic>{'value': 2},
+          template: _template('invoice-template'),
+        ),
+        deferReplacementCommit: true,
+      );
+
+      final activeUri = Uri.parse(active.presenterUrl);
+      final candidateUri = Uri.parse(candidate.presenterUrl);
+      expect(candidateUri.port, activeUri.port);
+
+      await coordinator.discardStaged();
+
+      expect(coordinator.activeSessionId, 'active');
+      expect(await Directory('${root.path}/runtime/active').exists(), isTrue);
+      expect(
+        await Directory('${root.path}/runtime/candidate').exists(),
+        isFalse,
+      );
+      expect(
+        await _httpStatus(_runtimeSeedUrl(activeUri, 'active')),
+        HttpStatus.ok,
+      );
+      expect(await _httpStatus(active.presenterUrl), HttpStatus.ok);
+      expect(
+        await _httpStatus(_runtimeSeedUrl(candidateUri, 'candidate')),
+        HttpStatus.notFound,
+      );
+    },
+  );
+
+  test(
+    'mixed online-to-offline staged candidate uses a distinct localhost port',
+    () async {
+      final api = await _startManifestServer();
+      addTearDown(() => api.close(force: true));
+      final upstream = await _startOnlinePresenterUpstream();
+      addTearDown(() => upstream.close(force: true));
+      final root = await Directory.systemTemp.createTemp(
+        'bridge_session_staged_mixed_',
+      );
+      addTearDown(() => root.delete(recursive: true));
+      final presenterRoot = Directory('${root.path}/presenter');
+      await _writeReadyPresenterSite(presenterRoot);
+      final apiBaseUrl = Uri.parse('http://127.0.0.1:${api.port}/');
+      await _writeCachedManifest(
+        root,
+        presenterVersion: '2.0.0',
+        devVersion: 20,
+        manifestUrl:
+            'http://127.0.0.1:${api.port}/api/presenter/bundles/manifest',
+      );
+
+      final coordinator = _coordinator(
+        root: root,
+        apiBaseUrl: apiBaseUrl,
+        onlinePresenterUrl: Uri.parse(
+          'http://127.0.0.1:${upstream.port}'
+          '/UltimateReport/apps/presenter/index.html?existing=1',
+        ),
+      );
+      addTearDown(coordinator.dispose);
+
+      final active = await coordinator.prepare(
+        PresenterSessionRequest(
+          sessionId: 'active-online',
+          reportType: 'invoice',
+          reportName: 'Invoice',
+          mode: PresenterSessionMode.online,
+          seedData: const <String, dynamic>{'value': 1},
+          template: _template('invoice-template'),
+        ),
+      );
+      final candidate = await coordinator.prepare(
+        PresenterSessionRequest(
+          sessionId: 'candidate-offline',
+          reportType: 'invoice',
+          reportName: 'Invoice',
+          mode: PresenterSessionMode.offline,
+          seedData: const <String, dynamic>{'value': 2},
+          template: _template('invoice-template'),
+        ),
+        deferReplacementCommit: true,
+      );
+
+      final activeUri = Uri.parse(active.presenterUrl);
+      final candidateUri = Uri.parse(candidate.presenterUrl);
+      expect(
+        candidateUri.port,
+        isNot(activeUri.port),
+        reason:
+            'proxy Presenter and static offline Presenter are incompatible on one server',
+      );
+      expect(
+        await _httpStatus(_runtimeSeedUrl(activeUri, 'active-online')),
+        HttpStatus.ok,
+      );
+      expect(await _httpStatus(active.presenterUrl), HttpStatus.ok);
+      expect(
+        await _httpStatus(_runtimeSeedUrl(candidateUri, 'candidate-offline')),
+        HttpStatus.ok,
+      );
+
+      await coordinator.discardStaged();
+
+      expect(coordinator.activeSessionId, 'active-online');
+      expect(
+        await Directory('${root.path}/runtime/active-online').exists(),
+        isTrue,
+      );
+      expect(
+        await Directory('${root.path}/runtime/candidate-offline').exists(),
+        isFalse,
+      );
+      expect(
+        await _httpStatus(_runtimeSeedUrl(activeUri, 'active-online')),
+        HttpStatus.ok,
+      );
+      expect(await _httpStatus(active.presenterUrl), HttpStatus.ok);
+    },
+  );
 }
 
 PresenterSessionCoordinator _coordinator({
   required Directory root,
   required Uri apiBaseUrl,
+  Uri? onlinePresenterUrl,
 }) {
   return PresenterSessionCoordinator(
     presenterCache: PresenterCacheService(
@@ -474,9 +760,11 @@ PresenterSessionCoordinator _coordinator({
     runtimeStorage: RuntimeSessionStorage(
       runtimeRoot: Directory('${root.path}/runtime'),
     ),
-    onlinePresenterUrl: Uri.parse(
-      'https://reports.example/UltimateReport/apps/presenter/index.html?existing=1',
-    ),
+    onlinePresenterUrl:
+        onlinePresenterUrl ??
+        Uri.parse(
+          'https://reports.example/UltimateReport/apps/presenter/index.html?existing=1',
+        ),
     apiBaseUrl: apiBaseUrl,
     headers: const <String, String>{
       'X-Tenant-Id': 'tenant_demo',
@@ -553,4 +841,56 @@ Future<HttpServer> _startManifestServer() async {
     await request.response.close();
   });
   return server;
+}
+
+Future<HttpServer> _startOnlinePresenterUpstream() async {
+  final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+  server.listen((request) async {
+    if (request.uri.path.startsWith('/UltimateReport/apps/presenter/')) {
+      request.response.headers.contentType = ContentType.html;
+      request.response.write('<html>online presenter</html>');
+    } else {
+      request.response.statusCode = HttpStatus.notFound;
+    }
+    await request.response.close();
+  });
+  return server;
+}
+
+String _runtimeSeedUrl(Uri presenterUri, String sessionId) {
+  return '${presenterUri.scheme}://${presenterUri.host}:${presenterUri.port}'
+      '/runtime/$sessionId/seed_report_data.json';
+}
+
+Future<int> _httpStatus(String url) async {
+  final client = HttpClient();
+  try {
+    final request = await client.getUrl(Uri.parse(url));
+    final response = await request.close();
+    await response.drain<void>();
+    return response.statusCode;
+  } finally {
+    client.close(force: true);
+  }
+}
+
+Future<void> _expectLocalhostUnreachable(String url) async {
+  final client = HttpClient()..connectionTimeout = const Duration(seconds: 2);
+  try {
+    final request = await client
+        .getUrl(Uri.parse(url))
+        .timeout(const Duration(seconds: 2));
+    final response = await request.close().timeout(const Duration(seconds: 2));
+    await response.drain<void>();
+    fail(
+      'Expected localhost Presenter server to be terminally unavailable, '
+      'but HTTP ${response.statusCode} succeeded for $url',
+    );
+  } on SocketException {
+    // Terminal stop: connection refused / host unreachable.
+  } on HttpException {
+    // Terminal stop: connection closed during handshake/request.
+  } finally {
+    client.close(force: true);
+  }
 }
