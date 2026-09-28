@@ -6,6 +6,7 @@ import android.graphics.Matrix;
 import android.graphics.Rect;
 import android.graphics.pdf.PdfRenderer;
 import android.os.ParcelFileDescriptor;
+import android.os.Trace;
 
 import androidx.annotation.NonNull;
 
@@ -110,13 +111,24 @@ final class PdfStripeRasterizer {
         final Matrix matrix = new Matrix();
         matrix.setScale(scale, scale);
         matrix.postTranslate(0, -top);
-        page.render(
-            bitmap,
-            new Rect(0, 0, printableWidthPx, height),
-            matrix,
-            PdfRenderer.Page.RENDER_MODE_FOR_PRINT);
-        final byte[] raster = EscPosPrinterCommands.bitmapToBytes(bitmap, gradient);
-        commands.printImage(raster);
+        Trace.beginSection("urb.print.rasterize_stripe");
+        final byte[] raster;
+        try {
+          page.render(
+              bitmap,
+              new Rect(0, 0, printableWidthPx, height),
+              matrix,
+              PdfRenderer.Page.RENDER_MODE_FOR_PRINT);
+          raster = EscPosPrinterCommands.bitmapToBytes(bitmap, gradient);
+        } finally {
+          Trace.endSection();
+        }
+        Trace.beginSection("urb.print.transmit_stripe");
+        try {
+          commands.printImage(raster);
+        } finally {
+          Trace.endSection();
+        }
         bytesSent[0] += raster.length;
         progress.onTransmitting(
             copyIndex,

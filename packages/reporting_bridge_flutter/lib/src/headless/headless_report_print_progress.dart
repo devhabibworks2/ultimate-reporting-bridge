@@ -38,6 +38,7 @@ enum HeadlessReportPrintTimingStage {
   startingWebView,
   rendering,
   generatingPdf,
+  preparingPrinter,
   rasterizing,
   connecting,
   transmitting,

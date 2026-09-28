@@ -6,6 +6,7 @@ import android.content.Context;
 import android.hardware.usb.UsbDevice;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Trace;
 
 import androidx.annotation.NonNull;
 
@@ -140,19 +141,26 @@ final class ThermalPrinterApiHandler implements
         emit(request.getJobId(), ThermalPrinterApi.ThermalPigeonProgressPhase.CONNECTING,
             null, null, null, null, null, null);
         connection = connections.create(request.getProfile());
-        connection.connect();
+        Trace.beginSection("urb.print.connect");
+        try {
+          connection.connect();
+        } finally {
+          Trace.endSection();
+        }
         final ThermalPrinterApi.ThermalPigeonProfile profile = request.getProfile();
-        PdfStripeRasterizer.print(
-            pdf,
-            connection,
-            profile.getPrintableWidthPx().intValue(),
-            profile.getCopies().intValue(),
-            profile.getGradient(),
-            profile.getFeedDots().intValue(),
-            profile.getCutAfterPrint(),
-            profile.getUseEscAsteriskCommand(),
-            ThermalTransportPolicy.stripeHeight(profile.getConnectionType()),
-            new PdfStripeRasterizer.Progress() {
+        Trace.beginSection("urb.print.raster_and_transmit");
+        try {
+          PdfStripeRasterizer.print(
+              pdf,
+              connection,
+              profile.getPrintableWidthPx().intValue(),
+              profile.getCopies().intValue(),
+              profile.getGradient(),
+              profile.getFeedDots().intValue(),
+              profile.getCutAfterPrint(),
+              profile.getUseEscAsteriskCommand(),
+              ThermalTransportPolicy.stripeHeight(profile.getConnectionType()),
+              new PdfStripeRasterizer.Progress() {
               @Override public void onPrinting(
                   int copy, int copies, int page, int pages) {
                 emit(request.getJobId(), ThermalPrinterApi.ThermalPigeonProgressPhase.PRINTING,
@@ -176,7 +184,10 @@ final class ThermalPrinterApiHandler implements
                     (long) copy, (long) copies, (long) page, (long) pages,
                     bytesSent, totalBytes);
               }
-            });
+              });
+        } finally {
+          Trace.endSection();
+        }
         result.success(printResult(ThermalPrinterApi.ThermalPigeonResultStatus.SUBMITTED, null, null));
       } catch (Throwable error) {
         result.success(mapError(error, request.getProfile().getConnectionType()));

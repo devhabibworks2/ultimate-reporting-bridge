@@ -26,6 +26,7 @@ final class HeadlessReportPrintRunner {
   }) async {
     final totalWatch = Stopwatch()..start();
     var stageWatch = Stopwatch()..start();
+    HeadlessReportPrintTimingStage? activePrinterStage;
     void timing(HeadlessReportPrintTimingStage stage) {
       _emitTiming(
         HeadlessReportPrintTiming(
@@ -36,6 +37,27 @@ final class HeadlessReportPrintRunner {
         onTiming,
       );
       stageWatch = Stopwatch()..start();
+    }
+
+    void observePrinterProgress(ThermalPrintProgress progress) {
+      final nextStage = switch (progress.phase) {
+        ThermalPrintPhase.preparing =>
+          HeadlessReportPrintTimingStage.preparingPrinter,
+        ThermalPrintPhase.connecting => HeadlessReportPrintTimingStage.connecting,
+        ThermalPrintPhase.rasterizing || ThermalPrintPhase.printing =>
+          HeadlessReportPrintTimingStage.rasterizing,
+        ThermalPrintPhase.transmitting =>
+          HeadlessReportPrintTimingStage.transmitting,
+      };
+      if (nextStage == activePrinterStage) return;
+      if (activePrinterStage == null) {
+        // PDF export completes immediately before the thermal platform emits
+        // its first PREPARING progress event.
+        timing(HeadlessReportPrintTimingStage.generatingPdf);
+      } else {
+        timing(activePrinterStage!);
+      }
+      activePrinterStage = nextStage;
     }
 
     _emit(
@@ -50,6 +72,8 @@ final class HeadlessReportPrintRunner {
     var printStarted = false;
 
     void listener() {
+      final printProgress = controller.value.printProgress;
+      if (printProgress != null) observePrinterProgress(printProgress);
       _handleControllerChange(
         controller: controller,
         onProgress: onProgress,
@@ -98,7 +122,11 @@ final class HeadlessReportPrintRunner {
         onProgress,
       );
       final result = await controller.printPdf();
-      timing(HeadlessReportPrintTimingStage.generatingPdf);
+      if (activePrinterStage == null) {
+        timing(HeadlessReportPrintTimingStage.generatingPdf);
+      } else {
+        timing(activePrinterStage!);
+      }
       _emit(
         const HeadlessReportPrintProgress(
           phase: HeadlessReportPrintPhase.completed,
