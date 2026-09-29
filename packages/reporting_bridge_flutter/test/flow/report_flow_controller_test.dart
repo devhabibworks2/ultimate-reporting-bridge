@@ -82,6 +82,19 @@ void main() {
     expect(controller.value.stage, ReportFlowStage.selectingTemplate);
   });
 
+  test(
+    'initialize defaults to offline when Presenter is already cached',
+    () async {
+      final controller = createController();
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      expect(controller.value.presenterCached, isTrue);
+      expect(controller.value.selectedMode, PresenterModePreference.offline);
+    },
+  );
+
   test('smart entry opens Preview for a valid online default', () async {
     preferences.valuesBySystem['legacy_system_1'] = const ReportFlowPreferences(
       templateId: 't1',
@@ -477,7 +490,7 @@ void main() {
   );
 
   test('selection can return to Preparation without losing choices', () async {
-    final controller = createController();
+    final controller = createController(mode: PresenterModePreference.online);
     addTearDown(controller.dispose);
 
     await controller.initialize();
@@ -569,7 +582,7 @@ void main() {
   test(
     'Settings Cancel restores mode changed in Resource Preparation',
     () async {
-      final controller = createController();
+      final controller = createController(mode: PresenterModePreference.online);
       addTearDown(controller.dispose);
       await controller.initialize();
       await controller.continueFromPreparation();
@@ -901,6 +914,7 @@ void main() {
   test('Settings template Cancel returns to the active Preview', () async {
     final controller = createController(
       templates: <CachedTemplate>[_template('t1'), _template('t2')],
+      mode: PresenterModePreference.online,
     );
     addTearDown(controller.dispose);
     await controller.initialize();
@@ -957,6 +971,7 @@ void main() {
   test('replacement commit failure rolls preferences back', () async {
     final controller = createController(
       templates: <CachedTemplate>[_template('t1'), _template('t2')],
+      mode: PresenterModePreference.online,
     );
     addTearDown(controller.dispose);
     await controller.initialize();

@@ -111,10 +111,7 @@ class ReportFlowControllerImpl
       }
 
       _persistedPreferences = stored;
-      final mode =
-          request.presenterMode ??
-          stored?.mode ??
-          PresenterModePreference.online;
+      final preferredMode = request.presenterMode ?? stored?.mode;
       final catalog = await _runtime.bridgeClient.listTemplates();
       var templates = _compatibleTemplates(catalog);
       var presenterCached = false;
@@ -126,6 +123,11 @@ class ReportFlowControllerImpl
       } catch (_) {
         // Online setup can continue even when local cache status is unavailable.
       }
+      final mode =
+          preferredMode ??
+          (presenterCached
+              ? PresenterModePreference.offline
+              : PresenterModePreference.online);
 
       final requestedTemplateId =
           request.initialTemplateId ?? stored?.templateId;
