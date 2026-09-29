@@ -3,6 +3,7 @@ package com.ultimate.reportbuilder.reporting_bridge_flutter;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import com.dantsu.escposprinter.exceptions.EscPosConnectionException;
 import java.io.IOException;
@@ -13,6 +14,13 @@ import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import org.junit.Test;
 
 public final class ReliableTcpConnectionTest {
@@ -124,6 +132,52 @@ public final class ReliableTcpConnectionTest {
   }
 
   @Test
+  public void tcpSendTimeoutUsesProfileTimeoutAndDisconnects() throws Exception {
+    CountDownLatch writeEntered = new CountDownLatch(1);
+    BlockingOutputStream stream = new BlockingOutputStream(writeEntered);
+    TestSocket socket = new TestSocket(null, stream);
+    // Profile timeout = 1s; send must fail closed within a small multiple of that.
+    ReliableTcpConnection connection =
+        new ReliableTcpConnection("127.0.0.1", 9100, 1, () -> socket);
+    connection.connect();
+    connection.write(new byte[] {1, 2, 3});
+
+    ExecutorService executor = Executors.newSingleThreadExecutor();
+    Future<?> sendFuture =
+        executor.submit(
+            () -> {
+              connection.send(0);
+              return null;
+            });
+
+    assertTrue(
+        "send should reach OutputStream.write before timing out",
+        writeEntered.await(1, TimeUnit.SECONDS));
+
+    try {
+      sendFuture.get(3, TimeUnit.SECONDS);
+      fail("send should throw EscPosConnectionException on write deadline");
+    } catch (TimeoutException hung) {
+      sendFuture.cancel(true);
+      fail(
+          "send did not return within bounded deadline; OutputStream.write still blocks"
+              + " without a write deadline");
+    } catch (ExecutionException execution) {
+      Throwable cause = execution.getCause();
+      assertTrue(
+          "expected EscPosConnectionException, got " + cause,
+          cause instanceof EscPosConnectionException);
+      assertTrue(
+          ((EscPosConnectionException) cause).getMessage().startsWith("tcpSendTimeout;"));
+    } finally {
+      executor.shutdownNow();
+    }
+
+    assertTrue(socket.closed);
+    assertFalse(connection.isConnected());
+  }
+
+  @Test
   public void explicitDisconnectClosesTcpPeer() throws Exception {
     try (ServerSocket server = new ServerSocket(0)) {
       Thread acceptor = new Thread(() -> {
@@ -186,9 +240,55 @@ public final class ReliableTcpConnectionTest {
       return closed;
     }
 
-    @Override public synchronized void close() {
+    @Override public synchronized void close() throws IOException {
       closed = true;
       connected = false;
+      stream.close();
+    }
+  }
+
+  /** Blocks in write/flush until {@link #close()} to simulate a stalled printer socket. */
+  private static final class BlockingOutputStream extends OutputStream {
+    private final CountDownLatch writeEntered;
+    private final Object lock = new Object();
+    private boolean closed;
+
+    BlockingOutputStream(CountDownLatch writeEntered) {
+      this.writeEntered = writeEntered;
+    }
+
+    @Override
+    public void write(int value) throws IOException {
+      write(new byte[] {(byte) value}, 0, 1);
+    }
+
+    @Override
+    public void write(byte[] buffer, int offset, int length) throws IOException {
+      writeEntered.countDown();
+      synchronized (lock) {
+        while (!closed) {
+          try {
+            lock.wait();
+          } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new IOException("interrupted");
+          }
+        }
+        throw new IOException("stream closed");
+      }
+    }
+
+    @Override
+    public void flush() throws IOException {
+      // No-op until close unblocks a parked write.
+    }
+
+    @Override
+    public void close() {
+      synchronized (lock) {
+        closed = true;
+        lock.notifyAll();
+      }
     }
   }
 }

@@ -8,11 +8,18 @@ import com.dantsu.escposprinter.connection.bluetooth.BluetoothConnection;
 import com.dantsu.escposprinter.exceptions.EscPosConnectionException;
 
 import java.io.IOException;
+import java.net.SocketTimeoutException;
 
 /** Bluetooth RFCOMM transport without DantSu's fixed data.length / 16 pause. */
 final class ReliableBluetoothConnection extends BluetoothConnection {
+  private final int writeTimeoutMillis;
   ReliableBluetoothConnection(@NonNull BluetoothDevice device) {
+    this(device, ThermalTransportPolicy.BLUETOOTH_WRITE_TIMEOUT_SECONDS);
+  }
+
+  ReliableBluetoothConnection(@NonNull BluetoothDevice device, int timeoutSeconds) {
     super(device);
+    this.writeTimeoutMillis = ThermalWriteDeadline.writeDeadlineMillis(timeoutSeconds);
   }
 
   @Override
@@ -27,8 +34,8 @@ final class ReliableBluetoothConnection extends BluetoothConnection {
         final int length = Math.min(
             ThermalTransportPolicy.BLUETOOTH_CHUNK_BYTES,
             pending.length - offset);
-        outputStream.write(pending, offset, length);
-        outputStream.flush();
+        ThermalWriteDeadline.write(
+            outputStream, pending, offset, length, writeTimeoutMillis);
         if (offset + length < pending.length) {
           Thread.sleep(ThermalTransportPolicy.pacingDelayMillis(
               length,
@@ -37,7 +44,12 @@ final class ReliableBluetoothConnection extends BluetoothConnection {
       }
       data = new byte[0];
       if (addWaitingTime > 0) Thread.sleep(addWaitingTime);
+    } catch (SocketTimeoutException error) {
+      disconnect();
+      throw new EscPosConnectionException(
+          "bluetoothSendTimeout;" + safeMessage(error));
     } catch (IOException error) {
+      disconnect();
       throw new EscPosConnectionException(
           "bluetoothSendFailed;" + safeMessage(error));
     } catch (InterruptedException error) {

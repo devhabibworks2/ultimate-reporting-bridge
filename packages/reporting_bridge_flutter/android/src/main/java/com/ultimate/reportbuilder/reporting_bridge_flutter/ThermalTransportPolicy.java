@@ -8,6 +8,7 @@ final class ThermalTransportPolicy {
   static final int TCP_BYTES_PER_SECOND = 128 * 1024;
   static final int BLUETOOTH_CHUNK_BYTES = 2048;
   static final int BLUETOOTH_BYTES_PER_SECOND = 32 * 1024;
+  static final int BLUETOOTH_WRITE_TIMEOUT_SECONDS = 15;
   static final int FAST_STRIPE_HEIGHT_PX = 384;
   static final int BLUETOOTH_STRIPE_HEIGHT_PX = 128;
 

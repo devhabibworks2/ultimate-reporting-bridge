@@ -109,14 +109,17 @@ final class ReliableTcpConnection extends DeviceConnection {
     try {
       for (int offset = 0; offset < pending.length; offset += CHUNK_BYTES) {
         final int length = Math.min(CHUNK_BYTES, pending.length - offset);
-        outputStream.write(pending, offset, length);
-        outputStream.flush();
+        ThermalWriteDeadline.write(
+            outputStream, pending, offset, length, timeoutMillis);
         if (offset + length < pending.length) {
           Thread.sleep(pacingDelayMillis(length));
         }
       }
       data = new byte[0];
       if (addWaitingTime > 0) Thread.sleep(addWaitingTime);
+    } catch (SocketTimeoutException error) {
+      disconnect();
+      throw new EscPosConnectionException("tcpSendTimeout;" + safeMessage(error));
     } catch (IOException error) {
       disconnect();
       throw new EscPosConnectionException("tcpSendFailed;" + safeMessage(error));
