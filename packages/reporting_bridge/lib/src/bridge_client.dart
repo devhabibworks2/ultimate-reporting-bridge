@@ -48,23 +48,30 @@ class ReportingBridgeClient {
   }) : apiBaseUrl = _withTrailingSlash(apiBaseUrl),
        _staticHeaders = filterPresenterBridgeHeaders(headers),
        _headersProvider = headersProvider,
-       _identityContext = identityContext ?? BridgeIdentityContext(),
-       _http = BridgeHttpFetch(
-         httpClientFactory: httpClientFactory,
-         timeout: timeout,
-       ),
-       _presenterCache = PresenterCacheService(
-         presenterRoot: Directory('${bridgeRoot.path}/presenter'),
-         httpClientFactory: httpClientFactory,
-       ),
-       _serverGateway = PresenterServerGateway(
-         apiBaseUrl: apiBaseUrl,
-         cacheIdentityBaseUrl: cacheIdentityBaseUrl ?? apiBaseUrl,
-         bridgeRoot: bridgeRoot,
-         headers: headers,
-         httpClientFactory: httpClientFactory,
-         timeout: timeout,
-       ) {
+       _identityContext = identityContext ?? BridgeIdentityContext() {
+    final sharedHttpClient = (httpClientFactory ?? HttpClient.new)();
+    sharedHttpClient.connectionTimeout = timeout;
+    _sharedHttpClient = sharedHttpClient;
+    HttpClient sharedHttpClientFactory() => sharedHttpClient;
+    _http = BridgeHttpFetch(
+      httpClientFactory: sharedHttpClientFactory,
+      timeout: timeout,
+      closeClientAfterRequest: false,
+    );
+    _presenterCache = PresenterCacheService(
+      presenterRoot: Directory('${bridgeRoot.path}/presenter'),
+      httpClientFactory: sharedHttpClientFactory,
+      closeClientAfterRequest: false,
+    );
+    _serverGateway = PresenterServerGateway(
+      apiBaseUrl: apiBaseUrl,
+      cacheIdentityBaseUrl: cacheIdentityBaseUrl ?? apiBaseUrl,
+      bridgeRoot: bridgeRoot,
+      headers: headers,
+      httpClientFactory: sharedHttpClientFactory,
+      timeout: timeout,
+      closeClientAfterRequest: false,
+    );
     _sessionCoordinator = PresenterSessionCoordinator(
       presenterCache: _presenterCache,
       runtimeStorage: RuntimeSessionStorage(
@@ -83,9 +90,10 @@ class ReportingBridgeClient {
   final String? bundleManifestUrl;
   final Map<String, String> _staticHeaders;
   final BridgeHeadersProvider? _headersProvider;
-  final BridgeHttpFetch _http;
-  final PresenterCacheService _presenterCache;
-  final PresenterServerGateway _serverGateway;
+  late final HttpClient _sharedHttpClient;
+  late final BridgeHttpFetch _http;
+  late final PresenterCacheService _presenterCache;
+  late final PresenterServerGateway _serverGateway;
   late final PresenterSessionCoordinator _sessionCoordinator;
 
   BridgeIdentityContext _identityContext;
@@ -338,6 +346,7 @@ class ReportingBridgeClient {
     await _waitForPresenterSync();
     _progressListeners.clear();
     await _sessionCoordinator.dispose();
+    _sharedHttpClient.close(force: true);
   }
 
   Future<List<CachedTemplate>> _currentTemplatesForStatus() async {

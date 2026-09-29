@@ -71,6 +71,7 @@ class PresenterServerGateway {
     Map<String, String> headers = const <String, String>{},
     HttpClient Function()? httpClientFactory,
     Duration timeout = const Duration(seconds: 8),
+    bool closeClientAfterRequest = true,
   }) : apiBaseUrl = normalizeBridgeApiBaseUrl(apiBaseUrl),
        cacheIdentityBaseUrl = normalizeBridgeApiBaseUrl(
          cacheIdentityBaseUrl ?? apiBaseUrl,
@@ -78,13 +79,16 @@ class PresenterServerGateway {
        _headers = filterPresenterBridgeHeaders(headers),
        _httpClientFactory = httpClientFactory,
        _timeout = timeout,
+       _closeClientAfterRequest = closeClientAfterRequest,
        _http = BridgeHttpFetch(
          httpClientFactory: httpClientFactory,
          timeout: timeout,
+         closeClientAfterRequest: closeClientAfterRequest,
        ),
        _templateSync = PresenterTemplateSyncService(
          httpClientFactory: httpClientFactory,
          timeout: timeout,
+         closeClientAfterRequest: closeClientAfterRequest,
        );
 
   static const String _systemsPath = 'presenter/systems';
@@ -95,6 +99,7 @@ class PresenterServerGateway {
   final Map<String, String> _headers;
   final HttpClient Function()? _httpClientFactory;
   final Duration _timeout;
+  final bool _closeClientAfterRequest;
   final BridgeHttpFetch _http;
   final PresenterTemplateSyncService _templateSync;
 
@@ -106,6 +111,7 @@ class PresenterServerGateway {
         headers: _headers,
         httpClientFactory: _httpClientFactory,
         timeout: _timeout,
+        closeClientAfterRequest: _closeClientAfterRequest,
       );
 
   Future<List<PresenterSystem>> fetchSystems({

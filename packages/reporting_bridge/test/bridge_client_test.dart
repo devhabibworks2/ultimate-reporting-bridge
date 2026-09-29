@@ -195,6 +195,91 @@ void main() {
       throwsA(isA<BridgeRuntimeException>()),
     );
   });
+
+  test(
+    'owns one shared HttpClient across HTTP collaborators until dispose',
+    () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        final path = request.uri.path;
+        if (path == '/api/health') {
+          await _writeJson(request, <String, dynamic>{'status': 'ok'});
+          return;
+        }
+        if (path == '/presenter/index.html') {
+          request.response.headers.contentType = ContentType.html;
+          request.response.write('<!doctype html><html>Presenter</html>');
+          await request.response.close();
+          return;
+        }
+        if (path == '/api/presenter/systems') {
+          expect(request.headers.value('X-Tenant-Id'), 'tenant_demo');
+          expect(request.headers.value('Not-Approved'), isNull);
+          await _writeJson(request, <String, dynamic>{
+            'success': true,
+            'data': <String, dynamic>{
+              'items': <Map<String, dynamic>>[
+                <String, dynamic>{'id': 1, 'code': 'erp', 'name': 'ERP'},
+              ],
+            },
+          });
+          return;
+        }
+        request.response.statusCode = HttpStatus.notFound;
+        await request.response.close();
+      });
+
+      var factoryCalls = 0;
+      final sharedClient = HttpClient();
+      addTearDown(() {
+        try {
+          sharedClient.close(force: true);
+        } catch (_) {}
+      });
+
+      final root = await Directory.systemTemp.createTemp(
+        'bridge_client_shared_http_',
+      );
+      addTearDown(() => root.delete(recursive: true));
+      final client = ReportingBridgeClient(
+        apiBaseUrl: Uri.parse('http://127.0.0.1:${server.port}'),
+        presenterEntryUrl: Uri.parse(
+          'http://127.0.0.1:${server.port}/presenter/index.html',
+        ),
+        bridgeRoot: root,
+        headers: const <String, String>{
+          'X-Tenant-Id': 'tenant_demo',
+          'Not-Approved': 'blocked',
+        },
+        httpClientFactory: () {
+          factoryCalls++;
+          return sharedClient;
+        },
+      );
+
+      await client.probeEndpoints();
+      final systems = await client.fetchSystems();
+      expect(systems.single.id, 1);
+      expect(
+        factoryCalls,
+        1,
+        reason:
+            'ReportingBridgeClient must construct one shared HttpClient once '
+            'and inject it into HTTP collaborators',
+      );
+
+      await client.dispose();
+
+      await expectLater(() async {
+        final request = await sharedClient.getUrl(
+          Uri.parse('http://127.0.0.1:${server.port}/api/health'),
+        );
+        final response = await request.close();
+        await response.drain<void>();
+      }(), throwsA(isA<Object>()));
+    },
+  );
 }
 
 List<int> _presenterZipBytes() {
