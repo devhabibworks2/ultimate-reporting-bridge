@@ -9,7 +9,7 @@ void main() {
   group('Ultimate Printer transport constants', () {
     test('exposes exact package, action, and MIME once', () {
       expect(ultimatePrinterPackageName, 'com.Ultimate.Printer');
-      expect(ultimatePrinterAction, 'com.Ultimate.Printer.PRINT_PDF');
+      expect(ultimatePrinterAction, 'com.Ultimate.Printer.OpenPrinter');
       expect(ultimatePrinterMimeType, 'application/pdf');
       expect(contract.ultimatePrinterPackageName, ultimatePrinterPackageName);
       expect(contract.ultimatePrinterAction, ultimatePrinterAction);

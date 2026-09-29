@@ -11,7 +11,7 @@
     <queries>
         <package android:name="com.Ultimate.Printer" />
         <intent>
-            <action android:name="com.Ultimate.Printer.PRINT_PDF" />
+            <action android:name="com.Ultimate.Printer.OpenPrinter" />
             <data android:mimeType="application/pdf" />
         </intent>
     </queries>

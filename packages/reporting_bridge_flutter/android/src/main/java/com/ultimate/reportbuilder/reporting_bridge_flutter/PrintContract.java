@@ -8,7 +8,7 @@ import java.util.Set;
 final class PrintContract {
   static final String CHANNEL = "reporting_bridge_flutter/print";
   static final String EXTERNAL_PACKAGE = "com.Ultimate.Printer";
-  static final String EXTERNAL_ACTION = "com.Ultimate.Printer.PRINT_PDF";
+  static final String EXTERNAL_ACTION = "com.Ultimate.Printer.OpenPrinter";
   static final String MIME_TYPE = "application/pdf";
   static final String CONTRACT_VERSION = "1";
   static final int DEFAULT_MAXIMUM_PDF_BYTES = 50 * 1024 * 1024;
