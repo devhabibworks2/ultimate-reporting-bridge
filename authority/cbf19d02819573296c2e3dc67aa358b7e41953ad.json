@@ -1,0 +1,15 @@
+{
+  "branch": "main",
+  "event": "push",
+  "repository": "devhabibworks2/ultimate-reporting-bridge",
+  "requiredJobs": [
+    "reporting-bridge",
+    "reporting-bridge-flutter",
+    "minimal-host"
+  ],
+  "runAttempt": 1,
+  "runId": 36514195835,
+  "schema": 1,
+  "sourceSha": "cbf19d02819573296c2e3dc67aa358b7e41953ad",
+  "workflowPath": ".github/workflows/ci.yml"
+}
