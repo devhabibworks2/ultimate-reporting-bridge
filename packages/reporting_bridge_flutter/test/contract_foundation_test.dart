@@ -50,6 +50,6 @@ void main() {
     expect(current.externalApp, isNull);
     expect(future.mode, AndroidPrintMode.externalApp);
     expect(future.externalApp?.packageName, 'com.Ultimate.Printer');
-    expect(future.externalApp?.action, 'com.Ultimate.Printer.PRINT_PDF_V1');
+    expect(future.externalApp?.action, 'com.Ultimate.Printer.PRINT_PDF');
   });
 }

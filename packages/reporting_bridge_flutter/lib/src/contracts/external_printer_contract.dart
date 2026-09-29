@@ -3,12 +3,12 @@ import 'package:reporting_bridge/reporting_bridge.dart'
 
 import 'report_contract_values.dart';
 
-/// Fixed Ultimate Printer V1 transport constants.
+/// Fixed Ultimate Printer transport constants.
 ///
 /// Native Android owns FileProvider staging and the final `content://` Intent.
 /// Flutter supplies PDF bytes and selected-template document metadata only.
 const String ultimatePrinterPackageName = 'com.Ultimate.Printer';
-const String ultimatePrinterAction = 'com.Ultimate.Printer.PRINT_PDF_V1';
+const String ultimatePrinterAction = 'com.Ultimate.Printer.PRINT_PDF';
 const String ultimatePrinterMimeType = 'application/pdf';
 
 /// Bridge-owned print context keys that Host [HostExternalPrintRequest.extra]

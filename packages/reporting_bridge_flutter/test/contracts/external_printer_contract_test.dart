@@ -6,10 +6,10 @@ import 'package:reporting_bridge_flutter/src/platform/android_print_configuratio
     as android_config;
 
 void main() {
-  group('Ultimate Printer V1 transport constants', () {
+  group('Ultimate Printer transport constants', () {
     test('exposes exact package, action, and MIME once', () {
       expect(ultimatePrinterPackageName, 'com.Ultimate.Printer');
-      expect(ultimatePrinterAction, 'com.Ultimate.Printer.PRINT_PDF_V1');
+      expect(ultimatePrinterAction, 'com.Ultimate.Printer.PRINT_PDF');
       expect(ultimatePrinterMimeType, 'application/pdf');
       expect(contract.ultimatePrinterPackageName, ultimatePrinterPackageName);
       expect(contract.ultimatePrinterAction, ultimatePrinterAction);
