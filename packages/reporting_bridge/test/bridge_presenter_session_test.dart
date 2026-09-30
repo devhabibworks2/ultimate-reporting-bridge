@@ -801,21 +801,43 @@ CachedTemplate _template(String id) => CachedTemplate(
 
 Future<void> _writeReadyPresenterSite(Directory presenterRoot) async {
   await presenterRoot.create(recursive: true);
-  await File(
-    '${presenterRoot.path}/index.html',
-  ).writeAsString('<!doctype html><html><head><base href="/"></head></html>');
-  for (final path in PresenterBundleContract.requiredFiles) {
+  for (final entry in _validPureDartBundleEntries().entries) {
+    final path = entry.key;
     final file = File('${presenterRoot.path}/$path');
     await file.parent.create(recursive: true);
-    await file.writeAsString(
-      path == 'main.dart.js'
-          ? PresenterBundleContract.requiredJavaScriptMarkers.join(' ')
-          : path,
-    );
+    await file.writeAsString(entry.value);
   }
-  final assetManifest = File('${presenterRoot.path}/assets/AssetManifest.bin');
-  await assetManifest.parent.create(recursive: true);
-  await assetManifest.writeAsBytes(const <int>[1]);
+}
+
+Map<String, String> _validPureDartBundleEntries() {
+  const fontHash =
+      'a446817d40e4dc37c526fb5e30859fe0dd7bb0a7d5b3c0c56f7a0626d0019307';
+  const iconHash =
+      '6cbd50037e50937c7aa9ad4a2de7770c8f5db9455c1be9e021bc236060dafa21';
+  final resources = <String, String>{
+    for (final path in PresenterBundleContract.requiredResourceFiles)
+      path: path == 'icons/MaterialIcons-Regular.ttf' ? iconHash : fontHash,
+  };
+  return <String, String>{
+    'index.html': '<!doctype html><html><head><base href="/"></head></html>',
+    'presenter.js': PresenterBundleContract.requiredJavaScriptMarkers.join(' '),
+    'presenter-manifest.json': jsonEncode(<String, Object>{
+      'formatVersion': 1,
+      'presenterVersion': '1.0.0',
+      'devVersion': 1,
+      'protocolVersion': 1,
+      'entry': 'presenter.js',
+      'resourceManifest': 'resource-manifest.json',
+    }),
+    'resource-manifest.json': jsonEncode(<String, Object>{
+      'version': 'fixture-v1',
+      'bundleSha256': List<String>.filled(64, 'a').join(),
+      'resources': resources,
+    }),
+    for (final path in PresenterBundleContract.requiredFontFiles)
+      path: 'font-bytes',
+    'icons/MaterialIcons-Regular.ttf': 'icon-bytes',
+  };
 }
 
 Future<void> _writeCachedManifest(

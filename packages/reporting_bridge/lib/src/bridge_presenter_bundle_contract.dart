@@ -1,26 +1,33 @@
 abstract final class PresenterBundleContract {
-  static const List<String> assetManifestPaths = <String>[
-    'assets/AssetManifest.bin',
-    'assets/AssetManifest.bin.json',
-    'assets/AssetManifest.json',
+  static const String presenterEntryFile = 'presenter.js';
+  static const String presenterManifestFile = 'presenter-manifest.json';
+  static const String resourceManifestFile = 'resource-manifest.json';
+
+  static const List<String> requiredFontFiles = <String>[
+    'fonts/Cairo-Regular.ttf',
+    'fonts/Cairo-Medium.ttf',
+    'fonts/Cairo-Bold.ttf',
+    'fonts/NotoSansArabic-Regular.ttf',
+    'fonts/NotoSansArabic-Medium.ttf',
+    'fonts/NotoSansArabic-Bold.ttf',
+    'fonts/NotoSansMono-Regular.ttf',
+    'fonts/NotoSansMono-Medium.ttf',
+    'fonts/NotoSansMono-Bold.ttf',
   ];
 
-  static const List<String> requiredRuntimeFiles = <String>['main.dart.js'];
+  static const List<String> requiredResourceFiles = <String>[
+    ...requiredFontFiles,
+    'icons/MaterialIcons-Regular.ttf',
+  ];
+
+  static const List<String> requiredRuntimeFiles = <String>[presenterEntryFile];
 
   static const List<String> requiredFiles = <String>[
-    ...requiredRuntimeFiles,
-    'flutter_bootstrap.js',
-    'assets/FontManifest.json',
-    'assets/fonts/MaterialIcons-Regular.otf',
-    'assets/assets/fonts/Cairo-Regular.ttf',
-    'assets/assets/fonts/Cairo-Medium.ttf',
-    'assets/assets/fonts/Cairo-Bold.ttf',
-    'assets/assets/fonts/NotoSansArabic-Regular.ttf',
-    'assets/assets/fonts/NotoSansArabic-Medium.ttf',
-    'assets/assets/fonts/NotoSansArabic-Bold.ttf',
-    'assets/assets/fonts/NotoSansMono-Regular.ttf',
-    'assets/assets/fonts/NotoSansMono-Medium.ttf',
-    'assets/assets/fonts/NotoSansMono-Bold.ttf',
+    'index.html',
+    presenterEntryFile,
+    presenterManifestFile,
+    resourceManifestFile,
+    ...requiredResourceFiles,
   ];
 
   static const List<String> requiredJavaScriptMarkers = <String>[
@@ -31,5 +38,6 @@ abstract final class PresenterBundleContract {
     'onRenderStarted',
     'onRenderCompleted',
     'onRenderFailed',
+    'exportPdf',
   ];
 }

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:archive/archive.dart';
+import 'package:crypto/crypto.dart';
 
 import 'bridge_cache_namespace.dart';
 import 'bridge_http_fetch.dart';
@@ -89,29 +90,89 @@ class PresenterCacheService {
   Future<bool> supportsCurrentLifecycleContract() async {
     if (!await isReady()) return false;
     return _containsAllMarkers(
-      File('${presenterRoot.path}/main.dart.js'),
+      File(
+        '${presenterRoot.path}/${PresenterBundleContract.presenterEntryFile}',
+      ),
       PresenterBundleContract.requiredJavaScriptMarkers,
     );
   }
 
   Future<bool> _isBundleSiteReady(Directory root) async {
-    if (!await _isNonEmptyFile(File('${root.path}/index.html'))) return false;
-
-    for (final path in PresenterBundleContract.requiredRuntimeFiles) {
+    for (final path in PresenterBundleContract.requiredFiles) {
       if (!await _isNonEmptyFile(File('${root.path}/$path'))) return false;
     }
-
-    var assetManifestReady = false;
-    for (final path in PresenterBundleContract.assetManifestPaths) {
-      if (await _isNonEmptyFile(File('${root.path}/$path'))) {
-        assetManifestReady = true;
-        break;
-      }
-    }
-    if (!assetManifestReady) return false;
-
-    return true;
+    if (!await _isPresenterManifestValid(root)) return false;
+    return _isResourceManifestValid(root);
   }
+
+  Future<bool> _isPresenterManifestValid(Directory root) async {
+    try {
+      final decoded = jsonDecode(
+        await File(
+          '${root.path}/${PresenterBundleContract.presenterManifestFile}',
+        ).readAsString(),
+      );
+      if (decoded is! Map<String, dynamic>) return false;
+
+      final presenterVersion = decoded['presenterVersion'];
+      final devVersion = decoded['devVersion'];
+      return decoded['formatVersion'] == 1 &&
+          presenterVersion is String &&
+          BridgeSemanticVersion.tryParse(presenterVersion) != null &&
+          devVersion is int &&
+          devVersion >= 0 &&
+          decoded['protocolVersion'] == 1 &&
+          decoded['entry'] == PresenterBundleContract.presenterEntryFile &&
+          decoded['resourceManifest'] ==
+              PresenterBundleContract.resourceManifestFile;
+    } on FileSystemException {
+      return false;
+    } on FormatException {
+      return false;
+    }
+  }
+
+  Future<bool> _isResourceManifestValid(Directory root) async {
+    try {
+      final decoded = jsonDecode(
+        await File(
+          '${root.path}/${PresenterBundleContract.resourceManifestFile}',
+        ).readAsString(),
+      );
+      if (decoded is! Map<String, dynamic>) return false;
+      final version = decoded['version'];
+      final bundleSha256 = decoded['bundleSha256'];
+      final resources = decoded['resources'];
+      if (version is! String || version.trim().isEmpty) return false;
+      if (bundleSha256 is! String || !_isSha256(bundleSha256)) return false;
+      if (resources is! Map ||
+          resources.length !=
+              PresenterBundleContract.requiredResourceFiles.length) {
+        return false;
+      }
+
+      for (final path in PresenterBundleContract.requiredResourceFiles) {
+        final expectedHash = resources[path];
+        if (expectedHash is! String || !_isSha256(expectedHash)) return false;
+
+        final resourceFile = File('${root.path}/$path');
+        if (!await _isNonEmptyFile(resourceFile)) return false;
+        final actualHash = await sha256.bind(resourceFile.openRead()).first;
+        if (actualHash.toString() != expectedHash) return false;
+      }
+      return resources.keys.every(
+        (path) =>
+            path is String &&
+            PresenterBundleContract.requiredResourceFiles.contains(path),
+      );
+    } on FileSystemException {
+      return false;
+    } on FormatException {
+      return false;
+    }
+  }
+
+  bool _isSha256(String value) => RegExp(r'^[0-9a-f]{64}$').hasMatch(value);
 
   Future<bool> _isNonEmptyFile(File file) async {
     try {

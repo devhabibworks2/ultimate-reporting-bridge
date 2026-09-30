@@ -284,27 +284,42 @@ void main() {
 
 List<int> _presenterZipBytes() {
   final archive = Archive();
-  final files = <String, String>{
-    'index.html': '<!doctype html><html><head><base href="/"></head></html>',
-    'main.dart.js': PresenterBundleContract.requiredJavaScriptMarkers.join(' '),
-    'flutter_bootstrap.js': 'bootstrap',
-    'assets/AssetManifest.bin': 'manifest',
-    'assets/FontManifest.json': '[]',
-    'assets/fonts/MaterialIcons-Regular.otf': 'icons',
-    'assets/assets/fonts/Cairo-Regular.ttf': 'cairo',
-    'assets/assets/fonts/Cairo-Medium.ttf': 'cairo-medium',
-    'assets/assets/fonts/Cairo-Bold.ttf': 'cairo-bold',
-    'assets/assets/fonts/NotoSansArabic-Regular.ttf': 'arabic',
-    'assets/assets/fonts/NotoSansArabic-Medium.ttf': 'arabic-medium',
-    'assets/assets/fonts/NotoSansArabic-Bold.ttf': 'arabic-bold',
-    'assets/assets/fonts/NotoSansMono-Regular.ttf': 'mono',
-    'assets/assets/fonts/NotoSansMono-Medium.ttf': 'mono-medium',
-    'assets/assets/fonts/NotoSansMono-Bold.ttf': 'mono-bold',
-  };
+  final files = _validPureDartBundleEntries();
   for (final entry in files.entries) {
     archive.addFile(ArchiveFile.string(entry.key, entry.value));
   }
   return ZipEncoder().encode(archive);
+}
+
+Map<String, String> _validPureDartBundleEntries() {
+  const fontHash =
+      'a446817d40e4dc37c526fb5e30859fe0dd7bb0a7d5b3c0c56f7a0626d0019307';
+  const iconHash =
+      '6cbd50037e50937c7aa9ad4a2de7770c8f5db9455c1be9e021bc236060dafa21';
+  final resources = <String, String>{
+    for (final path in PresenterBundleContract.requiredResourceFiles)
+      path: path == 'icons/MaterialIcons-Regular.ttf' ? iconHash : fontHash,
+  };
+  return <String, String>{
+    'index.html': '<!doctype html><html><head><base href="/"></head></html>',
+    'presenter.js': PresenterBundleContract.requiredJavaScriptMarkers.join(' '),
+    'presenter-manifest.json': jsonEncode(<String, Object>{
+      'formatVersion': 1,
+      'presenterVersion': '1.0.0',
+      'devVersion': 1,
+      'protocolVersion': 1,
+      'entry': 'presenter.js',
+      'resourceManifest': 'resource-manifest.json',
+    }),
+    'resource-manifest.json': jsonEncode(<String, Object>{
+      'version': 'fixture-v1',
+      'bundleSha256': List<String>.filled(64, 'a').join(),
+      'resources': resources,
+    }),
+    for (final path in PresenterBundleContract.requiredFontFiles)
+      path: 'font-bytes',
+    'icons/MaterialIcons-Regular.ttf': 'icon-bytes',
+  };
 }
 
 Future<void> _writeJson(HttpRequest request, Map<String, dynamic> body) async {
