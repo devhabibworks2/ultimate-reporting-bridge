@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'bridge_cache_namespace.dart';
@@ -67,7 +66,6 @@ class PresenterSessionCoordinator {
     required this.presenterCache,
     required this.runtimeStorage,
     PresenterResourceCacheStore? resourceCacheStore,
-    required this.onlinePresenterUrl,
     required Uri apiBaseUrl,
     this.bundleManifestUrl,
     Map<String, String> headers = const <String, String>{},
@@ -84,7 +82,6 @@ class PresenterSessionCoordinator {
   final PresenterCacheService presenterCache;
   final RuntimeSessionStorage runtimeStorage;
   final PresenterResourceCacheStore resourceCacheStore;
-  final Uri onlinePresenterUrl;
   final Uri apiBaseUrl;
   final String? bundleManifestUrl;
   final Map<String, String> _headers;
@@ -107,54 +104,11 @@ class PresenterSessionCoordinator {
   }
 
   Future<PresenterCacheManifest?> loadCachedManifest() async {
-    final file = presenterCache.manifestFile;
-    if (!await file.exists()) {
-      _cachedManifest = null;
-      return null;
-    }
-
-    try {
-      final decoded = jsonDecode(await file.readAsString());
-      if (decoded is! Map) {
-        _cachedManifest = null;
-        return null;
-      }
-      final manifestUri = Uri.tryParse(
-        decoded['manifestUrl']?.toString().trim() ?? '',
-      );
-      if (manifestUri != _expectedManifestUri()) {
-        _cachedManifest = null;
-        return null;
-      }
-
-      final presenterVersion = decoded['presenterVersion']?.toString().trim();
-      final bundleVersion = decoded['bundleVersion']?.toString().trim();
-      final devVersion = int.tryParse(decoded['devVersion']?.toString() ?? '');
-      if (presenterVersion == null ||
-          BridgeSemanticVersion.tryParse(presenterVersion) == null ||
-          bundleVersion == null ||
-          bundleVersion.isEmpty ||
-          devVersion == null) {
-        _cachedManifest = null;
-        return null;
-      }
-
-      final manifest = PresenterCacheManifest(
-        presenterVersion: presenterVersion,
-        bundleVersion: bundleVersion,
-        devVersion: devVersion,
-        rootPath: presenterCache.presenterRoot.path,
-        updatedAt: DateTime.tryParse(decoded['updatedAt']?.toString() ?? ''),
-        syncedAt: DateTime.tryParse(decoded['syncedAt']?.toString() ?? ''),
-      );
-      _cachedManifest = manifest;
-      return manifest;
-    } on FormatException {
-      _cachedManifest = null;
-      return null;
-    } on FileSystemException {
-      return _cachedManifest;
-    }
+    _cachedManifest = await presenterCache.readCachedManifest(
+      bundleManifestUrl: bundleManifestUrl,
+      apiBaseUrl: apiBaseUrl.toString(),
+    );
+    return _cachedManifest;
   }
 
   Future<PresenterSessionLaunch> prepare(
@@ -179,33 +133,36 @@ class PresenterSessionCoordinator {
       );
     }
 
-    final cachedManifest = request.mode == PresenterSessionMode.offline
+    final previousCachedManifest = request.mode == PresenterSessionMode.online
         ? await loadCachedManifest()
         : null;
-    final cachedPresenterReady = request.mode == PresenterSessionMode.offline
-        ? await presenterCache.isReady()
-        : false;
+    var cachedManifest = request.mode == PresenterSessionMode.offline
+        ? await loadCachedManifest()
+        : null;
     if (request.mode == PresenterSessionMode.offline &&
-        (cachedManifest == null || !cachedPresenterReady)) {
+        cachedManifest == null) {
       throw const BridgeRuntimeException(
         BridgeRuntimeErrorCodes.offlineAssetsNotReady,
         'Offline mode requires a complete, compatible Presenter bundle.',
       );
     }
 
-    final remoteManifest = request.mode == PresenterSessionMode.online
-        ? await presenterCache.fetchRemoteManifest(
-            bundleManifestUrl: bundleManifestUrl,
-            apiBaseUrl: apiBaseUrl.toString(),
-            headers: effectiveHeaders,
-          )
-        : null;
-    final presenterVersion = request.mode == PresenterSessionMode.offline
-        ? _requiredCachedPresenterVersion(cachedManifest!)
-        : remoteManifest!.presenterVersion;
-    final presenterDevVersion = request.mode == PresenterSessionMode.offline
-        ? cachedManifest!.devVersion
-        : remoteManifest!.devVersion;
+    if (request.mode == PresenterSessionMode.online) {
+      try {
+        cachedManifest = await presenterCache.ensureCurrentPresenterSite(
+          bundleManifestUrl: bundleManifestUrl,
+          apiBaseUrl: apiBaseUrl.toString(),
+          headers: effectiveHeaders,
+        );
+      } on PresenterCacheUpdateException catch (error) {
+        if (error.enforceUpdate || previousCachedManifest == null) rethrow;
+        cachedManifest = previousCachedManifest;
+      }
+      _cachedManifest = cachedManifest;
+    }
+    final currentManifest = cachedManifest!;
+    final presenterVersion = _requiredCachedPresenterVersion(currentManifest);
+    final presenterDevVersion = currentManifest.devVersion;
 
     if (!request.template.isCompatibleWith(
       presenterVersion: presenterVersion,
@@ -262,33 +219,21 @@ class PresenterSessionCoordinator {
     LocalServerHandle? candidateHandle;
 
     try {
-      if (request.mode == PresenterSessionMode.offline) {
-        await presenterCache.normalizeCachedPresenterForOffline();
-      }
-      candidateHandle = request.mode == PresenterSessionMode.offline
-          ? await candidateServer.start(sessionId: runtimeSession.sessionId)
-          : await candidateServer.startProxy(
-              sessionId: runtimeSession.sessionId,
-              presenterUrl: onlinePresenterUrl,
-            );
+      await presenterCache.normalizeCachedPresenterForOffline();
+      candidateHandle = await candidateServer.start(
+        sessionId: runtimeSession.sessionId,
+      );
 
       final launch = PresenterSessionLaunch(
-        presenterUrl: request.mode == PresenterSessionMode.offline
-            ? _withPresenterLocale(
-                candidateHandle.presenterUrl,
-                locale: request.locale,
-                direction: request.direction,
-              )
-            : _onlineSessionUrl(
-                presenterUrl: candidateHandle.presenterUrl,
-                sessionId: runtimeSession.sessionId,
-                locale: request.locale,
-                direction: request.direction,
-              ),
+        presenterUrl: _withPresenterLocale(
+          candidateHandle.presenterUrl,
+          locale: request.locale,
+          direction: request.direction,
+        ),
         sessionId: runtimeSession.sessionId,
         presenterVersion: presenterVersion,
         presenterDevVersion: presenterDevVersion,
-        presenterManifest: cachedManifest,
+        presenterManifest: currentManifest,
       );
       if (deferReplacementCommit && previousSessionId != null) {
         _stagedSession = _StagedPresenterSession(
@@ -425,24 +370,6 @@ class PresenterSessionCoordinator {
     }
   }
 
-  String _onlineSessionUrl({
-    required String presenterUrl,
-    required String sessionId,
-    required String locale,
-    required String direction,
-  }) {
-    final uri = Uri.parse(presenterUrl);
-    final base = uri
-        .replace(
-          queryParameters: <String, String>{
-            ...uri.queryParameters,
-            'sessionId': sessionId,
-          },
-        )
-        .toString();
-    return _withPresenterLocale(base, locale: locale, direction: direction);
-  }
-
   String _withPresenterLocale(
     String url, {
     required String locale,
@@ -458,14 +385,6 @@ class PresenterSessionCoordinator {
           },
         )
         .toString();
-  }
-
-  Uri? _expectedManifestUri() {
-    final explicit = bundleManifestUrl?.trim();
-    if (explicit != null && explicit.isNotEmpty) {
-      return Uri.tryParse(explicit);
-    }
-    return resolveBridgeApiRoute(apiBaseUrl, 'presenter/bundles/manifest');
   }
 
   String _requiredCachedPresenterVersion(PresenterCacheManifest manifest) {

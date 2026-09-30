@@ -82,7 +82,6 @@ class ReportingBridgeClient {
         runtimeRoot: Directory('${bridgeRoot.path}/runtime'),
       ),
       resourceCacheStore: _presenterResourceCache,
-      onlinePresenterUrl: presenterEntryUrl,
       apiBaseUrl: this.apiBaseUrl,
       bundleManifestUrl: bundleManifestUrl,
       headers: _staticHeaders,

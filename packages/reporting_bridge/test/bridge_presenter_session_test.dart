@@ -1,10 +1,184 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:archive/archive.dart';
 import 'package:reporting_bridge/reporting_bridge.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test(
+    'online session launches verified cached Presenter instead of proxy',
+    () async {
+      var upstreamRequests = 0;
+      final upstream = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      upstream.listen((request) async {
+        upstreamRequests++;
+        request.response.write('remote presenter');
+        await request.response.close();
+      });
+      addTearDown(() => upstream.close(force: true));
+      var downloads = 0;
+      final api = await _startSessionUpdateServer(
+        presenterVersion: '1.2.3',
+        bundleVersion: 'online-12',
+        devVersion: 12,
+        onDownload: () => downloads++,
+      );
+      addTearDown(() => api.close(force: true));
+      final root = await Directory.systemTemp.createTemp(
+        'bridge_session_local_',
+      );
+      addTearDown(() => root.delete(recursive: true));
+      final presenterRoot = Directory('${root.path}/presenter');
+      await _writeReadyPresenterSite(presenterRoot);
+      await _writeCachedManifest(
+        root,
+        presenterVersion: '1.2.3',
+        bundleVersion: 'online-12',
+        devVersion: 12,
+        manifestUrl:
+            'http://127.0.0.1:${api.port}/api/presenter/bundles/manifest',
+      );
+      final coordinator = _coordinator(
+        root: root,
+        apiBaseUrl: Uri.parse('http://127.0.0.1:${api.port}/'),
+      );
+      addTearDown(coordinator.dispose);
+
+      final launch = await coordinator.prepare(
+        PresenterSessionRequest(
+          sessionId: 'cached-online',
+          reportType: 'invoice',
+          reportName: 'Invoice',
+          mode: PresenterSessionMode.online,
+          seedData: const <String, dynamic>{'value': 1},
+          template: _template('invoice-template'),
+        ),
+      );
+      final client = HttpClient();
+      final request = await client.getUrl(Uri.parse(launch.presenterUrl));
+      final page = await request.close();
+      final html = await utf8.decoder.bind(page).join();
+      client.close(force: true);
+
+      expect(Uri.parse(launch.presenterUrl).host, '127.0.0.1');
+      expect(html, contains('base href'));
+      expect(upstreamRequests, 0);
+      expect(downloads, 0);
+    },
+  );
+
+  test('enforced failed update prevents online session launch', () async {
+    final api = await _startSessionUpdateServer(
+      presenterVersion: '2.0.0',
+      bundleVersion: 'broken-newer',
+      devVersion: 20,
+      enforceUpdate: true,
+      bundleBytes: const <int>[1, 2, 3],
+    );
+    addTearDown(() => api.close(force: true));
+    final root = await Directory.systemTemp.createTemp(
+      'bridge_session_enforced_',
+    );
+    addTearDown(() => root.delete(recursive: true));
+    final coordinator = _coordinator(
+      root: root,
+      apiBaseUrl: Uri.parse('http://127.0.0.1:${api.port}/'),
+    );
+    addTearDown(coordinator.dispose);
+
+    await expectLater(
+      coordinator.prepare(_onlineRequest('enforced-failure')),
+      throwsA(isA<BridgeRuntimeException>()),
+    );
+    expect(
+      await Directory('${root.path}/runtime/enforced-failure').exists(),
+      isFalse,
+    );
+    expect(coordinator.activeSessionId, isNull);
+  });
+
+  test(
+    'unenforced failed update launches previous compatible verified cache',
+    () async {
+      final api = await _startSessionUpdateServer(
+        presenterVersion: '2.0.0',
+        bundleVersion: 'broken-newer',
+        devVersion: 20,
+        bundleBytes: const <int>[1, 2, 3],
+      );
+      addTearDown(() => api.close(force: true));
+      final root = await Directory.systemTemp.createTemp(
+        'bridge_session_fallback_',
+      );
+      addTearDown(() => root.delete(recursive: true));
+      final presenterRoot = Directory('${root.path}/presenter');
+      await _writeReadyPresenterSite(presenterRoot);
+      await _writeCachedManifest(
+        root,
+        presenterVersion: '1.0.0',
+        devVersion: 10,
+        manifestUrl:
+            'http://127.0.0.1:${api.port}/api/presenter/bundles/manifest',
+      );
+      final coordinator = _coordinator(
+        root: root,
+        apiBaseUrl: Uri.parse('http://127.0.0.1:${api.port}/'),
+      );
+      addTearDown(coordinator.dispose);
+
+      final launch = await coordinator.prepare(
+        _onlineRequest('fallback-session'),
+      );
+
+      expect(launch.presenterVersion, '1.0.0');
+      expect(launch.presenterManifest?.bundleVersion, 'offline-10');
+      expect(Uri.parse(launch.presenterUrl).host, '127.0.0.1');
+      expect(await File('${presenterRoot.path}/index.html').exists(), isTrue);
+    },
+  );
+
+  test('offline session never requests manifest or bundle endpoints', () async {
+    var endpointCalls = 0;
+    final api = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    api.listen((request) async {
+      endpointCalls++;
+      request.response.statusCode = HttpStatus.internalServerError;
+      await request.response.close();
+    });
+    addTearDown(() => api.close(force: true));
+    final root = await Directory.systemTemp.createTemp(
+      'bridge_session_offline_network_',
+    );
+    addTearDown(() => root.delete(recursive: true));
+    await _writeReadyPresenterSite(Directory('${root.path}/presenter'));
+    await _writeCachedManifest(
+      root,
+      presenterVersion: '2.0.0',
+      devVersion: 20,
+      manifestUrl:
+          'http://127.0.0.1:${api.port}/api/presenter/bundles/manifest',
+    );
+    final coordinator = _coordinator(
+      root: root,
+      apiBaseUrl: Uri.parse('http://127.0.0.1:${api.port}/'),
+    );
+    addTearDown(coordinator.dispose);
+
+    await coordinator.prepare(
+      PresenterSessionRequest(
+        sessionId: 'offline-no-network',
+        reportType: 'invoice',
+        reportName: 'Invoice',
+        mode: PresenterSessionMode.offline,
+        seedData: const <String, dynamic>{'value': 1},
+        template: _template('invoice-template'),
+      ),
+    );
+
+    expect(endpointCalls, 0);
+  });
+
   test(
     'online session preserves runtime JSON and replaces active session',
     () async {
@@ -57,7 +231,7 @@ void main() {
       expect(firstUri.scheme, 'http');
       expect(firstUri.host, '127.0.0.1');
       expect(firstUri.path, '/UltimateReport/apps/presenter/index.html');
-      expect(firstUri.queryParameters['existing'], '1');
+      expect(firstUri.queryParameters['existing'], isNull);
       expect(firstUri.queryParameters['sessionId'], 'online-first');
       expect(firstUri.queryParameters['locale'], 'ar');
       expect(firstUri.queryParameters['dir'], 'rtl');
@@ -95,12 +269,10 @@ void main() {
   );
 
   test(
-    'coordinator.stop terminal-stops the shared localhost proxy server',
+    'coordinator.stop terminal-stops the shared localhost Presenter server',
     () async {
       final api = await _startManifestServer();
       addTearDown(() => api.close(force: true));
-      final upstream = await _startOnlinePresenterUpstream();
-      addTearDown(() => upstream.close(force: true));
       final root = await Directory.systemTemp.createTemp(
         'bridge_session_stop_terminal_',
       );
@@ -108,10 +280,6 @@ void main() {
       final coordinator = _coordinator(
         root: root,
         apiBaseUrl: Uri.parse('http://127.0.0.1:${api.port}/'),
-        onlinePresenterUrl: Uri.parse(
-          'http://127.0.0.1:${upstream.port}'
-          '/UltimateReport/apps/presenter/index.html?existing=1',
-        ),
       );
       addTearDown(coordinator.dispose);
 
@@ -319,6 +487,7 @@ void main() {
         apiBaseUrl: Uri.parse('https://reports.example/'),
       );
       addTearDown(coordinator.dispose);
+      await _writeReadyPresenterSite(Directory('${root.path}/presenter'));
 
       await _writeCachedManifest(
         root,
@@ -533,8 +702,6 @@ void main() {
     () async {
       final api = await _startManifestServer();
       addTearDown(() => api.close(force: true));
-      final upstream = await _startOnlinePresenterUpstream();
-      addTearDown(() => upstream.close(force: true));
       final root = await Directory.systemTemp.createTemp(
         'bridge_session_staged_share_commit_',
       );
@@ -542,10 +709,6 @@ void main() {
       final coordinator = _coordinator(
         root: root,
         apiBaseUrl: Uri.parse('http://127.0.0.1:${api.port}/'),
-        onlinePresenterUrl: Uri.parse(
-          'http://127.0.0.1:${upstream.port}'
-          '/UltimateReport/apps/presenter/index.html?existing=1',
-        ),
       );
       addTearDown(coordinator.dispose);
 
@@ -611,8 +774,6 @@ void main() {
     () async {
       final api = await _startManifestServer();
       addTearDown(() => api.close(force: true));
-      final upstream = await _startOnlinePresenterUpstream();
-      addTearDown(() => upstream.close(force: true));
       final root = await Directory.systemTemp.createTemp(
         'bridge_session_staged_share_discard_',
       );
@@ -620,10 +781,6 @@ void main() {
       final coordinator = _coordinator(
         root: root,
         apiBaseUrl: Uri.parse('http://127.0.0.1:${api.port}/'),
-        onlinePresenterUrl: Uri.parse(
-          'http://127.0.0.1:${upstream.port}'
-          '/UltimateReport/apps/presenter/index.html?existing=1',
-        ),
       );
       addTearDown(coordinator.dispose);
 
@@ -678,8 +835,6 @@ void main() {
     () async {
       final api = await _startManifestServer();
       addTearDown(() => api.close(force: true));
-      final upstream = await _startOnlinePresenterUpstream();
-      addTearDown(() => upstream.close(force: true));
       final root = await Directory.systemTemp.createTemp(
         'bridge_session_staged_mixed_',
       );
@@ -695,14 +850,7 @@ void main() {
             'http://127.0.0.1:${api.port}/api/presenter/bundles/manifest',
       );
 
-      final coordinator = _coordinator(
-        root: root,
-        apiBaseUrl: apiBaseUrl,
-        onlinePresenterUrl: Uri.parse(
-          'http://127.0.0.1:${upstream.port}'
-          '/UltimateReport/apps/presenter/index.html?existing=1',
-        ),
-      );
+      final coordinator = _coordinator(root: root, apiBaseUrl: apiBaseUrl);
       addTearDown(coordinator.dispose);
 
       final active = await coordinator.prepare(
@@ -732,8 +880,7 @@ void main() {
       expect(
         candidateUri.port,
         isNot(activeUri.port),
-        reason:
-            'proxy Presenter and static offline Presenter are incompatible on one server',
+        reason: 'staged sessions retain distinct localhost server handles',
       );
       expect(
         await _httpStatus(_runtimeSeedUrl(activeUri, 'active-online')),
@@ -768,7 +915,6 @@ void main() {
 PresenterSessionCoordinator _coordinator({
   required Directory root,
   required Uri apiBaseUrl,
-  Uri? onlinePresenterUrl,
 }) {
   return PresenterSessionCoordinator(
     presenterCache: PresenterCacheService(
@@ -777,11 +923,6 @@ PresenterSessionCoordinator _coordinator({
     runtimeStorage: RuntimeSessionStorage(
       runtimeRoot: Directory('${root.path}/runtime'),
     ),
-    onlinePresenterUrl:
-        onlinePresenterUrl ??
-        Uri.parse(
-          'https://reports.example/UltimateReport/apps/presenter/index.html?existing=1',
-        ),
     apiBaseUrl: apiBaseUrl,
     headers: const <String, String>{
       'X-Tenant-Id': 'tenant_demo',
@@ -789,6 +930,16 @@ PresenterSessionCoordinator _coordinator({
     },
   );
 }
+
+PresenterSessionRequest _onlineRequest(String sessionId) =>
+    PresenterSessionRequest(
+      sessionId: sessionId,
+      reportType: 'invoice',
+      reportName: 'Invoice',
+      mode: PresenterSessionMode.online,
+      seedData: const <String, dynamic>{'value': 1},
+      template: _template('invoice-template'),
+    );
 
 CachedTemplate _template(String id) => CachedTemplate(
   id: id,
@@ -844,13 +995,14 @@ Future<void> _writeCachedManifest(
   Directory root, {
   required String presenterVersion,
   required int devVersion,
+  String? bundleVersion,
   String manifestUrl = 'https://reports.example/api/presenter/bundles/manifest',
 }) async {
   await File('${root.path}/presenter_manifest.json').writeAsString(
     jsonEncode(<String, dynamic>{
       'manifestUrl': manifestUrl,
       'presenterVersion': presenterVersion,
-      'bundleVersion': 'offline-$devVersion',
+      'bundleVersion': bundleVersion ?? 'offline-$devVersion',
       'devVersion': devVersion,
     }),
   );
@@ -871,9 +1023,13 @@ Future<HttpServer> _startManifestServer() async {
             'presenterVersion': '1.2.3',
             'bundleVersion': 'online-12',
             'devVersion': 12,
+            'downloadUrl': '/api/presenter/bundles/online-12',
           },
         }),
       );
+    } else if (request.uri.path == '/api/presenter/bundles/online-12') {
+      request.response.headers.contentType = ContentType.binary;
+      request.response.add(_validPresenterZipBytes());
     } else {
       request.response.statusCode = HttpStatus.notFound;
     }
@@ -882,12 +1038,43 @@ Future<HttpServer> _startManifestServer() async {
   return server;
 }
 
-Future<HttpServer> _startOnlinePresenterUpstream() async {
+List<int> _validPresenterZipBytes() {
+  final archive = Archive();
+  for (final entry in _validPureDartBundleEntries().entries) {
+    archive.addFile(ArchiveFile.string(entry.key, entry.value));
+  }
+  return ZipEncoder().encode(archive);
+}
+
+Future<HttpServer> _startSessionUpdateServer({
+  required String presenterVersion,
+  required String bundleVersion,
+  required int devVersion,
+  bool enforceUpdate = false,
+  List<int> bundleBytes = const <int>[1, 2, 3],
+  void Function()? onDownload,
+}) async {
   final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
   server.listen((request) async {
-    if (request.uri.path.startsWith('/UltimateReport/apps/presenter/')) {
-      request.response.headers.contentType = ContentType.html;
-      request.response.write('<html>online presenter</html>');
+    if (request.uri.path == '/api/presenter/bundles/manifest') {
+      request.response.headers.contentType = ContentType.json;
+      request.response.write(
+        jsonEncode(<String, Object>{
+          'success': true,
+          'data': <String, Object>{
+            'available': true,
+            'presenterVersion': presenterVersion,
+            'bundleVersion': bundleVersion,
+            'devVersion': devVersion,
+            'downloadUrl': '/api/presenter/bundles/download',
+            'enforceUpdate': enforceUpdate,
+          },
+        }),
+      );
+    } else if (request.uri.path == '/api/presenter/bundles/download') {
+      onDownload?.call();
+      request.response.headers.contentType = ContentType.binary;
+      request.response.add(bundleBytes);
     } else {
       request.response.statusCode = HttpStatus.notFound;
     }

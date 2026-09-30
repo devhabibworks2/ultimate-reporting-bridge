@@ -188,6 +188,54 @@ void main() {
     expect(await cache.manifestFile.readAsString(), previousManifest);
     expect(await cache.isReady(), isTrue);
   });
+
+  test(
+    'identical remote manifest reuses cache without downloading bundle',
+    () async {
+      await _writeReadyPresenter(presenterRoot, cache.manifestFile);
+      const manifestPath = '/manifest';
+      var bundleRequests = 0;
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        if (request.uri.path == manifestPath) {
+          request.response.headers.contentType = ContentType.json;
+          request.response.write(
+            jsonEncode(<String, Object>{
+              'presenterVersion': '1.0.0',
+              'bundleVersion': 'test-bundle',
+              'devVersion': 1,
+              'downloadUrl': '/bundle.zip',
+              'available': true,
+            }),
+          );
+        } else if (request.uri.path == '/bundle.zip') {
+          bundleRequests++;
+          request.response.add(_presenterZipBytes());
+        } else {
+          request.response.statusCode = HttpStatus.notFound;
+        }
+        await request.response.close();
+      });
+      await cache.manifestFile.writeAsString(
+        jsonEncode(<String, Object>{
+          'manifestUrl': 'http://127.0.0.1:${server.port}$manifestPath',
+          'presenterVersion': '1.0.0',
+          'bundleVersion': 'test-bundle',
+          'devVersion': 1,
+        }),
+      );
+
+      final manifest = await cache.ensureCurrentPresenterSite(
+        bundleManifestUrl: 'http://127.0.0.1:${server.port}$manifestPath',
+        apiBaseUrl: null,
+      );
+
+      expect(manifest.bundleVersion, 'test-bundle');
+      expect(bundleRequests, 0);
+      expect(await cache.isReady(), isTrue);
+    },
+  );
 }
 
 enum _ResourceManifestMode { valid, missingEntry, tamperedHash }

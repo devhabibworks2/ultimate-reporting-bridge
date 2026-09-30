@@ -59,6 +59,16 @@ class RemotePresenterManifest {
   final DateTime? updatedAt;
 }
 
+class PresenterCacheUpdateException extends BridgeRuntimeException {
+  const PresenterCacheUpdateException({
+    required String code,
+    required String message,
+    required this.enforceUpdate,
+  }) : super(code, message);
+
+  final bool enforceUpdate;
+}
+
 class PresenterCacheService {
   PresenterCacheService({
     required this.presenterRoot,
@@ -233,6 +243,101 @@ class PresenterCacheService {
     );
   }
 
+  Future<PresenterCacheManifest?> readCachedManifest({
+    required String? bundleManifestUrl,
+    required String? apiBaseUrl,
+  }) async {
+    final expectedUri = _resolveManifestUri(
+      bundleManifestUrl: bundleManifestUrl,
+      apiBaseUrl: apiBaseUrl,
+    );
+    if (expectedUri == null || !await isReady()) return null;
+
+    try {
+      final decoded = jsonDecode(await manifestFile.readAsString());
+      if (decoded is! Map) return null;
+      final manifestUri = Uri.tryParse(
+        decoded['manifestUrl']?.toString().trim() ?? '',
+      );
+      final presenterVersion = decoded['presenterVersion']?.toString().trim();
+      final bundleVersion = decoded['bundleVersion']?.toString().trim();
+      final devVersion = _asInt(decoded['devVersion']);
+      if (manifestUri != expectedUri ||
+          presenterVersion == null ||
+          BridgeSemanticVersion.tryParse(presenterVersion) == null ||
+          bundleVersion == null ||
+          bundleVersion.isEmpty ||
+          devVersion == null) {
+        return null;
+      }
+
+      return PresenterCacheManifest(
+        presenterVersion: presenterVersion,
+        bundleVersion: bundleVersion,
+        devVersion: devVersion,
+        rootPath: presenterRoot.path,
+        updatedAt: DateTime.tryParse(decoded['updatedAt']?.toString() ?? ''),
+        syncedAt: DateTime.tryParse(decoded['syncedAt']?.toString() ?? ''),
+      );
+    } on FormatException {
+      return null;
+    } on FileSystemException {
+      return null;
+    }
+  }
+
+  Future<PresenterCacheManifest> ensureCurrentPresenterSite({
+    required String? bundleManifestUrl,
+    required String? apiBaseUrl,
+    Map<String, String> headers = const <String, String>{},
+    void Function(double progress)? onProgress,
+  }) async {
+    final manifestUri = _requiredManifestUri(
+      bundleManifestUrl: bundleManifestUrl,
+      apiBaseUrl: apiBaseUrl,
+    );
+    final cached = await readCachedManifest(
+      bundleManifestUrl: bundleManifestUrl,
+      apiBaseUrl: apiBaseUrl,
+    );
+    RemotePresenterManifest remote;
+    try {
+      remote = await fetchRemoteManifest(
+        bundleManifestUrl: bundleManifestUrl,
+        apiBaseUrl: apiBaseUrl,
+        headers: headers,
+      );
+    } on Object catch (error) {
+      throw _updateException(error, enforceUpdate: false);
+    }
+
+    if (!remote.available) {
+      throw PresenterCacheUpdateException(
+        code: BridgeRuntimeErrorCodes.offlineAssetsNotReady,
+        message: 'Presenter bundle is not available from manifest endpoint.',
+        enforceUpdate: remote.enforceUpdate,
+      );
+    }
+    if (cached != null &&
+        cached.presenterVersion == remote.presenterVersion &&
+        cached.bundleVersion == remote.bundleVersion &&
+        cached.devVersion == remote.devVersion) {
+      onProgress?.call(1);
+      return cached;
+    }
+
+    try {
+      return await _downloadAndActivate(
+        manifestUri: manifestUri,
+        remote: remote,
+        headers: headers,
+        onProgress: onProgress,
+      );
+    } on Object catch (error) {
+      throw _updateException(error, enforceUpdate: remote.enforceUpdate);
+    }
+  }
+
   Future<PresenterCacheManifest> syncPresenterSite({
     required String? bundleManifestUrl,
     required String? apiBaseUrl,
@@ -259,6 +364,24 @@ class PresenterCacheService {
         'Presenter bundle is not available from manifest endpoint.',
       );
     }
+    return _downloadAndActivate(
+      manifestUri: manifestUri,
+      remote: remote,
+      headers: headers,
+      onProgress: onProgress,
+    );
+  }
+
+  Future<PresenterCacheManifest> _downloadAndActivate({
+    required Uri manifestUri,
+    required RemotePresenterManifest remote,
+    required Map<String, String> headers,
+    void Function(double progress)? onProgress,
+  }) async {
+    void report(num value) =>
+        onProgress?.call(value.clamp(0.0, 1.0).toDouble());
+
+    report(0.05);
     final rawDownloadUrl = remote.downloadUrl;
     if (rawDownloadUrl == null || rawDownloadUrl.isEmpty) {
       throw BridgeRuntimeException(
@@ -415,6 +538,24 @@ class PresenterCacheService {
       return manifestUri.replace(path: '$mountPrefix$rawDownloadUrl');
     }
     return manifestUri.resolve(rawDownloadUrl);
+  }
+
+  PresenterCacheUpdateException _updateException(
+    Object error, {
+    required bool enforceUpdate,
+  }) {
+    if (error is BridgeRuntimeException) {
+      return PresenterCacheUpdateException(
+        code: error.code,
+        message: error.message,
+        enforceUpdate: enforceUpdate,
+      );
+    }
+    return PresenterCacheUpdateException(
+      code: BridgeRuntimeErrorCodes.offlineAssetsNotReady,
+      message: 'Presenter cache update failed: $error',
+      enforceUpdate: enforceUpdate,
+    );
   }
 
   Future<Directory> _extractBundleToStaging(List<int> zipBytes) async {
