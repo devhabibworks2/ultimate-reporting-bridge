@@ -47,6 +47,7 @@ class _BridgePresenterViewState extends State<BridgePresenterView> {
   void initState() {
     super.initState();
     _surface = _createSurface();
+    widget.surfaceBinding.beginPreviewTiming(widget.launch.sessionId);
     unawaited(_startSurface(_surface, ++_surfaceGeneration));
   }
 
@@ -65,28 +66,14 @@ class _BridgePresenterViewState extends State<BridgePresenterView> {
     }
 
     oldWidget.surfaceBinding.detach();
-    final previous = _surface;
-    _surface = _createSurface();
+    widget.surfaceBinding.beginPreviewTiming(widget.launch.sessionId);
     final generation = ++_surfaceGeneration;
     _surfaceError = null;
-    unawaited(_replaceSurface(previous, _surface, generation));
+    unawaited(_startSurface(_surface, generation));
   }
 
   HeadlessPresenterSurface _createSurface() =>
       widget.headlessSurfaceFactory?.call() ?? InAppHeadlessPresenterSurface();
-
-  Future<void> _replaceSurface(
-    HeadlessPresenterSurface previous,
-    HeadlessPresenterSurface next,
-    int generation,
-  ) async {
-    await _shutdownSurface(previous);
-    if (!mounted || generation != _surfaceGeneration) {
-      await _shutdownSurface(next);
-      return;
-    }
-    await _startSurface(next, generation);
-  }
 
   Future<void> _startSurface(
     HeadlessPresenterSurface surface,
@@ -142,7 +129,12 @@ class _BridgePresenterViewState extends State<BridgePresenterView> {
     if (builder != null) {
       return builder(context, cachedPdf.bytes);
     }
-    return BridgePdfView(bytes: cachedPdf.bytes);
+    return BridgePdfView(
+      bytes: cachedPdf.bytes,
+      onDocumentOpenStarted: widget.surfaceBinding.markViewerOpenStarted,
+      onDocumentLoaded: widget.surfaceBinding.markViewerDocumentLoaded,
+      onFirstFrameAfterDocument: widget.surfaceBinding.markViewerFirstFrame,
+    );
   }
 
   @override

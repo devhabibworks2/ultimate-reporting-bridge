@@ -160,7 +160,9 @@ class DefaultReportingBridgeFlutterClient
         bridgeClient: _bridgeClient,
         preferences: _preferences,
         filePlatform: _filePlatform,
-        surfaceBinding: PresenterSurfaceBinding(),
+        surfaceBinding: PresenterSurfaceBinding(
+          diagnostics: _connection.diagnostics,
+        ),
         printPlatform: _printPlatform,
         thermalPrinterSettings: _thermalPrinterSettings,
         supportSharePlatform: _supportSharePlatform,

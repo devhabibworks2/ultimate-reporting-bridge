@@ -10,11 +10,17 @@ class BridgePdfView extends StatefulWidget {
     super.key,
     required this.bytes,
     this.onViewerError,
+    this.onDocumentOpenStarted,
+    this.onDocumentLoaded,
+    this.onFirstFrameAfterDocument,
     @visibleForTesting this.documentFactory,
   });
 
   final Uint8List bytes;
   final ValueChanged<Object>? onViewerError;
+  final VoidCallback? onDocumentOpenStarted;
+  final VoidCallback? onDocumentLoaded;
+  final VoidCallback? onFirstFrameAfterDocument;
 
   @visibleForTesting
   final BridgePdfDocumentFactory? documentFactory;
@@ -47,6 +53,7 @@ class _BridgePdfViewState extends State<BridgePdfView> {
   }
 
   PdfControllerPinch _createController() {
+    widget.onDocumentOpenStarted?.call();
     final factory = widget.documentFactory ?? PdfDocument.openData;
     final document = Future<PdfDocument>.sync(() => factory(widget.bytes)).then(
       (value) => value,
@@ -79,6 +86,16 @@ class _BridgePdfViewState extends State<BridgePdfView> {
     return PdfViewPinch(
       key: const Key('bridge-pdf-view'),
       controller: _controller,
+      minScale: 0.5,
+      maxScale: 8,
+      onDocumentLoaded: (_) {
+        widget.onDocumentLoaded?.call();
+        if (widget.onFirstFrameAfterDocument != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) widget.onFirstFrameAfterDocument?.call();
+          });
+        }
+      },
       onDocumentError: _handleViewerError,
     );
   }

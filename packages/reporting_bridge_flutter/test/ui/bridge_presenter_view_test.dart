@@ -23,7 +23,14 @@ void main() {
     await cache.resolve(
       () async => PresenterCachedPdf(bytes: bytes, filename: 'report.pdf'),
     );
-    final binding = PresenterSurfaceBinding(cache: cache);
+    final timingRecords = <BridgeLogRecord>[];
+    final binding = PresenterSurfaceBinding(
+      cache: cache,
+      diagnostics: BridgeDiagnostics(
+        sink: timingRecords.add,
+        minimumLevel: BridgeLogLevel.debug,
+      ),
+    );
     final surfaces = <_FakeHeadlessSurface>[];
 
     await tester.pumpWidget(
@@ -46,11 +53,15 @@ void main() {
 
     expect(surfaces, hasLength(1));
     expect(surfaces.single.startCalls, 1);
+    expect(
+      timingRecords.map((record) => record.event),
+      contains('previewTiming.surfaceStart'),
+    );
     final probe = tester.widget<_BytesProbe>(find.byType(_BytesProbe));
     expect(identical(probe.bytes, bytes), isTrue);
   });
 
-  testWidgets('replacement shuts down runtime and clears prior PDF', (
+  testWidgets('replacement reuses warm runtime and clears prior PDF', (
     tester,
   ) async {
     final cache = PresenterPdfExportCache();
@@ -87,14 +98,14 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(surfaces.length, 2);
-    expect(surfaces.first.shutdownCalls, 1);
-    expect(surfaces.last.startCalls, 1);
+    expect(surfaces, hasLength(1));
+    expect(surfaces.single.startCalls, 2);
+    expect(surfaces.single.shutdownCalls, 0);
     expect(binding.cachedPdf, isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
-    expect(surfaces.last.shutdownCalls, 1);
+    expect(surfaces.single.shutdownCalls, 1);
   });
 }
 
