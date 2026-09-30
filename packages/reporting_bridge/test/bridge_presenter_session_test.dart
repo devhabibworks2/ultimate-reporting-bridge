@@ -44,6 +44,15 @@ void main() {
         ),
       );
 
+      final firstSessionJson =
+          jsonDecode(
+                await File(
+                  '${root.path}/runtime/online-first/session.json',
+                ).readAsString(),
+              )
+              as Map;
+      expect(firstSessionJson['apiBaseUrl'], 'http://127.0.0.1:${api.port}/');
+
       final firstUri = Uri.parse(first.presenterUrl);
       expect(firstUri.scheme, 'http');
       expect(firstUri.host, '127.0.0.1');
@@ -174,6 +183,14 @@ void main() {
       );
 
       final uri = Uri.parse(launch.presenterUrl);
+      final sessionJson =
+          jsonDecode(
+                await File(
+                  '${root.path}/runtime/offline-one/session.json',
+                ).readAsString(),
+              )
+              as Map;
+      expect(sessionJson.containsKey('apiBaseUrl'), isFalse);
       expect(uri.host, '127.0.0.1');
       expect(uri.path, '/UltimateReport/apps/presenter/index.html');
       expect(uri.queryParameters['sessionId'], 'offline-one');

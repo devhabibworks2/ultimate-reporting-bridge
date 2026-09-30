@@ -6,6 +6,7 @@ import 'bridge_config.dart';
 import 'bridge_contract.dart';
 import 'bridge_local_server.dart';
 import 'bridge_presenter_cache.dart';
+import 'bridge_presenter_resource_cache.dart';
 import 'bridge_runtime_error.dart';
 import 'bridge_runtime_storage.dart';
 import 'bridge_semantic_version.dart';
@@ -65,15 +66,24 @@ class PresenterSessionCoordinator {
   PresenterSessionCoordinator({
     required this.presenterCache,
     required this.runtimeStorage,
+    PresenterResourceCacheStore? resourceCacheStore,
     required this.onlinePresenterUrl,
     required Uri apiBaseUrl,
     this.bundleManifestUrl,
     Map<String, String> headers = const <String, String>{},
   }) : apiBaseUrl = _withTrailingSlash(apiBaseUrl),
+       resourceCacheStore =
+           resourceCacheStore ??
+           PresenterResourceCacheStore(
+             cacheRoot: Directory(
+               '${runtimeStorage.runtimeRoot.parent.path}/presenter_resources',
+             ),
+           ),
        _headers = filterPresenterBridgeHeaders(headers);
 
   final PresenterCacheService presenterCache;
   final RuntimeSessionStorage runtimeStorage;
+  final PresenterResourceCacheStore resourceCacheStore;
   final Uri onlinePresenterUrl;
   final Uri apiBaseUrl;
   final String? bundleManifestUrl;
@@ -229,6 +239,9 @@ class PresenterSessionCoordinator {
         mode: request.mode.name,
         locale: request.locale,
         direction: request.direction,
+        apiBaseUrl: request.mode == PresenterSessionMode.online
+            ? normalizeBridgeApiBaseUrl(apiBaseUrl).removeFragment().toString()
+            : null,
         seedData: request.seedData,
         templateDocument: request.template.document,
         selectedTemplate: request.template.selectedTemplate,
@@ -244,6 +257,7 @@ class PresenterSessionCoordinator {
         : LocalPresenterServer(
             presenterRoot: presenterCache.presenterRoot,
             runtimeRoot: runtimeStorage.runtimeRoot,
+            resourceCacheStore: resourceCacheStore,
           );
     LocalServerHandle? candidateHandle;
 

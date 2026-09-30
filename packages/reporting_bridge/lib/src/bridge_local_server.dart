@@ -1,5 +1,7 @@
 import 'dart:io';
+import 'dart:typed_data';
 
+import 'bridge_presenter_resource_cache.dart';
 import 'bridge_runtime_error.dart';
 
 class PortPolicy {
@@ -26,10 +28,12 @@ class LocalPresenterServer {
   LocalPresenterServer({
     required this.presenterRoot,
     required this.runtimeRoot,
+    this.resourceCacheStore,
   });
 
   final Directory presenterRoot;
   final Directory runtimeRoot;
+  final PresenterResourceCacheStore? resourceCacheStore;
   static const String _presenterRoutePrefix = '/UltimateReport/apps/presenter/';
   HttpServer? _server;
   final Set<String> _sessionIds = <String>{};
@@ -216,16 +220,24 @@ class LocalPresenterServer {
       await request.response.close();
       return;
     }
-    if (request.method != 'GET' && request.method != 'HEAD') {
-      await _sendMethodNotAllowed(request);
-      return;
-    }
-
     late final String path;
     try {
       path = Uri.decodeComponent(request.uri.path);
     } on FormatException {
       await _sendNotFound(request);
+      return;
+    }
+
+    if (path.startsWith('/runtime/')) {
+      final segments = path.split('/');
+      if (segments.length >= 4 && segments[3] == 'resource-cache') {
+        await _handleResourceCacheRequest(request, segments);
+        return;
+      }
+    }
+
+    if (request.method != 'GET' && request.method != 'HEAD') {
+      await _sendMethodNotAllowed(request);
       return;
     }
 
@@ -257,6 +269,73 @@ class LocalPresenterServer {
       return;
     }
     await file.openRead().pipe(request.response);
+  }
+
+  Future<void> _handleResourceCacheRequest(
+    HttpRequest request,
+    List<String> segments,
+  ) async {
+    if (segments.length < 3 || !_sessionIds.contains(segments[2])) {
+      await _sendNotFound(request);
+      return;
+    }
+    if (segments.length != 5 || segments[4].isEmpty) {
+      request.response.statusCode = HttpStatus.badRequest;
+      await request.response.close();
+      return;
+    }
+    final key = segments[4];
+    if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(key)) {
+      request.response.statusCode = HttpStatus.badRequest;
+      await request.response.close();
+      return;
+    }
+    final store = resourceCacheStore;
+    if (store == null) {
+      await _sendNotFound(request);
+      return;
+    }
+
+    if (request.method == 'GET') {
+      final bytes = await store.read(key);
+      if (bytes == null) {
+        await _sendNotFound(request);
+        return;
+      }
+      request.response
+        ..statusCode = HttpStatus.ok
+        ..headers.contentType = ContentType.binary
+        ..contentLength = bytes.length;
+      request.response.add(bytes);
+      await request.response.close();
+      return;
+    }
+    if (request.method != 'PUT') {
+      await _sendMethodNotAllowed(request);
+      return;
+    }
+
+    const maxEntryBytes = 5 * 1024 * 1024;
+    final body = BytesBuilder(copy: false);
+    var length = 0;
+    await for (final chunk in request) {
+      length += chunk.length;
+      if (length > maxEntryBytes) {
+        request.response.statusCode = HttpStatus.requestEntityTooLarge;
+        await request.response.close();
+        return;
+      }
+      body.add(chunk);
+    }
+    try {
+      await store.write(key, body.takeBytes());
+    } on ArgumentError {
+      request.response.statusCode = HttpStatus.requestEntityTooLarge;
+      await request.response.close();
+      return;
+    }
+    request.response.statusCode = HttpStatus.noContent;
+    await request.response.close();
   }
 
   Future<void> _proxyPresenterRequest(
@@ -339,14 +418,14 @@ class LocalPresenterServer {
 
   Future<void> _sendMethodNotAllowed(HttpRequest request) async {
     request.response.statusCode = HttpStatus.methodNotAllowed;
-    request.response.headers.set('Allow', 'GET, HEAD, OPTIONS');
+    request.response.headers.set('Allow', 'GET, HEAD, PUT, OPTIONS');
     await request.response.close();
   }
 
   void _addCommonHeaders(HttpResponse response) {
     response.headers
       ..set('Access-Control-Allow-Origin', '*')
-      ..set('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS')
+      ..set('Access-Control-Allow-Methods', 'GET, HEAD, PUT, OPTIONS')
       ..set('Access-Control-Allow-Headers', '*')
       ..set('Cache-Control', 'no-store');
   }
