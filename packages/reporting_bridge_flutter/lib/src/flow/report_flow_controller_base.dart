@@ -1064,9 +1064,6 @@ class ReportFlowControllerImpl
     if (!_acceptPresenterCallback()) return;
     final normalized = progress.clamp(0, 1).toDouble();
     _set(_value.copyWith(webViewLoadProgress: normalized));
-    if (normalized >= 1) {
-      _activateLegacyPresenterPageLoaded();
-    }
   }
 
   @override
@@ -1087,7 +1084,6 @@ class ReportFlowControllerImpl
     if (!_value.presenterProtocolReady) {
       _failPresenterCompatibility(
         'Presenter lifecycle contract was not acknowledged.',
-        rendered: true,
       );
       return;
     }
@@ -1170,7 +1166,6 @@ class ReportFlowControllerImpl
             technicalPath: failure.technicalPath,
             details: failure.details,
           );
-    if (_activateLegacyPresenterFallback(renderFailure)) return;
     _set(
       _value.copyWith(
         stage: ReportFlowStage.failed,
@@ -1552,7 +1547,6 @@ class ReportFlowControllerImpl
       final failure = const ReportFlowFailure(
         code: ReportFlowFailureCode.renderTimedOut,
       );
-      if (_activateLegacyPresenterFallback(failure)) return;
       _set(
         _value.copyWith(
           stage: ReportFlowStage.failed,
@@ -1573,13 +1567,12 @@ class ReportFlowControllerImpl
     _renderWatchdog = null;
   }
 
-  void _failPresenterCompatibility(String diagnostic, {bool rendered = false}) {
+  void _failPresenterCompatibility(String diagnostic) {
     _cancelRenderWatchdog();
     final failure = ReportFlowFailure(
       code: ReportFlowFailureCode.presenterIncompatible,
       diagnostic: diagnostic,
     );
-    if (_activateLegacyPresenterFallback(failure, rendered: rendered)) return;
     _set(
       _value.copyWith(
         stage: ReportFlowStage.failed,
@@ -1606,53 +1599,6 @@ class ReportFlowControllerImpl
     if (!_matchesSession(sessionId)) return false;
     return _value.stage == ReportFlowStage.previewing ||
         _value.stage == ReportFlowStage.failed;
-  }
-
-  bool _activateLegacyPresenterPageLoaded() {
-    if (!_features.allowLegacyPresenterFallback ||
-        _value.stage != ReportFlowStage.previewing ||
-        _value.presenterLaunch == null ||
-        _value.presenterProtocolReady ||
-        _value.renderStatus != PresenterRenderStatus.loading ||
-        _value.webViewLoadProgress < 1) {
-      return false;
-    }
-    _cancelRenderWatchdog();
-    _set(
-      _value.copyWith(
-        previewLoad: ReportOperationStatus.succeeded,
-        renderStatus: PresenterRenderStatus.ready,
-        webViewLoadProgress: 1,
-        clearFailure: true,
-      ),
-    );
-    _addEvent(const ReportFlowEvent(type: ReportFlowEventType.previewReady));
-    return true;
-  }
-
-  bool _activateLegacyPresenterFallback(
-    ReportFlowFailure failure, {
-    bool rendered = false,
-  }) {
-    if (!_features.allowLegacyPresenterFallback ||
-        _value.presenterLaunch == null ||
-        (!rendered && _value.webViewLoadProgress < 1)) {
-      return false;
-    }
-    _cancelRenderWatchdog();
-    _set(
-      _value.copyWith(
-        stage: ReportFlowStage.previewing,
-        previewLoad: ReportOperationStatus.succeeded,
-        renderStatus: PresenterRenderStatus.ready,
-        webViewLoadProgress: 1,
-        failure: failure,
-      ),
-    );
-    _addEvent(
-      ReportFlowEvent(type: ReportFlowEventType.failure, failure: failure),
-    );
-    return true;
   }
 
   bool get _exportReady =>

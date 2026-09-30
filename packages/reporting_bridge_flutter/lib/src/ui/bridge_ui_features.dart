@@ -10,7 +10,6 @@ class BridgeUiFeatures {
     this.showSharePdf = true,
     this.showSettings = true,
     this.showDevelopmentSupport = true,
-    this.allowLegacyPresenterFallback = false,
   });
 
   final bool allowOfflineMode;
@@ -28,10 +27,6 @@ class BridgeUiFeatures {
   /// diagnostic data export can disable it explicitly.
   final bool showDevelopmentSupport;
 
-  /// Temporary compatibility mode for a deployed Presenter that renders and
-  /// exports correctly but does not yet emit the current lifecycle contract.
-  final bool allowLegacyPresenterFallback;
-
   BridgeUiFeatures restrictTo(ReportActionPolicy policy) => BridgeUiFeatures(
     allowOfflineMode: allowOfflineMode,
     showCurrentTemplate: showCurrentTemplate,
@@ -41,7 +36,6 @@ class BridgeUiFeatures {
     showSharePdf: showSharePdf && policy.canSharePdf,
     showSettings: showSettings,
     showDevelopmentSupport: showDevelopmentSupport,
-    allowLegacyPresenterFallback: allowLegacyPresenterFallback,
   );
 
   bool get hasVisibleOutputAction => showPrint || showSavePdf || showSharePdf;

@@ -369,11 +369,10 @@ class _PersistentPreviewFlow extends StatelessWidget {
     );
     final overlayActive = overlay != null;
 
-    // Always keep the same Stack/preview subtree shape across Preview and
-    // settings-owned stages. Changing from `_PreviewPage` directly to a Stack
-    // The opaque overlay owns input and semantics while the embedded PDF
-    // preview stays mounted underneath. BridgePresenterView manages the
-    // headless Presenter runtime independently from this overlay.
+    // Keep the same Stack/preview subtree across Preview and settings-owned
+    // stages so the embedded PDF viewer remains mounted under the overlay.
+    // The opaque overlay owns input and semantics while BridgePresenterView
+    // manages the headless Presenter runtime independently.
     return Stack(
       fit: StackFit.expand,
       children: <Widget>[

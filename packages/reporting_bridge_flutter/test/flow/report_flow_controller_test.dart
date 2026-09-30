@@ -755,36 +755,31 @@ void main() {
     },
   );
 
-  test(
-    'legacy fallback becomes usable immediately when the visible page loads',
-    () async {
-      final controller = createController(
-        features: const BridgeUiFeatures(allowLegacyPresenterFallback: true),
-      );
-      addTearDown(controller.dispose);
+  test('page load alone cannot make Presenter output ready', () async {
+    final controller = createController();
+    addTearDown(controller.dispose);
 
-      await controller.initialize();
-      await controller.continueFromPreparation();
-      await controller.preparePreview();
-      controller.presenterLoadStarted();
-      controller.presenterLoadProgress(1);
+    await controller.initialize();
+    await controller.continueFromPreparation();
+    await controller.preparePreview();
+    controller.presenterLoadStarted();
+    controller.presenterLoadProgress(1);
 
-      expect(controller.value.stage, ReportFlowStage.previewing);
-      expect(controller.value.previewLoad, ReportOperationStatus.succeeded);
-      expect(controller.value.renderStatus, PresenterRenderStatus.ready);
-      expect(controller.value.webViewLoadProgress, 1);
-      expect(controller.value.presenterProtocolReady, isFalse);
-      expect(controller.value.failure, isNull);
-      expect(controller.value.exportReady, isFalse);
-    },
-  );
+    expect(controller.value.stage, ReportFlowStage.previewing);
+    expect(controller.value.previewLoad, ReportOperationStatus.running);
+    expect(controller.value.renderStatus, PresenterRenderStatus.loading);
+    expect(controller.value.webViewLoadProgress, 1);
+    expect(controller.value.presenterProtocolReady, isFalse);
+    expect(controller.value.failure, isNull);
+    expect(controller.value.exportReady, isFalse);
+    expect(controller.outputReady, isFalse);
+  });
 
   test(
     'late Preview callbacks cannot relaunch Preview over resource settings',
     () async {
       final controller = createController(
         renderTimeout: const Duration(milliseconds: 20),
-        features: const BridgeUiFeatures(allowLegacyPresenterFallback: true),
       );
       addTearDown(controller.dispose);
 
