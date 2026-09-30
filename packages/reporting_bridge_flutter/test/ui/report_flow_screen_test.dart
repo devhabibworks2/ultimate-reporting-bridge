@@ -959,49 +959,42 @@ void main() {
   });
 
   testWidgets(
-    'Preview does not enable navigation override without an allow policy',
+    'Preview has no visible WebView; navigation policy belongs to the headless runtime',
     (WidgetTester tester) async {
-      final platform = _TestInAppWebViewPlatform();
-      InAppWebViewPlatform.instance = platform;
-      final controller = _FakeController(_previewState());
-      await _pumpFlow(tester, controller);
-
-      final webView = tester.widget<InAppWebView>(find.byType(InAppWebView));
-      expect(
-        webView.platform.params.initialSettings?.useShouldOverrideUrlLoading,
-        isNot(true),
-      );
-      expect(webView.platform.params.shouldOverrideUrlLoading, isNull);
-    },
-  );
-
-  testWidgets(
-    'Preview disables native WebView zoom so Presenter is the only zoom authority',
-    (WidgetTester tester) async {
-      final platform = _TestInAppWebViewPlatform();
-      InAppWebViewPlatform.instance = platform;
-      final controller = _FakeController(_previewState());
-      await _pumpFlow(tester, controller);
-
-      final webView = tester.widget<InAppWebView>(find.byType(InAppWebView));
-      expect(webView.platform.params.initialSettings?.supportZoom, isFalse);
-    },
-  );
-
-  testWidgets(
-    'Settings keeps the existing Presenter WebView mounted until Preview resumes',
-    (WidgetTester tester) async {
-      final platform = _TestInAppWebViewPlatform();
-      InAppWebViewPlatform.instance = platform;
+      InAppWebViewPlatform.instance = _TestInAppWebViewPlatform();
       final controller = _FakeController(_previewState());
       await _pumpFlow(tester, controller);
 
       expect(find.byType(BridgePresenterView), findsOneWidget);
+      expect(find.byType(InAppWebView), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'Preview has no visible WebView; zoom policy belongs to the headless runtime',
+    (WidgetTester tester) async {
+      InAppWebViewPlatform.instance = _TestInAppWebViewPlatform();
+      final controller = _FakeController(_previewState());
+      await _pumpFlow(tester, controller);
+
+      expect(find.byType(BridgePresenterView), findsOneWidget);
+      expect(find.byType(InAppWebView), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'Settings keeps the existing embedded Preview subtree mounted until Preview resumes',
+    (WidgetTester tester) async {
+      InAppWebViewPlatform.instance = _TestInAppWebViewPlatform();
+      final controller = _FakeController(_previewState());
+      await _pumpFlow(tester, controller);
+
+      expect(find.byType(BridgePresenterView), findsOneWidget);
+      expect(find.byType(InAppWebView), findsNothing);
       final presenterElement = find
           .byType(BridgePresenterView)
           .evaluate()
           .single;
-      final webViewElement = find.byType(InAppWebView).evaluate().single;
 
       controller.editSettings();
       await tester.pumpAndSettle();
@@ -1015,6 +1008,7 @@ void main() {
       // Settings AppBar instead.
       expect(settingsTitle, findsOneWidget);
       expect(find.byType(BridgePresenterView), findsOneWidget);
+      expect(find.byType(InAppWebView), findsNothing);
       expect(
         identical(
           find.byType(BridgePresenterView).evaluate().single,
@@ -1022,14 +1016,11 @@ void main() {
         ),
         isTrue,
       );
-      expect(
-        identical(find.byType(InAppWebView).evaluate().single, webViewElement),
-        isTrue,
-      );
 
       controller.cancelSettings();
       await tester.pumpAndSettle();
       expect(find.byType(BridgePresenterView), findsOneWidget);
+      expect(find.byType(InAppWebView), findsNothing);
       expect(
         find.descendant(
           of: find.byType(AppBar),
@@ -1042,10 +1033,6 @@ void main() {
           find.byType(BridgePresenterView).evaluate().single,
           presenterElement,
         ),
-        isTrue,
-      );
-      expect(
-        identical(find.byType(InAppWebView).evaluate().single, webViewElement),
         isTrue,
       );
     },

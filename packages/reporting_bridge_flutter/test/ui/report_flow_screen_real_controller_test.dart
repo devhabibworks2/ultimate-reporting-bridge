@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reporting_bridge_flutter/reporting_bridge_flutter.dart';
 import '../test_open_request.dart';
@@ -105,6 +106,117 @@ void main() {
       expect(controller.value.presenterLaunch, same(launch));
 
       await controller.dispose().timeout(const Duration(seconds: 10));
+    },
+  );
+
+  testWidgets(
+    'viewer failure keeps cached PDF authoritative for Save Share and Print',
+    (tester) async {
+      final root = Directory.systemTemp.createTempSync(
+        'urb-viewer-failure-output-authority-',
+      );
+      final bridge = _UiBridgeClient(root, <CachedTemplate>[_template('t1')]);
+      final filePlatform = _RecordingFilePlatform();
+      final printPlatform = _RecordingPrintPlatform();
+      var presenterExportCalls = 0;
+      const correlationId = 'viewer-failure-ready';
+      final surface = PresenterSurfaceBinding(
+        exportTransport: PresenterWebExportTransport(
+          correlationIdFactory: () => correlationId,
+        ),
+      );
+      final controller = ReportFlowControllerImpl(
+        request: buildTestOpenRequest(
+          system: 'legacy_system_1',
+          reportType: 'sales_invoice',
+          entryPolicy: ReportEntryPolicy.alwaysPrepare,
+        ),
+        runtime: ReportFlowRuntime(
+          connection: ReportServerConnection(
+            endpoints: ReportServerEndpoints.deployed(
+              Uri.parse('https://example.test'),
+            ),
+            cacheRoot: root,
+          ),
+          bridgeClient: bridge,
+          preferences: _UiPreferenceStore(),
+          filePlatform: filePlatform,
+          printPlatform: printPlatform,
+          surfaceBinding: surface,
+        ),
+        renderTimeout: Duration.zero,
+      );
+
+      addTearDown(() async {
+        await controller.dispose();
+        if (root.existsSync()) root.deleteSync(recursive: true);
+      });
+
+      await controller.initialize();
+      await controller.continueFromPreparation();
+      controller.selectTemplate('t1');
+      await controller.preparePreview();
+      final launch = controller.value.presenterLaunch!;
+
+      surface.attach(
+        sessionId: launch.sessionId,
+        templateName: controller.value.selectedTemplate!.templateName,
+        evaluateJavaScript: (_) async {
+          presenterExportCalls += 1;
+          surface.acceptMessage(<String, dynamic>{
+            'channel': bridgeWebMessageChannel,
+            'method': BridgeWebMethods.exportPdf,
+            'correlationId': correlationId,
+            'type': 'result',
+            'ok': true,
+            'base64': base64Encode(<int>[1, 2, 3, 4]),
+            'filename': 'report.pdf',
+            'byteLength': 4,
+          });
+          return null;
+        },
+        reload: () async {},
+        onLifecycle: (_) {},
+      );
+
+      controller.presenterLoadStarted();
+      controller.presenterProtocolDetected(BridgeContract.payloadVersion);
+      await controller.completePresenterRender(sessionId: launch.sessionId);
+
+      final cached = surface.cachedPdf;
+      expect(cached, isNotNull);
+      expect(controller.outputReady, isTrue);
+      expect(presenterExportCalls, 1);
+
+      final viewerFailure = Exception('viewer failed');
+      Object? reportedViewerFailure;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BridgePdfView(
+            bytes: cached!.bytes,
+            documentFactory: (_) async => throw viewerFailure,
+            onViewerError: (error) => reportedViewerFailure = error,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(reportedViewerFailure, same(viewerFailure));
+      expect(surface.cachedPdf, same(cached));
+      expect(controller.outputReady, isTrue);
+
+      await controller.savePdf();
+      await controller.sharePdf();
+      final printResult = await controller.printPdf();
+
+      expect(printResult.isSubmitted, isTrue);
+      expect(presenterExportCalls, 1);
+      expect(filePlatform.savedBytes, same(cached.bytes));
+      expect(filePlatform.sharedBytes, same(cached.bytes));
+      expect(printPlatform.printedBytes, orderedEquals(cached.bytes));
+      expect(surface.cachedPdf, same(cached));
+      expect(controller.outputReady, isTrue);
     },
   );
 
@@ -288,4 +400,30 @@ class _UiFilePlatform implements ReportFilePlatform {
 
   @override
   Future<void> sharePdf(Uint8List bytes, String filename) async {}
+}
+
+class _RecordingFilePlatform implements ReportFilePlatform {
+  Uint8List? savedBytes;
+  Uint8List? sharedBytes;
+
+  @override
+  Future<bool> savePdf(Uint8List bytes, String filename) async {
+    savedBytes = bytes;
+    return true;
+  }
+
+  @override
+  Future<void> sharePdf(Uint8List bytes, String filename) async {
+    sharedBytes = bytes;
+  }
+}
+
+class _RecordingPrintPlatform implements ReportPrintPlatform {
+  Uint8List? printedBytes;
+
+  @override
+  Future<ReportPrintResult> printPdf(ReportPrintRequest request) async {
+    printedBytes = request.pdfBytes;
+    return const ReportPrintResult.submitted();
+  }
 }

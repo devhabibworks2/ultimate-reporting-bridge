@@ -371,9 +371,9 @@ class _PersistentPreviewFlow extends StatelessWidget {
 
     // Always keep the same Stack/preview subtree shape across Preview and
     // settings-owned stages. Changing from `_PreviewPage` directly to a Stack
-    // would dispose the platform WebView before the overlay even appeared.
-    // The opaque overlay owns input and semantics while the Presenter stays
-    // mounted underneath with its current page/zoom state intact.
+    // The opaque overlay owns input and semantics while the embedded PDF
+    // preview stays mounted underneath. BridgePresenterView manages the
+    // headless Presenter runtime independently from this overlay.
     return Stack(
       fit: StackFit.expand,
       children: <Widget>[
@@ -2675,14 +2675,7 @@ class _PreviewPage extends StatelessWidget {
               showSharePdf: features.showSharePdf,
               showPrint: features.showPrint,
               showSettings: features.showSettings,
-              outputEnabled:
-                  state.exportReady ||
-                  (features.allowLegacyPresenterFallback &&
-                      state.stage == ReportFlowStage.previewing &&
-                      state.presenterLaunch != null &&
-                      state.renderStatus == PresenterRenderStatus.ready &&
-                      state.webViewLoadProgress >= 1 &&
-                      state.exportAction == null),
+              outputEnabled: controller.outputReady,
               busyAction: state.exportAction,
               onSave: () => unawaited(controller.savePdf()),
               onShare: () => unawaited(controller.sharePdf()),
