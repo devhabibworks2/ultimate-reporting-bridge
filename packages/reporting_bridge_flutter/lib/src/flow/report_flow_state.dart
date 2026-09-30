@@ -56,6 +56,8 @@ enum ReportOperationStatus { idle, running, succeeded, failed }
 
 enum PresenterRenderStatus { idle, loading, ready, failed }
 
+enum PresenterPdfStatus { idle, loading, ready, failed }
+
 enum ReportExportAction { save, share, print }
 
 class ReportFlowState {
@@ -74,6 +76,7 @@ class ReportFlowState {
     this.cacheMaintenance = ReportOperationStatus.idle,
     this.previewLoad = ReportOperationStatus.idle,
     this.renderStatus = PresenterRenderStatus.idle,
+    this.pdfStatus = PresenterPdfStatus.idle,
     this.exportAction,
     this.printProgress,
     this.failure,
@@ -118,6 +121,7 @@ class ReportFlowState {
   final ReportOperationStatus cacheMaintenance;
   final ReportOperationStatus previewLoad;
   final PresenterRenderStatus renderStatus;
+  final PresenterPdfStatus pdfStatus;
   final ReportExportAction? exportAction;
   final ThermalPrintProgress? printProgress;
   final ReportFlowFailure? failure;
@@ -183,6 +187,7 @@ class ReportFlowState {
       presenterLaunch != null &&
       presenterProtocolReady &&
       renderStatus == PresenterRenderStatus.ready &&
+      pdfStatus == PresenterPdfStatus.ready &&
       exportAction == null;
 
   CachedTemplate? get selectedTemplate {
@@ -218,6 +223,7 @@ class ReportFlowState {
     ReportOperationStatus? cacheMaintenance,
     ReportOperationStatus? previewLoad,
     PresenterRenderStatus? renderStatus,
+    PresenterPdfStatus? pdfStatus,
     ReportExportAction? exportAction,
     ThermalPrintProgress? printProgress,
     ReportFlowFailure? failure,
@@ -267,6 +273,7 @@ class ReportFlowState {
     cacheMaintenance: cacheMaintenance ?? this.cacheMaintenance,
     previewLoad: previewLoad ?? this.previewLoad,
     renderStatus: renderStatus ?? this.renderStatus,
+    pdfStatus: pdfStatus ?? this.pdfStatus,
     exportAction: clearExportAction
         ? null
         : (exportAction ?? this.exportAction),

@@ -2137,7 +2137,7 @@ class _FakeController extends ChangeNotifier implements ReportFlowController {
   Future<void> commitSettings() async {}
 
   @override
-  void completePresenterRender({String? sessionId}) {}
+  Future<void> completePresenterRender({String? sessionId}) async {}
 
   @override
   Future<void> dispose() async {

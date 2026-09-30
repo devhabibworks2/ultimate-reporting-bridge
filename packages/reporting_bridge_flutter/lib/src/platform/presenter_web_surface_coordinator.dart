@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:reporting_bridge/reporting_bridge.dart';
 
@@ -48,7 +50,9 @@ final class PresenterWebSurfaceCoordinator {
         return;
       case PresenterWebLifecycleState.ready:
         controller.presenterProtocolDetected(event.contractVersion);
-        controller.completePresenterRender(sessionId: event.sessionId);
+        unawaited(
+          controller.completePresenterRender(sessionId: event.sessionId),
+        );
         return;
       case PresenterWebLifecycleState.failed:
         controller.presenterProtocolDetected(event.contractVersion);

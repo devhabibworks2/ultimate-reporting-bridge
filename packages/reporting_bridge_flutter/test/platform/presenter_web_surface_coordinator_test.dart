@@ -325,7 +325,7 @@ final class _RecordingController extends ChangeNotifier
   }
 
   @override
-  void completePresenterRender({String? sessionId}) {
+  Future<void> completePresenterRender({String? sessionId}) async {
     completeRenderSessionIds.add(sessionId);
   }
 

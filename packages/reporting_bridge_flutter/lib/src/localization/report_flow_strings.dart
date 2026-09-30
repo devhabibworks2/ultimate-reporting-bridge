@@ -430,6 +430,8 @@ class ReportFlowStrings {
       ReportFlowFailureCode.presenterIncompatible => presenterIncompatible,
       ReportFlowFailureCode.renderTimedOut => renderTimedOut,
       ReportFlowFailureCode.renderFailed => previewFailed,
+      ReportFlowFailureCode.pdfGenerationFailed =>
+        arabic ? 'تعذر إنشاء ملف PDF.' : 'PDF generation failed.',
       ReportFlowFailureCode.persistenceFailed =>
         arabic
             ? 'تعذر حفظ إعدادات التقرير.'

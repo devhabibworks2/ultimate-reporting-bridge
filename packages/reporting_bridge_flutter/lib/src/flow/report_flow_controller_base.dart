@@ -871,6 +871,7 @@ class ReportFlowControllerImpl
         renderStatus: replacing
             ? _value.renderStatus
             : PresenterRenderStatus.loading,
+        pdfStatus: replacing ? _value.pdfStatus : PresenterPdfStatus.idle,
         webViewLoadProgress: replacing ? _value.webViewLoadProgress : 0,
         presenterProtocolReady: replacing
             ? _value.presenterProtocolReady
@@ -982,6 +983,7 @@ class ReportFlowControllerImpl
           clearSettingsDraft: true,
           previewLoad: ReportOperationStatus.running,
           renderStatus: PresenterRenderStatus.loading,
+          pdfStatus: PresenterPdfStatus.idle,
           webViewLoadProgress: 0,
           presenterProtocolReady: false,
           clearPresenterProtocolVersion: true,
@@ -1045,6 +1047,7 @@ class ReportFlowControllerImpl
         stage: ReportFlowStage.previewing,
         previewLoad: ReportOperationStatus.running,
         renderStatus: PresenterRenderStatus.loading,
+        pdfStatus: PresenterPdfStatus.idle,
         webViewLoadProgress: 0,
         presenterProtocolReady: false,
         clearPresenterProtocolVersion: true,
@@ -1079,7 +1082,7 @@ class ReportFlowControllerImpl
   }
 
   @override
-  void completePresenterRender({String? sessionId}) {
+  Future<void> completePresenterRender({String? sessionId}) async {
     if (!_acceptPresenterCallback(sessionId: sessionId)) return;
     if (!_value.presenterProtocolReady) {
       _failPresenterCompatibility(
@@ -1088,13 +1091,51 @@ class ReportFlowControllerImpl
       );
       return;
     }
+    final activeSessionId = _value.presenterLaunch?.sessionId;
     _cancelRenderWatchdog();
     _set(
       _value.copyWith(
         stage: ReportFlowStage.previewing,
-        previewLoad: ReportOperationStatus.succeeded,
         renderStatus: PresenterRenderStatus.ready,
+        pdfStatus: PresenterPdfStatus.loading,
         webViewLoadProgress: 1,
+        clearFailure: true,
+      ),
+    );
+    try {
+      await _runtime.surfaceBinding.exportPdf();
+    } catch (error) {
+      if (!_matchesSession(activeSessionId) ||
+          (sessionId != null && sessionId != activeSessionId)) {
+        return;
+      }
+      final failure = ReportFlowFailure(
+        code: ReportFlowFailureCode.pdfGenerationFailed,
+        diagnostic: error.toString(),
+      );
+      _set(
+        _value.copyWith(
+          stage: ReportFlowStage.failed,
+          previewLoad: ReportOperationStatus.failed,
+          pdfStatus: PresenterPdfStatus.failed,
+          failure: failure,
+        ),
+      );
+      _addEvent(
+        ReportFlowEvent(type: ReportFlowEventType.failure, failure: failure),
+      );
+      return;
+    }
+    if (!_matchesSession(activeSessionId) ||
+        (sessionId != null && sessionId != activeSessionId) ||
+        _runtime.surfaceBinding.cachedPdf == null) {
+      return;
+    }
+    _set(
+      _value.copyWith(
+        stage: ReportFlowStage.previewing,
+        previewLoad: ReportOperationStatus.succeeded,
+        pdfStatus: PresenterPdfStatus.ready,
         clearFailure: true,
       ),
     );
@@ -1135,6 +1176,7 @@ class ReportFlowControllerImpl
         stage: ReportFlowStage.failed,
         previewLoad: ReportOperationStatus.failed,
         renderStatus: PresenterRenderStatus.failed,
+        pdfStatus: PresenterPdfStatus.failed,
         failure: renderFailure,
       ),
     );
@@ -1345,6 +1387,7 @@ class ReportFlowControllerImpl
               : ReportOperationStatus.failed,
           previewLoad: ReportOperationStatus.idle,
           renderStatus: PresenterRenderStatus.idle,
+          pdfStatus: PresenterPdfStatus.idle,
           presenterDownloadProgress: 0,
           webViewLoadProgress: 0,
           presenterProtocolReady: false,
@@ -1515,6 +1558,7 @@ class ReportFlowControllerImpl
           stage: ReportFlowStage.failed,
           previewLoad: ReportOperationStatus.failed,
           renderStatus: PresenterRenderStatus.failed,
+          pdfStatus: PresenterPdfStatus.failed,
           failure: failure,
         ),
       );
@@ -1541,6 +1585,7 @@ class ReportFlowControllerImpl
         stage: ReportFlowStage.failed,
         previewLoad: ReportOperationStatus.failed,
         renderStatus: PresenterRenderStatus.failed,
+        pdfStatus: PresenterPdfStatus.failed,
         failure: failure,
       ),
     );
@@ -1611,13 +1656,7 @@ class ReportFlowControllerImpl
   }
 
   bool get _exportReady =>
-      _value.exportReady ||
-      (_features.allowLegacyPresenterFallback &&
-          _value.stage == ReportFlowStage.previewing &&
-          _value.presenterLaunch != null &&
-          _value.renderStatus == PresenterRenderStatus.ready &&
-          _value.webViewLoadProgress >= 1 &&
-          _value.exportAction == null);
+      _value.exportReady && _runtime.surfaceBinding.cachedPdf != null;
 
   bool get _operationInProgress =>
       _previewPreparationFuture != null ||

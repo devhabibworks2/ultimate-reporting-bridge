@@ -697,15 +697,42 @@ void main() {
   test(
     'WebView progress does not enable export before Presenter ready',
     () async {
-      final controller = createController();
+      var exportLoads = 0;
+      final surface = PresenterSurfaceBinding(
+        exportTransport: PresenterWebExportTransport(
+          correlationIdFactory: () => 'auto-ready',
+        ),
+      );
+      final controller = createController(surfaceBinding: surface);
       addTearDown(controller.dispose);
 
       await controller.initialize();
       await controller.continueFromPreparation();
       await controller.preparePreview();
+      final launch = controller.value.presenterLaunch!;
+      surface.attach(
+        sessionId: launch.sessionId,
+        templateName: controller.value.selectedTemplate!.templateName,
+        evaluateJavaScript: (_) async {
+          exportLoads += 1;
+          surface.acceptMessage(<String, dynamic>{
+            'channel': bridgeWebMessageChannel,
+            'method': BridgeWebMethods.exportPdf,
+            'correlationId': 'auto-ready',
+            'type': 'result',
+            'ok': true,
+            'base64': base64Encode(<int>[1, 2, 3]),
+            'filename': 'bridge.pdf',
+            'byteLength': 3,
+          });
+          return null;
+        },
+        reload: () async {},
+        onLifecycle: (_) {},
+      );
 
-      expect(controller.value.presenterLaunch, isNotNull);
       expect(controller.value.renderStatus, PresenterRenderStatus.loading);
+      expect(controller.value.pdfStatus, PresenterPdfStatus.idle);
       expect(controller.value.exportReady, isFalse);
 
       controller.presenterLoadProgress(1);
@@ -714,11 +741,17 @@ void main() {
       expect(controller.value.exportReady, isFalse);
 
       controller.presenterProtocolDetected(BridgeContract.payloadVersion);
-      controller.completePresenterRender(
-        sessionId: controller.value.presenterLaunch!.sessionId,
-      );
+      await controller.completePresenterRender(sessionId: launch.sessionId);
       expect(controller.value.renderStatus, PresenterRenderStatus.ready);
+      expect(controller.value.pdfStatus, PresenterPdfStatus.ready);
+      expect(surface.cachedPdf, isNotNull);
+      expect(exportLoads, 1);
+      expect(controller.outputReady, isTrue);
       expect(controller.value.exportReady, isTrue);
+
+      await controller.savePdf();
+      await controller.sharePdf();
+      expect(exportLoads, 1);
     },
   );
 
@@ -769,7 +802,7 @@ void main() {
       controller.presenterLoadStarted();
       controller.presenterLoadProgress(1);
       controller.presenterProtocolDetected(BridgeContract.payloadVersion);
-      controller.completePresenterRender(sessionId: sessionId);
+      await controller.completePresenterRender(sessionId: sessionId);
       controller.failPresenterRender(
         'late callback from disposed Preview',
         sessionId: sessionId,
@@ -1108,7 +1141,7 @@ void main() {
       onLifecycle: (_) {},
     );
     controller.presenterProtocolDetected(BridgeContract.payloadVersion);
-    controller.completePresenterRender(sessionId: launch.sessionId);
+    await controller.completePresenterRender(sessionId: launch.sessionId);
     final events = <ReportFlowEvent>[];
     final subscription = controller.events.listen(events.add);
     addTearDown(subscription.cancel);

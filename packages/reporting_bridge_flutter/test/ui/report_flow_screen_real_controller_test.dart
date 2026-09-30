@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -19,6 +20,11 @@ void main() {
         _template('t2'),
       ]);
       final preferences = _UiPreferenceStore();
+      final surface = PresenterSurfaceBinding(
+        exportTransport: PresenterWebExportTransport(
+          correlationIdFactory: () => 'real-controller-ready',
+        ),
+      );
       final controller = ReportFlowControllerImpl(
         request: buildTestOpenRequest(
           system: 'legacy_system_1',
@@ -35,7 +41,7 @@ void main() {
           bridgeClient: bridge,
           preferences: preferences,
           filePlatform: _UiFilePlatform(),
-          surfaceBinding: PresenterSurfaceBinding(),
+          surfaceBinding: surface,
         ),
         renderTimeout: Duration.zero,
       );
@@ -52,10 +58,30 @@ void main() {
       controller.selectTemplate('t1');
 
       await controller.preparePreview().timeout(const Duration(seconds: 10));
+      final preparedLaunch = controller.value.presenterLaunch!;
+      surface.attach(
+        sessionId: preparedLaunch.sessionId,
+        templateName: controller.value.selectedTemplate!.templateName,
+        evaluateJavaScript: (_) async {
+          surface.acceptMessage(<String, dynamic>{
+            'channel': bridgeWebMessageChannel,
+            'method': BridgeWebMethods.exportPdf,
+            'correlationId': 'real-controller-ready',
+            'type': 'result',
+            'ok': true,
+            'base64': base64Encode(<int>[1, 2, 3]),
+            'filename': 'report.pdf',
+            'byteLength': 3,
+          });
+          return null;
+        },
+        reload: () async {},
+        onLifecycle: (_) {},
+      );
 
       controller.presenterLoadStarted();
       controller.presenterProtocolDetected(BridgeContract.payloadVersion);
-      controller.completePresenterRender(
+      await controller.completePresenterRender(
         sessionId: controller.value.presenterLaunch?.sessionId,
       );
       expect(controller.value.stage, ReportFlowStage.previewing);

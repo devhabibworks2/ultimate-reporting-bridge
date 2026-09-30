@@ -37,6 +37,7 @@ void main() {
     final second = await cache.resolve(load);
 
     expect(identical(first, second), isTrue);
+    expect(identical(cache.value, first), isTrue);
     expect(loads, 1);
   });
 
@@ -48,6 +49,7 @@ void main() {
       final oldFuture = cache.resolve(() => oldCompletion.future);
 
       cache.bindSession('session-b');
+      expect(cache.value, isNull);
       oldCompletion.complete(
         PresenterCachedPdf(
           bytes: Uint8List.fromList(<int>[1]),
@@ -55,6 +57,7 @@ void main() {
         ),
       );
       await oldFuture;
+      expect(cache.value, isNull);
 
       var newLoads = 0;
       final current = await cache.resolve(() async {
@@ -66,6 +69,7 @@ void main() {
       });
 
       expect(current.filename, 'new.pdf');
+      expect(identical(cache.value, current), isTrue);
       expect(newLoads, 1);
     },
   );

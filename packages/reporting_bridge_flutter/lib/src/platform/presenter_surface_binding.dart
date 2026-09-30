@@ -23,6 +23,7 @@ class PresenterSurfaceBinding {
   String? _templateName;
 
   bool get attached => _evaluateJavaScript != null;
+  PresenterCachedPdf? get cachedPdf => _cache.value;
 
   void attach({
     required String sessionId,

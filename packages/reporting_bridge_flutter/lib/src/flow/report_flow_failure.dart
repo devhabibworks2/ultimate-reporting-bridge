@@ -9,6 +9,7 @@ enum ReportFlowFailureCode {
   presenterIncompatible,
   renderTimedOut,
   renderFailed,
+  pdfGenerationFailed,
   persistenceFailed,
   actionDenied,
   exportUnavailable,

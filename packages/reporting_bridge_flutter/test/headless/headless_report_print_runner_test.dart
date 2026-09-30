@@ -361,7 +361,7 @@ final class _FakeHeadlessController extends ChangeNotifier
   void presenterProtocolDetected(int contractVersion) {}
 
   @override
-  void completePresenterRender({String? sessionId}) {}
+  Future<void> completePresenterRender({String? sessionId}) async {}
 
   @override
   void failPresenterRender(String diagnostic, {String? sessionId}) {}
