@@ -29,7 +29,7 @@ class ReportingBridgeStatus {
 
 /// High-level Bridge client for one Report Server and one local cache root.
 ///
-/// It owns endpoint probing, systems/templates transport, Presenter downloads,
+/// It owns endpoint probing, template-query transport, Presenter downloads,
 /// cache namespaces, runtime-session coordination, and lifecycle cleanup. Host
 /// applications provide selected domain values and map the returned Bridge
 /// models to their UI models.
@@ -128,94 +128,51 @@ class ReportingBridgeClient {
     await _http.getBytes(presenterEntryUrl, headers: const <String, String>{});
   }
 
-  Future<List<PresenterSystem>> fetchSystems() async {
-    _ensureActive();
-    final headers = await _resolveHeaders(BridgeHeaderOperation.fetchSystems);
-    return _serverGateway.fetchSystems(headers: headers);
-  }
-
   Future<TemplateSyncSummary> syncTemplates({
-    String? systemCode,
-    @Deprecated('Use systemCode.') int? systemId,
+    required String systemCode,
     TemplateSyncFilter? filter,
     Map<String, Object?> extra = const <String, Object?>{},
   }) async {
     _ensureActive();
-    if (systemCode == null && !_identityContext.isEmpty) {
-      throw const BridgeRuntimeException(
-        BridgeRuntimeErrorCodes.runtimeSessionInvalid,
-        'An active identity context requires systemCode synchronization. '
-        'The deprecated numeric cache is anonymous-only.',
-      );
-    }
-    final query = systemCode == null
-        ? null
-        : TemplateQueryRequest(
-            systemCode: systemCode,
-            identity: _identityContext,
-            filter: filter,
-            extra: extra,
-          );
-    if (query != null && systemId != null) {
-      throw const BridgeRuntimeException(
-        BridgeRuntimeErrorCodes.runtimeSessionInvalid,
-        'Template synchronization cannot combine systemCode and systemId.',
-      );
-    }
+    final query = TemplateQueryRequest(
+      systemCode: systemCode,
+      identity: _identityContext,
+      filter: filter,
+      extra: extra,
+    );
     final headers = await _resolveHeaders(
       BridgeHeaderOperation.syncTemplates,
       query: query,
-      systemId: systemId,
     );
     final summary = await _serverGateway.syncTemplates(
       query: query,
-      systemId: systemId,
       headers: headers,
     );
-    if (query != null) _lastTemplateQuery = query;
+    _lastTemplateQuery = query;
     return summary;
   }
 
   Future<List<CachedTemplate>> listTemplates({
-    String? systemCode,
-    @Deprecated('Use systemCode.') int? systemId,
+    required String systemCode,
     TemplateSyncFilter? filter,
     Map<String, Object?> extra = const <String, Object?>{},
   }) async {
     _ensureActive();
-    if (systemCode != null && systemId != null) {
-      throw const BridgeRuntimeException(
-        BridgeRuntimeErrorCodes.runtimeSessionInvalid,
-        'Template listing cannot combine systemCode and systemId.',
-      );
-    }
-
-    final explicitQuery = systemCode == null
-        ? null
-        : TemplateQueryRequest(
-            systemCode: systemCode,
-            identity: _identityContext,
-            filter: filter,
-            extra: extra,
-          );
-    final query = systemId == null ? explicitQuery ?? _lastTemplateQuery : null;
-    if (query == null && !_identityContext.isEmpty) {
-      throw const BridgeRuntimeException(
-        BridgeTemplateSyncErrorCodes.offlineCacheUnavailable,
-        'No systemCode-scoped catalog is selected for the active identity.',
-      );
-    }
+    final query = TemplateQueryRequest(
+      systemCode: systemCode,
+      identity: _identityContext,
+      filter: filter,
+      extra: extra,
+    );
     final headers = await _resolveHeaders(
       BridgeHeaderOperation.listTemplates,
       query: query,
-      systemId: systemId,
     );
     final templates = await _serverGateway.listTemplates(
       query: query,
-      systemId: systemId,
       headers: headers,
     );
-    if (explicitQuery != null) _lastTemplateQuery = explicitQuery;
+    _lastTemplateQuery = query;
     return templates;
   }
 
@@ -351,10 +308,7 @@ class ReportingBridgeClient {
 
   Future<List<CachedTemplate>> _currentTemplatesForStatus() async {
     final query = _lastTemplateQuery;
-    if (query == null) {
-      if (!_identityContext.isEmpty) return const <CachedTemplate>[];
-      return _serverGateway.listTemplates();
-    }
+    if (query == null) return const <CachedTemplate>[];
     final headers = await _resolveHeaders(
       BridgeHeaderOperation.listTemplates,
       query: query,
@@ -372,7 +326,6 @@ class ReportingBridgeClient {
   Future<Map<String, String>> _resolveHeaders(
     BridgeHeaderOperation operation, {
     TemplateQueryRequest? query,
-    int? systemId,
     String? reportType,
     String? sessionId,
   }) {
@@ -381,7 +334,6 @@ class ReportingBridgeClient {
         operation: operation,
         apiBaseUrl: apiBaseUrl,
         systemCode: query?.systemCode,
-        systemId: systemId,
         branchId: query?.identity.branchId ?? _identityContext.branchId,
         userId: query?.identity.userId ?? _identityContext.userId,
         systemUnit: query?.identity.systemUnit ?? _identityContext.systemUnit,

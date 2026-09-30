@@ -10,7 +10,7 @@ void main() {
         calls += 1;
         return <String, String>{
           'Authorization': 'Bearer ${context.operation.name}-$calls',
-          'X-Tenant-Id': '${context.systemId ?? 0}',
+          'X-Tenant-Id': context.systemCode ?? 'none',
           'Not-Approved': 'discarded',
         };
       }
@@ -18,7 +18,7 @@ void main() {
       final context = BridgeHeaderContext(
         operation: BridgeHeaderOperation.syncTemplates,
         apiBaseUrl: Uri.parse('https://example.test/api/'),
-        systemId: 7,
+        systemCode: 'erp',
       );
 
       final first = await resolveBridgeHeaders(
@@ -33,7 +33,7 @@ void main() {
       expect(calls, 2);
       expect(first['Authorization'], 'Bearer syncTemplates-1');
       expect(second['Authorization'], 'Bearer syncTemplates-2');
-      expect(first['X-Tenant-Id'], '7');
+      expect(first['X-Tenant-Id'], 'erp');
       expect(first.containsKey('Not-Approved'), isFalse);
       expect(() => first['Authorization'] = 'mutated', throwsUnsupportedError);
     },

@@ -25,8 +25,6 @@ abstract interface class ReportingBridgeFlutterClient {
   bool get hasActiveFlow;
 
   Future<void> probeEndpoints();
-  Future<List<PresenterSystem>> fetchSystems();
-
   ReportFlowController createController(ReportOpenRequest request);
 
   Future<ReportResult?> openReport(
@@ -125,19 +123,6 @@ class DefaultReportingBridgeFlutterClient
         ),
       },
       action: _bridgeClient.probeEndpoints,
-    );
-  }
-
-  @override
-  Future<List<PresenterSystem>> fetchSystems() {
-    return _connection.diagnostics.traceApi<List<PresenterSystem>>(
-      operation: 'fetchSystems',
-      method: 'GET',
-      uri: resolveBridgeApiRoute(
-        _connection.endpoints.apiBaseUrl,
-        'presenter/systems',
-      ),
-      action: _bridgeClient.fetchSystems,
     );
   }
 

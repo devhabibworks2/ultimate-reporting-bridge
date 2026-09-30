@@ -60,13 +60,11 @@ void main() {
 
       final summary = await client.syncTemplates(
         systemCode: 'ignored_by_workflow_scope',
-        systemId: 99,
         filter: filter,
         extra: extra,
       );
       final templates = await client.listTemplates(
         systemCode: 'ignored_by_workflow_scope',
-        systemId: 99,
         filter: filter,
         extra: extra,
       );
@@ -107,21 +105,17 @@ void main() {
 
       await client.syncTemplates(
         systemCode: 'must_not_be_forwarded',
-        systemId: 99,
         filter: TemplateSyncFilter(reportTypes: const <String>['other']),
         extra: const <String, Object?>{'ignored': true},
       );
       await client.listTemplates(
         systemCode: 'must_not_be_forwarded',
-        systemId: 99,
         filter: TemplateSyncFilter(reportTypes: const <String>['other']),
         extra: const <String, Object?>{'ignored': true},
       );
 
       expect(delegate.syncSystemCode, 'motakamel_transactions');
-      expect(delegate.syncSystemId, isNull);
       expect(delegate.listSystemCode, 'motakamel_transactions');
-      expect(delegate.listSystemId, isNull);
       expect(delegate.syncFilter, same(filter));
       expect(delegate.listFilter, same(filter));
       expect(delegate.syncExtra, extra);
@@ -158,10 +152,11 @@ void main() {
       );
       addTearDown(client.dispose);
 
-      final templates = await client.listTemplates();
+      final templates = await client.listTemplates(
+        systemCode: 'motakamel_transactions',
+      );
 
       expect(delegate.listSystemCode, 'motakamel_transactions');
-      expect(delegate.listSystemId, isNull);
       expect(templates, <CachedTemplate>[matching, unspecified]);
       expect(identical(templates.first, matching), isTrue);
       expect(templates.first.description, 'Description matching');
@@ -276,23 +271,19 @@ final class _RecordingBridgeClient extends ReportingBridgeClient {
 
   final List<CachedTemplate> templates;
   String? syncSystemCode;
-  int? syncSystemId;
   TemplateSyncFilter? syncFilter;
   Map<String, Object?>? syncExtra;
   String? listSystemCode;
-  int? listSystemId;
   TemplateSyncFilter? listFilter;
   Map<String, Object?>? listExtra;
 
   @override
   Future<TemplateSyncSummary> syncTemplates({
-    String? systemCode,
-    int? systemId,
+    required String systemCode,
     TemplateSyncFilter? filter,
     Map<String, Object?> extra = const <String, Object?>{},
   }) async {
     syncSystemCode = systemCode;
-    syncSystemId = systemId;
     syncFilter = filter;
     syncExtra = extra;
     return TemplateSyncSummary(
@@ -304,13 +295,11 @@ final class _RecordingBridgeClient extends ReportingBridgeClient {
 
   @override
   Future<List<CachedTemplate>> listTemplates({
-    String? systemCode,
-    int? systemId,
+    required String systemCode,
     TemplateSyncFilter? filter,
     Map<String, Object?> extra = const <String, Object?>{},
   }) async {
     listSystemCode = systemCode;
-    listSystemId = systemId;
     listFilter = filter;
     listExtra = extra;
     return templates;

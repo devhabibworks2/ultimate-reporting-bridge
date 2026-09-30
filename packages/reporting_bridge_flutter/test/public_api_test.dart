@@ -18,7 +18,7 @@ void main() {
       Uri.parse('https://example.test'),
     );
     Map<String, String> provider(BridgeHeaderContext context) =>
-        <String, String>{'X-Tenant-Id': '${context.systemId ?? 0}'};
+        <String, String>{'X-Tenant-Id': context.systemCode ?? 'none'};
     final connection = ReportServerConnection(
       endpoints: endpoints,
       cacheRoot: root,

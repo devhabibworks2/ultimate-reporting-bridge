@@ -669,13 +669,26 @@ class _RequestScopedPreferenceStore implements ReportFlowPreferenceStore {
   Future<({CachedTemplate? template, bool refreshed})> _lookupTemplate(
     bool Function(CachedTemplate template) predicate,
   ) async {
-    var templates = await bridgeClient.listTemplates();
+    final sync = request.templateSyncRequest;
+    var templates = await bridgeClient.listTemplates(
+      systemCode: sync.systemCode.value,
+      filter: sync.filter,
+      extra: sync.extra,
+    );
     for (final template in templates) {
       if (predicate(template)) return (template: template, refreshed: false);
     }
     try {
-      await bridgeClient.syncTemplates();
-      templates = await bridgeClient.listTemplates();
+      await bridgeClient.syncTemplates(
+        systemCode: sync.systemCode.value,
+        filter: sync.filter,
+        extra: sync.extra,
+      );
+      templates = await bridgeClient.listTemplates(
+        systemCode: sync.systemCode.value,
+        filter: sync.filter,
+        extra: sync.extra,
+      );
       for (final template in templates) {
         if (predicate(template)) return (template: template, refreshed: true);
       }
@@ -752,8 +765,7 @@ class _WorkflowBridgeClient extends ReportingBridgeClient {
 
   @override
   Future<TemplateSyncSummary> syncTemplates({
-    String? systemCode,
-    int? systemId,
+    required String systemCode,
     TemplateSyncFilter? filter,
     Map<String, Object?> extra = const <String, Object?>{},
   }) async {
@@ -768,8 +780,7 @@ class _WorkflowBridgeClient extends ReportingBridgeClient {
 
   @override
   Future<List<CachedTemplate>> listTemplates({
-    String? systemCode,
-    int? systemId,
+    required String systemCode,
     TemplateSyncFilter? filter,
     Map<String, Object?> extra = const <String, Object?>{},
   }) async {

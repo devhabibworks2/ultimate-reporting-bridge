@@ -444,65 +444,6 @@ void main() {
       ),
     );
   });
-
-  test(
-    'deprecated numeric path keeps GET list and detail compatibility',
-    () async {
-      final root = await Directory.systemTemp.createTemp(
-        'bridge-query-legacy-',
-      );
-      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-      addTearDown(() async {
-        await server.close(force: true);
-        if (await root.exists()) await root.delete(recursive: true);
-      });
-
-      var queryPosts = 0;
-      var listGets = 0;
-      var detailGets = 0;
-      server.listen((request) async {
-        if (request.uri.path == '/api/presenter/templates/query') {
-          queryPosts += 1;
-        }
-        if (request.uri.path == '/api/presenter/templates') {
-          listGets += 1;
-          expect(request.method, 'GET');
-          expect(request.uri.queryParameters['systemId'], '7');
-          await _writeJson(request, <String, dynamic>{
-            'success': true,
-            'data': <String, dynamic>{
-              'items': <Map<String, dynamic>>[
-                <String, dynamic>{'id': 'legacy-7', 'systemId': 7},
-              ],
-            },
-          });
-          return;
-        }
-        if (request.uri.path == '/api/presenter/templates/legacy-7/latest') {
-          detailGets += 1;
-          await _writeJson(request, <String, dynamic>{
-            'success': true,
-            'data': _legacyTemplate('legacy-7', 7),
-          });
-          return;
-        }
-        request.response.statusCode = HttpStatus.notFound;
-        await request.response.close();
-      });
-
-      final gateway = PresenterServerGateway(
-        apiBaseUrl: _api(server),
-        bridgeRoot: root,
-      );
-      final summary = await gateway.syncTemplates(systemId: 7);
-
-      expect(summary.syncedCount, 1);
-      expect(queryPosts, 0);
-      expect(listGets, 1);
-      expect(detailGets, 1);
-      expect((await gateway.listTemplates(systemId: 7)).single.id, 'legacy-7');
-    },
-  );
 }
 
 Uri _api(HttpServer server) =>
@@ -566,17 +507,6 @@ Map<String, dynamic> _queryTemplate(
       'assets': <Object?>[],
       'layers': <Object?>[],
       'elements': <Object?>[],
-    },
-  };
-}
-
-Map<String, dynamic> _legacyTemplate(String id, int systemId) {
-  return <String, dynamic>{
-    'id': id,
-    'type': 'sales_invoice',
-    'systemId': systemId,
-    'document': <String, dynamic>{
-      'meta': <String, dynamic>{'name': 'Legacy'},
     },
   };
 }

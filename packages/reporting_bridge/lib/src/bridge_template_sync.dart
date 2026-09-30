@@ -42,21 +42,13 @@ class PresenterTemplateSyncService {
     Duration timeout = const Duration(seconds: 8),
     this.closeClientAfterRequest = true,
   }) : _httpClientFactory = httpClientFactory ?? HttpClient.new,
-       _timeout = timeout,
-       _legacyHttp = BridgeHttpFetch(
-         httpClientFactory: httpClientFactory,
-         timeout: timeout,
-         closeClientAfterRequest: closeClientAfterRequest,
-       );
+       _timeout = timeout;
 
   final HttpClient Function() _httpClientFactory;
   final Duration _timeout;
   final bool closeClientAfterRequest;
-  final BridgeHttpFetch _legacyHttp;
 
   static const String _queryPath = 'presenter/templates/query';
-  static const String _listPath = 'presenter/templates';
-  static const String _detailPathPrefix = 'presenter/templates/';
 
   Future<TemplateSyncSummary> queryTemplatesToCache({
     required Uri apiBase,
@@ -127,147 +119,6 @@ class PresenterTemplateSyncService {
       systemName: parsed.systemName,
       systemDescription: parsed.systemDescription,
       appliedFilter: parsed.appliedFilter,
-    );
-  }
-
-  @Deprecated('Use queryTemplatesToCache with systemCode.')
-  Future<TemplateSyncSummary> syncTemplatesToCache({
-    required Uri apiBase,
-    required Map<String, String> headers,
-    required TemplateCacheService cache,
-    int? systemId,
-  }) async {
-    if (systemId != null && systemId <= 0) {
-      throw const BridgeRuntimeException(
-        BridgeRuntimeErrorCodes.runtimeSessionInvalid,
-        'Template synchronization requires a positive systemId.',
-      );
-    }
-
-    final filtered = filterPresenterBridgeHeaders(headers);
-    final baseListUri = resolveBridgeApiRoute(apiBase, _listPath);
-    final listUri = systemId == null
-        ? baseListUri
-        : baseListUri.replace(
-            queryParameters: <String, String>{'systemId': '$systemId'},
-          );
-    final listPayload = await _legacyHttp.getJsonObject(
-      listUri,
-      headers: filtered,
-      notValidJsonMessage: 'Response from $listUri is not valid JSON.',
-    );
-    if (listPayload['success'] != true) {
-      throw BridgeRuntimeException(
-        BridgeRuntimeErrorCodes.runtimeSessionInvalid,
-        'Presenter template list response not successful: $listUri',
-      );
-    }
-
-    final data = unwrapBridgeEnvelopeData(listPayload);
-    final rawItems = data['items'];
-    if (rawItems is! List) {
-      throw const BridgeRuntimeException(
-        BridgeRuntimeErrorCodes.runtimeSessionInvalid,
-        'Presenter template list missing data.items array.',
-      );
-    }
-
-    if (systemId != null && rawItems.isEmpty) {
-      return TemplateSyncSummary(
-        syncedCount: 0,
-        listCount: 0,
-        errors: <String>[
-          'No published templates are available for system $systemId; '
-              'the existing cache was preserved.',
-        ],
-      );
-    }
-
-    final downloaded = <CachedTemplate>[];
-    final ids = <String>{};
-    final errors = <String>[];
-
-    for (var index = 0; index < rawItems.length; index++) {
-      final raw = rawItems[index];
-      if (raw is! Map) {
-        errors.add('Template list item $index is not an object');
-        continue;
-      }
-
-      final id = raw['id']?.toString().trim();
-      if (id == null || id.isEmpty) {
-        errors.add('Template list item $index is missing id');
-        continue;
-      }
-      if (!ids.add(id)) {
-        errors.add('Template $id appears more than once in the list');
-        continue;
-      }
-
-      if (systemId != null) {
-        final listedSystemId = int.tryParse(raw['systemId']?.toString() ?? '');
-        if (listedSystemId != systemId) {
-          errors.add(
-            'Template $id belongs to system ${raw['systemId']}; '
-            'expected $systemId',
-          );
-          continue;
-        }
-      }
-
-      final detailUri = resolveBridgeApiRoute(
-        apiBase,
-        '$_detailPathPrefix${Uri.encodeComponent(id)}/latest',
-      );
-      try {
-        final detailPayload = await _legacyHttp.getJsonObject(
-          detailUri,
-          headers: filtered,
-          notValidJsonMessage: 'Response from $detailUri is not valid JSON.',
-        );
-        if (detailPayload['success'] != true) {
-          errors.add('Template $id: response not successful');
-          continue;
-        }
-
-        final template = CachedTemplate.fromMap(
-          unwrapBridgeEnvelopeData(detailPayload),
-        );
-        if (template.id != id) {
-          errors.add('Template $id: detail response id is ${template.id}');
-          continue;
-        }
-        if (systemId != null && template.systemId != systemId) {
-          errors.add(
-            'Template $id: detail systemId is ${template.systemId}; '
-            'expected $systemId',
-          );
-          continue;
-        }
-        downloaded.add(template);
-      } catch (error) {
-        errors.add('Template $id: $error');
-      }
-    }
-
-    if (errors.isNotEmpty) {
-      return TemplateSyncSummary(
-        syncedCount: 0,
-        listCount: rawItems.length,
-        errors: List<String>.unmodifiable(errors),
-      );
-    }
-
-    await _replaceLegacyCacheAtomically(
-      cache: cache,
-      systemId: systemId,
-      downloaded: downloaded,
-    );
-
-    return TemplateSyncSummary(
-      syncedCount: downloaded.length,
-      listCount: rawItems.length,
-      errors: const <String>[],
     );
   }
 
@@ -549,78 +400,6 @@ class PresenterTemplateSyncService {
         legacy: storedSelection,
       );
     }
-
-    var originalMoved = false;
-    var stagedInstalled = false;
-    try {
-      if (await root.exists()) {
-        await root.rename(backup.path);
-        originalMoved = true;
-      }
-      await staging.rename(root.path);
-      stagedInstalled = true;
-      if (originalMoved && await backup.exists()) {
-        await backup.delete(recursive: true);
-      }
-    } catch (_) {
-      if (stagedInstalled && await root.exists()) {
-        await root.delete(recursive: true);
-      }
-      if (originalMoved && await backup.exists()) {
-        await backup.rename(root.path);
-      }
-      rethrow;
-    } finally {
-      if (await staging.exists()) await staging.delete(recursive: true);
-      if (await backup.exists() && await root.exists()) {
-        await backup.delete(recursive: true);
-      }
-    }
-  }
-
-  Future<void> _replaceLegacyCacheAtomically({
-    required TemplateCacheService cache,
-    required int? systemId,
-    required List<CachedTemplate> downloaded,
-  }) async {
-    final previous = await cache.listTemplates();
-    final retained = systemId == null
-        ? const <CachedTemplate>[]
-        : previous
-              .where((template) => template.systemId != systemId)
-              .toList(growable: false);
-    final incomingIds = downloaded.map((template) => template.id).toSet();
-    for (final template in retained) {
-      if (incomingIds.contains(template.id)) {
-        throw BridgeRuntimeException(
-          BridgeRuntimeErrorCodes.templateDocumentInvalid,
-          'Template ${template.id} is already cached for system '
-          '${template.systemId}.',
-        );
-      }
-    }
-
-    final root = cache.cacheRoot;
-    await root.parent.create(recursive: true);
-    final token = DateTime.now().microsecondsSinceEpoch;
-    final staging = Directory('${root.path}.stage-$token');
-    final backup = Directory('${root.path}.backup-$token');
-    if (await staging.exists()) await staging.delete(recursive: true);
-    if (await backup.exists()) await backup.delete(recursive: true);
-    await staging.create(recursive: true);
-
-    final stagedCache = TemplateCacheService(cacheRoot: staging);
-    for (final template in <CachedTemplate>[...retained, ...downloaded]) {
-      await stagedCache.putTemplate(template);
-    }
-    await stagedCache.writeCatalogMetadata(
-      TemplateCatalogMetadata(
-        catalogRevision: 'legacy-get',
-        systemCode: null,
-        filterFingerprint: null,
-        extraFingerprint: null,
-      ),
-    );
 
     var originalMoved = false;
     var stagedInstalled = false;

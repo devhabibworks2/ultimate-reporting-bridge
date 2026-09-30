@@ -174,16 +174,16 @@ void main() {
     expect(
       resolveBridgeApiRoute(
         Uri.parse('https://example.test/UltimateReport/backend/api/'),
-        'presenter/systems',
+        'presenter/templates/query',
       ).path,
-      '/UltimateReport/backend/api/presenter/systems',
+      '/UltimateReport/backend/api/presenter/templates/query',
     );
     expect(
       resolveBridgeApiRoute(
         Uri.parse('https://example.test/UltimateReport/backend/'),
-        'presenter/systems',
+        'presenter/templates/query',
       ).path,
-      '/UltimateReport/backend/api/presenter/systems',
+      '/UltimateReport/backend/api/presenter/templates/query',
     );
     expect(
       resolveBridgeApiRoute(Uri.parse('http://127.0.0.1:8000/'), 'health').path,
@@ -191,93 +191,75 @@ void main() {
     );
   });
 
-  test(
-    'Bridge requests canonical health, systems, and manifest paths',
-    () async {
-      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-      addTearDown(() => server.close(force: true));
-      final requestedPaths = <String>[];
-      server.listen((request) async {
-        requestedPaths.add(request.uri.path);
-        switch (request.uri.path) {
-          case '/UltimateReport/backend/api/health':
-            request.response.statusCode = HttpStatus.ok;
-            request.response.write('ok');
-            break;
-          case '/UltimateReport/apps/presenter/index.html':
-            request.response.statusCode = HttpStatus.ok;
-            request.response.headers.contentType = ContentType.html;
-            request.response.write('<!doctype html><html></html>');
-            break;
-          case '/UltimateReport/backend/api/presenter/systems':
-            await _writeJson(request, <String, dynamic>{
-              'success': true,
-              'data': <String, dynamic>{
-                'items': <Map<String, dynamic>>[
-                  <String, dynamic>{'id': 1, 'code': 'demo', 'name': 'Demo'},
-                ],
-              },
-            });
-            return;
-          case '/UltimateReport/backend/api/presenter/bundles/manifest':
-            await _writeJson(request, <String, dynamic>{
-              'success': true,
-              'data': <String, dynamic>{
-                'presenterVersion': '1.0.0',
-                'bundleVersion': 'canonical-path-test',
-                'devVersion': 1,
-                'downloadUrl': '/api/presenter/bundles/canonical-path-test',
-                'available': true,
-                'enforceUpdate': false,
-              },
-            });
-            return;
-          default:
-            request.response.statusCode = HttpStatus.notFound;
-        }
-        await request.response.close();
-      });
+  test('Bridge requests canonical health and manifest paths', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    final requestedPaths = <String>[];
+    server.listen((request) async {
+      requestedPaths.add(request.uri.path);
+      switch (request.uri.path) {
+        case '/UltimateReport/backend/api/health':
+          request.response.statusCode = HttpStatus.ok;
+          request.response.write('ok');
+          break;
+        case '/UltimateReport/apps/presenter/index.html':
+          request.response.statusCode = HttpStatus.ok;
+          request.response.headers.contentType = ContentType.html;
+          request.response.write('<!doctype html><html></html>');
+          break;
+        case '/UltimateReport/backend/api/presenter/bundles/manifest':
+          await _writeJson(request, <String, dynamic>{
+            'success': true,
+            'data': <String, dynamic>{
+              'presenterVersion': '1.0.0',
+              'bundleVersion': 'canonical-path-test',
+              'devVersion': 1,
+              'downloadUrl': '/api/presenter/bundles/canonical-path-test',
+              'available': true,
+              'enforceUpdate': false,
+            },
+          });
+          return;
+        default:
+          request.response.statusCode = HttpStatus.notFound;
+      }
+      await request.response.close();
+    });
 
-      final root = await Directory.systemTemp.createTemp(
-        'bridge_canonical_api_',
-      );
-      addTearDown(() => root.delete(recursive: true));
-      final origin = 'http://127.0.0.1:${server.port}';
-      final apiBase = Uri.parse('$origin/UltimateReport/backend/api/');
-      final client = ReportingBridgeClient(
-        apiBaseUrl: apiBase,
-        presenterEntryUrl: Uri.parse(
-          '$origin/UltimateReport/apps/presenter/index.html',
-        ),
-        bridgeRoot: root,
-      );
-      addTearDown(client.dispose);
+    final root = await Directory.systemTemp.createTemp('bridge_canonical_api_');
+    addTearDown(() => root.delete(recursive: true));
+    final origin = 'http://127.0.0.1:${server.port}';
+    final apiBase = Uri.parse('$origin/UltimateReport/backend/api/');
+    final client = ReportingBridgeClient(
+      apiBaseUrl: apiBase,
+      presenterEntryUrl: Uri.parse(
+        '$origin/UltimateReport/apps/presenter/index.html',
+      ),
+      bridgeRoot: root,
+    );
+    addTearDown(client.dispose);
 
-      await client.probeEndpoints();
-      final systems = await client.fetchSystems();
-      expect(systems.single.code, 'demo');
+    await client.probeEndpoints();
 
-      final presenterCache = PresenterCacheService(
-        presenterRoot: Directory('${root.path}/presenter-manifest-probe'),
-      );
-      final manifest = await presenterCache.fetchRemoteManifest(
-        bundleManifestUrl: null,
-        apiBaseUrl: apiBase.toString(),
-      );
-      expect(manifest.bundleVersion, 'canonical-path-test');
+    final presenterCache = PresenterCacheService(
+      presenterRoot: Directory('${root.path}/presenter-manifest-probe'),
+    );
+    final manifest = await presenterCache.fetchRemoteManifest(
+      bundleManifestUrl: null,
+      apiBaseUrl: apiBase.toString(),
+    );
+    expect(manifest.bundleVersion, 'canonical-path-test');
 
-      expect(
-        requestedPaths,
-        containsAll(<String>[
-          '/UltimateReport/backend/api/health',
-          '/UltimateReport/apps/presenter/index.html',
-          '/UltimateReport/backend/api/presenter/systems',
-          '/UltimateReport/backend/api/presenter/bundles/manifest',
-        ]),
-      );
-      expect(requestedPaths.where((p) => p.contains('/api/api/')), isEmpty);
-    },
-  );
+    expect(
+      requestedPaths,
+      containsAll(<String>[
+        '/UltimateReport/backend/api/health',
+        '/UltimateReport/apps/presenter/index.html',
+        '/UltimateReport/backend/api/presenter/bundles/manifest',
+      ]),
+    );
+    expect(requestedPaths.where((p) => p.contains('/api/api/')), isEmpty);
+  });
 }
 
 Future<void> _writeJson(

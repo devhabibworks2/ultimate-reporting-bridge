@@ -34,43 +34,18 @@ void main() {
           await _writeJson(request, <String, dynamic>{'status': 'ok'});
           return;
         }
-        if (path == '/api/presenter/systems') {
-          await _writeJson(request, <String, dynamic>{
-            'success': true,
-            'data': <String, dynamic>{
-              'items': <Map<String, dynamic>>[
-                <String, dynamic>{'id': 7, 'code': 'erp', 'name': 'ERP'},
-              ],
-            },
-          });
-          return;
-        }
-        if (path == '/api/presenter/templates') {
-          expect(request.uri.queryParameters['systemId'], '7');
-          await _writeJson(request, <String, dynamic>{
-            'success': true,
-            'data': <String, dynamic>{
-              'items': <Map<String, dynamic>>[
-                <String, dynamic>{'id': 'invoice-7', 'systemId': 7},
-              ],
-            },
-          });
-          return;
-        }
-        if (path == '/api/presenter/templates/invoice-7/latest') {
-          await _writeJson(request, <String, dynamic>{
-            'success': true,
-            'data': <String, dynamic>{
-              'id': 'invoice-7',
-              'type': 'invoice',
-              'systemId': 7,
-              'document': <String, dynamic>{
-                'meta': <String, dynamic>{'name': 'Invoice'},
-                'page': <String, dynamic>{},
-                'elements': <dynamic>[],
-              },
-            },
-          });
+        if (path == '/api/presenter/templates/query') {
+          expect(request.method, 'POST');
+          final body = Map<String, dynamic>.from(
+            jsonDecode(await utf8.decoder.bind(request).join()) as Map,
+          );
+          expect(body['systemCode'], 'erp');
+          await _writeJson(
+            request,
+            _queryEnvelope(<Map<String, dynamic>>[
+              _queryTemplate('invoice-7', 7, 'invoice', systemCode: 'erp'),
+            ], systemCode: 'erp'),
+          );
           return;
         }
         if (path == '/api/presenter/bundles/manifest') {
@@ -117,8 +92,7 @@ void main() {
       addTearDown(client.dispose);
 
       await client.probeEndpoints();
-      expect((await client.fetchSystems()).single.id, 7);
-      final templateSync = await client.syncTemplates(systemId: 7);
+      final templateSync = await client.syncTemplates(systemCode: 'erp');
       expect(templateSync.syncedCount, 1);
 
       final firstProgress = <double>[];
@@ -143,7 +117,7 @@ void main() {
       expect(status.templateCount, 1);
       expect(status.presenterManifest?.bundleVersion, 'bundle-210');
 
-      final template = (await client.listTemplates(systemId: 7)).single;
+      final template = (await client.listTemplates(systemCode: 'erp')).single;
       final seed = <String, dynamic>{
         'dynamic': <String, dynamic>{
           'rows': <dynamic>[1, null, true],
@@ -191,7 +165,7 @@ void main() {
     await client.dispose();
 
     expect(
-      () => client.listTemplates(),
+      () => client.listTemplates(systemCode: 'erp'),
       throwsA(isA<BridgeRuntimeException>()),
     );
   });
@@ -213,17 +187,16 @@ void main() {
           await request.response.close();
           return;
         }
-        if (path == '/api/presenter/systems') {
+        if (path == '/api/presenter/templates/query') {
           expect(request.headers.value('X-Tenant-Id'), 'tenant_demo');
           expect(request.headers.value('Not-Approved'), isNull);
-          await _writeJson(request, <String, dynamic>{
-            'success': true,
-            'data': <String, dynamic>{
-              'items': <Map<String, dynamic>>[
-                <String, dynamic>{'id': 1, 'code': 'erp', 'name': 'ERP'},
-              ],
-            },
-          });
+          await utf8.decoder.bind(request).join();
+          await _writeJson(
+            request,
+            _queryEnvelope(<Map<String, dynamic>>[
+              _queryTemplate('shared-1', 7, 'invoice', systemCode: 'erp'),
+            ], systemCode: 'erp'),
+          );
           return;
         }
         request.response.statusCode = HttpStatus.notFound;
@@ -259,8 +232,7 @@ void main() {
       );
 
       await client.probeEndpoints();
-      final systems = await client.fetchSystems();
-      expect(systems.single.id, 1);
+      await client.syncTemplates(systemCode: 'erp');
       expect(
         factoryCalls,
         1,
@@ -305,6 +277,67 @@ List<int> _presenterZipBytes() {
     archive.addFile(ArchiveFile.string(entry.key, entry.value));
   }
   return ZipEncoder().encode(archive);
+}
+
+Map<String, dynamic> _queryEnvelope(
+  List<Map<String, dynamic>> items, {
+  required String systemCode,
+}) {
+  return <String, dynamic>{
+    'success': true,
+    'message': 'OK',
+    'data': <String, dynamic>{
+      'catalogRevision': 'client-test-revision',
+      'system': <String, dynamic>{
+        'id': 7,
+        'code': systemCode,
+        'name': 'ERP',
+        'description': 'Client test system',
+      },
+      'appliedFilter': <String, dynamic>{
+        'reportTypes': <String>['all'],
+        'layouts': <String>['all'],
+        'sizes': <String>['all'],
+        'languages': <String>['all'],
+        'units': <String>['all'],
+        'orientations': <String>['all'],
+      },
+      'count': items.length,
+      'items': items,
+    },
+  };
+}
+
+Map<String, dynamic> _queryTemplate(
+  String id,
+  int systemId,
+  String reportType, {
+  required String systemCode,
+}) {
+  return <String, dynamic>{
+    'id': id,
+    'systemId': systemId,
+    'systemCode': systemCode,
+    'code': '$id-code',
+    'name': 'Template $id',
+    'description': 'Description for $id',
+    'reportType': reportType,
+    'publishedVersionNo': 1,
+    'metadata': <String, dynamic>{},
+    'compatibility': <String, dynamic>{
+      'minPresenterVersion': '1.0.0',
+      'minBridgeVersion': '1.0.0',
+    },
+    'document': <String, dynamic>{
+      'schemaVersion': '1.0.0',
+      'meta': <String, dynamic>{'name': 'Template $id', 'code': '$id-code'},
+      'page': <String, dynamic>{},
+      'styleTokens': <String, dynamic>{},
+      'assets': <Object?>[],
+      'layers': <Object?>[],
+      'elements': <Object?>[],
+    },
+  };
 }
 
 Future<void> _writeJson(HttpRequest request, Map<String, dynamic> body) async {

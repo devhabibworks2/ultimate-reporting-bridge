@@ -7,24 +7,8 @@ void main() {
   test('client updates and clears identity context lifecycle', () async {
     final root = await Directory.systemTemp.createTemp('bridge-identity-');
     addTearDown(() => root.delete(recursive: true));
-    final apiBaseUrl = Uri.parse('https://reports.example/');
-    final legacy = TemplateCacheService(
-      cacheRoot: bridgeTemplateCacheDirectoryForApi(
-        bridgeRoot: root,
-        apiBaseUrl: apiBaseUrl,
-      ),
-    );
-    await legacy.putTemplate(
-      const CachedTemplate(
-        id: 'anonymous-legacy',
-        type: 'sales_invoice',
-        systemId: 7,
-        document: <String, dynamic>{'meta': <String, dynamic>{}},
-      ),
-    );
-
     final client = ReportingBridgeClient(
-      apiBaseUrl: apiBaseUrl,
+      apiBaseUrl: Uri.parse('https://reports.example/'),
       presenterEntryUrl: Uri.parse('https://reports.example/presenter/'),
       bridgeRoot: root,
       identityContext: BridgeIdentityContext(
@@ -36,16 +20,6 @@ void main() {
     addTearDown(client.dispose);
 
     expect(client.identityContext.userId, 'user-a');
-    await expectLater(
-      client.listTemplates(),
-      throwsA(
-        isA<BridgeRuntimeException>().having(
-          (error) => error.code,
-          'code',
-          BridgeTemplateSyncErrorCodes.offlineCacheUnavailable,
-        ),
-      ),
-    );
     await client.updateIdentityContext(
       BridgeIdentityContext(
         branchId: 'branch-b',
@@ -64,7 +38,6 @@ void main() {
 
     await client.clearIdentityContext();
     expect(client.identityContext.isEmpty, isTrue);
-    expect((await client.listTemplates()).single.id, 'anonymous-legacy');
   });
 
   test(

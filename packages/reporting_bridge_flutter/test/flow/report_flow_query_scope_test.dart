@@ -77,7 +77,6 @@ void main() {
     expect(bridge.listCalls, isNotEmpty);
     for (final call in <_ScopeCall>[...bridge.syncCalls, ...bridge.listCalls]) {
       expect(call.systemCode, 'motakamel_transactions');
-      expect(call.systemId, isNull);
       expect(call.filter?.reportTypes, <String>['sales_invoice']);
       expect(call.filter?.layouts, <String>['Pages']);
       expect(call.filter?.sizes, <String>['A4']);
@@ -163,23 +162,17 @@ void main() {
 
     await flowB.dispose();
     expect(bridge.identityContext.isEmpty, isTrue);
-
-    await bridge.fetchSystems();
-    expect(bridge.fetchSystemsCalls, 1);
-    expect(bridge.identityContext.isEmpty, isTrue);
   });
 }
 
 final class _ScopeCall {
   const _ScopeCall({
     required this.systemCode,
-    required this.systemId,
     required this.filter,
     required this.extra,
   });
 
-  final String? systemCode;
-  final int? systemId;
+  final String systemCode;
   final TemplateSyncFilter? filter;
   final Map<String, Object?> extra;
 }
@@ -197,7 +190,6 @@ final class _RecordingScopedBridgeClient extends ReportingBridgeClient {
   final List<_ScopeCall> syncCalls = <_ScopeCall>[];
   final List<_ScopeCall> listCalls = <_ScopeCall>[];
   final List<BridgeIdentityContext> identityUpdates = <BridgeIdentityContext>[];
-  int fetchSystemsCalls = 0;
 
   @override
   Future<void> updateIdentityContext(BridgeIdentityContext value) async {
@@ -206,25 +198,13 @@ final class _RecordingScopedBridgeClient extends ReportingBridgeClient {
   }
 
   @override
-  Future<List<PresenterSystem>> fetchSystems() async {
-    fetchSystemsCalls += 1;
-    return const <PresenterSystem>[];
-  }
-
-  @override
   Future<TemplateSyncSummary> syncTemplates({
-    String? systemCode,
-    int? systemId,
+    required String systemCode,
     TemplateSyncFilter? filter,
     Map<String, Object?> extra = const <String, Object?>{},
   }) async {
     syncCalls.add(
-      _ScopeCall(
-        systemCode: systemCode,
-        systemId: systemId,
-        filter: filter,
-        extra: extra,
-      ),
+      _ScopeCall(systemCode: systemCode, filter: filter, extra: extra),
     );
     return TemplateSyncSummary(
       syncedCount: 1,
@@ -235,18 +215,12 @@ final class _RecordingScopedBridgeClient extends ReportingBridgeClient {
 
   @override
   Future<List<CachedTemplate>> listTemplates({
-    String? systemCode,
-    int? systemId,
+    required String systemCode,
     TemplateSyncFilter? filter,
     Map<String, Object?> extra = const <String, Object?>{},
   }) async {
     listCalls.add(
-      _ScopeCall(
-        systemCode: systemCode,
-        systemId: systemId,
-        filter: filter,
-        extra: extra,
-      ),
+      _ScopeCall(systemCode: systemCode, filter: filter, extra: extra),
     );
     return <CachedTemplate>[
       CachedTemplate(
@@ -258,7 +232,7 @@ final class _RecordingScopedBridgeClient extends ReportingBridgeClient {
           'schemaVersion': '1.0.0',
           'meta': <String, dynamic>{
             'family': 'sales_invoice',
-            'systemCode': systemCode ?? 'motakamel_transactions',
+            'systemCode': systemCode,
           },
           'page': <String, dynamic>{
             'layout': 'Pages',
@@ -273,9 +247,7 @@ final class _RecordingScopedBridgeClient extends ReportingBridgeClient {
           'layers': <dynamic>[],
           'elements': <dynamic>[],
         },
-        metadata: <String, dynamic>{
-          'systemCode': systemCode ?? 'motakamel_transactions',
-        },
+        metadata: <String, dynamic>{'systemCode': systemCode},
       ),
     ];
   }

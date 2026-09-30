@@ -5,7 +5,6 @@ import 'bridge_template_sync.dart';
 
 enum BridgeHeaderOperation {
   probeApi,
-  fetchSystems,
   syncTemplates,
   listTemplates,
   syncPresenter,
@@ -17,7 +16,6 @@ class BridgeHeaderContext {
     required this.operation,
     required this.apiBaseUrl,
     this.systemCode,
-    this.systemId,
     this.branchId,
     this.userId,
     this.systemUnit,
@@ -28,7 +26,6 @@ class BridgeHeaderContext {
   final BridgeHeaderOperation operation;
   final Uri apiBaseUrl;
   final String? systemCode;
-  final int? systemId;
   final String? branchId;
   final String? userId;
   final String? systemUnit;

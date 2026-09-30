@@ -112,7 +112,12 @@ class ReportFlowControllerImpl
 
       _persistedPreferences = stored;
       final preferredMode = request.presenterMode ?? stored?.mode;
-      final catalog = await _runtime.bridgeClient.listTemplates();
+      final sync = request.templateSyncRequest;
+      final catalog = await _runtime.bridgeClient.listTemplates(
+        systemCode: sync.systemCode.value,
+        filter: sync.filter,
+        extra: sync.extra,
+      );
       var templates = _compatibleTemplates(catalog);
       var presenterCached = false;
       PresenterCacheManifest? presenterManifest;
@@ -396,7 +401,11 @@ class ReportFlowControllerImpl
             'filterFingerprint': sync.filter.fingerprint,
             'hasExtra': sync.extra.isNotEmpty,
           },
-          action: () => _runtime.bridgeClient.syncTemplates(),
+          action: () => _runtime.bridgeClient.syncTemplates(
+            systemCode: sync.systemCode.value,
+            filter: sync.filter,
+            extra: sync.extra,
+          ),
         );
     if (summary.errors.isNotEmpty) {
       throw ReportFlowFailure(
@@ -404,7 +413,11 @@ class ReportFlowControllerImpl
         diagnostic: summary.errors.join('\n'),
       );
     }
-    final catalog = await _runtime.bridgeClient.listTemplates();
+    final catalog = await _runtime.bridgeClient.listTemplates(
+      systemCode: sync.systemCode.value,
+      filter: sync.filter,
+      extra: sync.extra,
+    );
     return (
       catalogCount: catalog.length,
       compatibleTemplates: _compatibleTemplates(catalog),

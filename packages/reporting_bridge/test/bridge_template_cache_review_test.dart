@@ -1,72 +1,9 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:reporting_bridge/reporting_bridge.dart';
 import 'package:test/test.dart';
 
 void main() {
-  test('keeps previous cache when a template sync is partial', () async {
-    final root = await Directory.systemTemp.createTemp('bridge_sync_review_');
-    addTearDown(() => root.delete(recursive: true));
-    final cache = TemplateCacheService(cacheRoot: root);
-    await cache.putTemplate(
-      const CachedTemplate(
-        id: 'existing',
-        type: 'invoice',
-        document: <String, dynamic>{'meta': <String, dynamic>{}},
-      ),
-    );
-
-    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    addTearDown(() => server.close(force: true));
-    server.listen((request) async {
-      if (request.uri.path == '/api/presenter/templates') {
-        await _writeJson(request, <String, dynamic>{
-          'success': true,
-          'data': <String, dynamic>{
-            'items': <Map<String, dynamic>>[
-              <String, dynamic>{'id': 'new-good'},
-              <String, dynamic>{'id': 'new-bad'},
-            ],
-          },
-        });
-        return;
-      }
-      if (request.uri.path == '/api/presenter/templates/new-good/latest') {
-        await _writeJson(request, <String, dynamic>{
-          'success': true,
-          'data': <String, dynamic>{
-            'id': 'new-good',
-            'type': 'invoice',
-            'document': <String, dynamic>{'meta': <String, dynamic>{}},
-          },
-        });
-        return;
-      }
-      if (request.uri.path == '/api/presenter/templates/new-bad/latest') {
-        await _writeJson(request, <String, dynamic>{
-          'success': false,
-          'data': <String, dynamic>{},
-        });
-        return;
-      }
-      request.response.statusCode = HttpStatus.notFound;
-      await request.response.close();
-    });
-
-    final result = await PresenterTemplateSyncService().syncTemplatesToCache(
-      apiBase: Uri.parse('http://127.0.0.1:${server.port}/'),
-      headers: const <String, String>{},
-      cache: cache,
-    );
-
-    expect(result.syncedCount, 0);
-    expect(result.errors, isNotEmpty);
-    expect((await cache.listTemplates()).map((item) => item.id), <String>[
-      'existing',
-    ]);
-  });
-
   test('skips corrupt cache files and keeps colliding ids distinct', () async {
     final root = await Directory.systemTemp.createTemp('bridge_cache_review_');
     addTearDown(() => root.delete(recursive: true));
@@ -102,10 +39,4 @@ void main() {
       },
     );
   });
-}
-
-Future<void> _writeJson(HttpRequest request, Map<String, dynamic> body) async {
-  request.response.headers.contentType = ContentType.json;
-  request.response.write(jsonEncode(body));
-  await request.response.close();
 }

@@ -33,11 +33,12 @@ void main() {
         );
         addTearDown(client.dispose);
 
-        final templates = await client.listTemplates();
+        final templates = await client.listTemplates(
+          systemCode: 'motakamel_transactions',
+        );
 
         expect(templates, isEmpty);
         expect(delegate.listSystemCode, 'motakamel_transactions');
-        expect(delegate.listSystemId, isNull);
       },
     );
 
@@ -66,7 +67,7 @@ void main() {
         addTearDown(client.dispose);
 
         await expectLater(
-          client.listTemplates(),
+          client.listTemplates(systemCode: 'motakamel_transactions'),
           throwsA(
             isA<BridgeRuntimeException>()
                 .having(
@@ -92,17 +93,14 @@ final class _ListFailureBridgeClient extends ReportingBridgeClient {
 
   final BridgeRuntimeException failure;
   String? listSystemCode;
-  int? listSystemId;
 
   @override
   Future<List<CachedTemplate>> listTemplates({
-    String? systemCode,
-    int? systemId,
+    required String systemCode,
     TemplateSyncFilter? filter,
     Map<String, Object?> extra = const <String, Object?>{},
   }) async {
     listSystemCode = systemCode;
-    listSystemId = systemId;
     throw failure;
   }
 }

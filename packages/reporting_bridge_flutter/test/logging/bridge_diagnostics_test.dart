@@ -55,15 +55,15 @@ void main() {
 
     await expectLater(
       diagnostics.traceApi<void>(
-        operation: 'fetchSystems',
+        operation: 'syncTemplates',
         method: 'GET',
-        uri: Uri.parse('https://example.test/presenter/systems'),
+        uri: Uri.parse('https://example.test/presenter/templates/query'),
         action: () => Future<void>.error(failure),
       ),
       throwsA(same(failure)),
     );
 
-    expect(records.last.event, 'fetchSystems.error');
+    expect(records.last.event, 'syncTemplates.error');
     expect(records.last.level, BridgeLogLevel.error);
     expect(records.last.error, same(failure));
     expect(records.last.stackTrace, isNotNull);
