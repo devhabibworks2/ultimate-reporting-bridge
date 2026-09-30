@@ -268,7 +268,7 @@ Future<void> _ready(ReportFlowController controller) async {
     onLifecycle: (_) {},
   );
   controller.presenterProtocolDetected(BridgeContract.payloadVersion);
-  controller.completePresenterRender(sessionId: launch.sessionId);
+  await controller.completePresenterRender(sessionId: launch.sessionId);
   expect(controller.outputReady, isTrue);
 }
 

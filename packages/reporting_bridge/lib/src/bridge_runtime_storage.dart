@@ -20,6 +20,7 @@ class RuntimeSessionInput {
     this.selectedTemplate,
     this.branding,
     this.apiHeaders,
+    this.apiBaseUrl,
     this.writeSessionJson = true,
   });
 
@@ -35,6 +36,7 @@ class RuntimeSessionInput {
   final SelectedTemplate? selectedTemplate;
   final BrandConfig? branding;
   final ApiHeaderConfig? apiHeaders;
+  final String? apiBaseUrl;
   final bool writeSessionJson;
 }
 
@@ -79,6 +81,7 @@ class RuntimeSessionStorage {
         seedReportData: seedRef,
         template: templateRef,
         apiHeaders: input.apiHeaders,
+        apiBaseUrl: input.apiBaseUrl,
       );
       final sessionRef = input.writeSessionJson
           ? await writeSessionJson(partialSession)
@@ -97,6 +100,7 @@ class RuntimeSessionStorage {
         template: templateRef,
         session: sessionRef,
         apiHeaders: input.apiHeaders,
+        apiBaseUrl: input.apiBaseUrl,
       );
     } on BridgeRuntimeException {
       await _deleteDirectoryIfExists(sessionDir);

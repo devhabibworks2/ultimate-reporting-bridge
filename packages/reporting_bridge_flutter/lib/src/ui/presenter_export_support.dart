@@ -47,6 +47,8 @@ class PresenterPdfExportCache {
   String? _sessionId;
   int _generation = 0;
 
+  PresenterCachedPdf? get value => _value;
+
   void bindSession(String sessionId) {
     if (_sessionId == sessionId) return;
     _sessionId = sessionId;

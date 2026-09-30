@@ -152,13 +152,7 @@ class ReportFlowControllerImpl extends base.ReportFlowControllerImpl
 
   @override
   bool get outputReady =>
-      value.exportReady ||
-      (_effectiveFeatures.allowLegacyPresenterFallback &&
-          value.stage == ReportFlowStage.previewing &&
-          value.presenterLaunch != null &&
-          value.renderStatus == PresenterRenderStatus.ready &&
-          value.webViewLoadProgress >= 1 &&
-          value.exportAction == null);
+      value.exportReady && presenterSurface.cachedPdf != null;
 
   @override
   void selectTemplate(String templateId) {

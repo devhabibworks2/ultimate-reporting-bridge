@@ -14,6 +14,7 @@ export 'src/bridge_inline_session_payload.dart';
 export 'src/bridge_local_server.dart';
 export 'src/bridge_methods.dart';
 export 'src/bridge_presenter_cache.dart';
+export 'src/bridge_presenter_resource_cache.dart';
 export 'src/bridge_presenter_bundle_contract.dart';
 export 'src/bridge_presenter_server.dart';
 export 'src/bridge_presenter_session.dart';

@@ -39,6 +39,7 @@ class RuntimeSession {
     this.template,
     this.session,
     this.apiHeaders,
+    this.apiBaseUrl,
   });
 
   final String sessionId;
@@ -54,6 +55,7 @@ class RuntimeSession {
   final FileRef? template;
   final FileRef? session;
   final ApiHeaderConfig? apiHeaders;
+  final String? apiBaseUrl;
 
   Map<String, dynamic> toMap() {
     return <String, dynamic>{
@@ -71,6 +73,7 @@ class RuntimeSession {
       if (template != null) 'template': template!.toMap(),
       if (session != null) 'session': session!.toMap(),
       if (apiHeaders != null) 'apiHeaders': apiHeaders!.toRedactedMap(),
+      if (apiBaseUrl != null) 'apiBaseUrl': apiBaseUrl,
     };
   }
 }

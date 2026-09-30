@@ -5,6 +5,46 @@ import 'package:archive/archive.dart';
 import 'package:reporting_bridge/reporting_bridge.dart';
 import 'package:test/test.dart';
 
+const _pureDartFiles = <String>[
+  'index.html',
+  'presenter.js',
+  'presenter-manifest.json',
+  'resource-manifest.json',
+  'fonts/Cairo-Regular.ttf',
+  'fonts/Cairo-Medium.ttf',
+  'fonts/Cairo-Bold.ttf',
+  'fonts/NotoSansArabic-Regular.ttf',
+  'fonts/NotoSansArabic-Medium.ttf',
+  'fonts/NotoSansArabic-Bold.ttf',
+  'fonts/NotoSansMono-Regular.ttf',
+  'fonts/NotoSansMono-Medium.ttf',
+  'fonts/NotoSansMono-Bold.ttf',
+  'icons/MaterialIcons-Regular.ttf',
+];
+
+const _fontFiles = <String>[
+  'fonts/Cairo-Regular.ttf',
+  'fonts/Cairo-Medium.ttf',
+  'fonts/Cairo-Bold.ttf',
+  'fonts/NotoSansArabic-Regular.ttf',
+  'fonts/NotoSansArabic-Medium.ttf',
+  'fonts/NotoSansArabic-Bold.ttf',
+  'fonts/NotoSansMono-Regular.ttf',
+  'fonts/NotoSansMono-Medium.ttf',
+  'fonts/NotoSansMono-Bold.ttf',
+];
+
+const _lifecycleMarkers = <String>[
+  'base64Chunk',
+  'urbReportingBridge',
+  'presenterLifecycle',
+  'onPresenterReady',
+  'onRenderStarted',
+  'onRenderCompleted',
+  'onRenderFailed',
+  'exportPdf',
+];
+
 void main() {
   late Directory root;
   late Directory presenterRoot;
@@ -21,7 +61,7 @@ void main() {
   });
 
   test(
-    'accepts the AssetManifest.bin emitted by current Flutter Web',
+    'accepts a complete Pure Dart Presenter bundle and lifecycle contract',
     () async {
       await _writeReadyPresenter(presenterRoot, cache.manifestFile);
 
@@ -30,20 +70,17 @@ void main() {
     },
   );
 
-  test('rejects a bundle without any supported AssetManifest', () async {
-    await _writeReadyPresenter(presenterRoot, cache.manifestFile);
-    await File('${presenterRoot.path}/assets/AssetManifest.bin').delete();
-
-    expect(await cache.isReady(), isFalse);
-  });
-
   test(
-    'accepts a structurally ready legacy Presenter and reports old lifecycle',
+    'requires presenter.js and scans it for lifecycle and export markers',
     () async {
       await _writeReadyPresenter(
         presenterRoot,
         cache.manifestFile,
-        mainJavaScript: 'base64Chunk urbReportingBridge',
+        includeLegacyFlutterAssets: true,
+        presenterJavaScript: _lifecycleMarkers
+            .where((marker) => marker != 'onRenderCompleted')
+            .join(' '),
+        legacyMainJavaScript: _lifecycleMarkers.join(' '),
       );
 
       expect(await cache.isReady(), isTrue);
@@ -51,28 +88,63 @@ void main() {
     },
   );
 
-  test('rejects Presenter JavaScript missing one required marker', () async {
-    final markers = PresenterBundleContract.requiredJavaScriptMarkers
-        .where((marker) => marker != 'onRenderCompleted')
-        .join(' ');
+  test(
+    'does not treat main.dart.js as a substitute for presenter.js',
+    () async {
+      await _writeReadyPresenter(
+        presenterRoot,
+        cache.manifestFile,
+        includePresenterJavaScript: false,
+        includeLegacyFlutterAssets: true,
+        legacyMainJavaScript: _lifecycleMarkers.join(' '),
+      );
+
+      expect(await cache.isReady(), isFalse);
+    },
+  );
+
+  test('requires resource-manifest.json before a bundle is ready', () async {
     await _writeReadyPresenter(
       presenterRoot,
       cache.manifestFile,
-      mainJavaScript: markers,
+      includeLegacyFlutterAssets: true,
+      includeResourceManifest: false,
     );
 
-    expect(await cache.isReady(), isTrue);
-    expect(await cache.supportsCurrentLifecycleContract(), isFalse);
+    expect(await cache.isReady(), isFalse);
   });
+
+  test(
+    'rejects a listed font or icon with a missing or mismatched SHA-256',
+    () async {
+      for (final mode in <_ResourceManifestMode>[
+        _ResourceManifestMode.missingEntry,
+        _ResourceManifestMode.tamperedHash,
+      ]) {
+        if (await presenterRoot.exists()) {
+          await presenterRoot.delete(recursive: true);
+        }
+        await _writeReadyPresenter(
+          presenterRoot,
+          cache.manifestFile,
+          includeLegacyFlutterAssets: true,
+          resourceManifestMode: mode,
+        );
+
+        expect(
+          await cache.isReady(),
+          isFalse,
+          reason: 'Resource manifest mode $mode must fail closed.',
+        );
+      }
+    },
+  );
 
   test('invalid downloaded bundle preserves the previous ready site', () async {
     await _writeReadyPresenter(presenterRoot, cache.manifestFile);
     await File('${presenterRoot.path}/index.html').writeAsString('old-site');
     final previousManifest = await cache.manifestFile.readAsString();
-    final invalidZip = _presenterZipBytes(
-      mainJavaScript: 'base64Chunk urbReportingBridge',
-      includeMainJavaScript: false,
-    );
+    final invalidZip = _presenterZipBytes(includePresenterJavaScript: false);
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));
     server.listen((request) async {
@@ -116,57 +188,185 @@ void main() {
     expect(await cache.manifestFile.readAsString(), previousManifest);
     expect(await cache.isReady(), isTrue);
   });
+
+  test(
+    'identical remote manifest reuses cache without downloading bundle',
+    () async {
+      await _writeReadyPresenter(presenterRoot, cache.manifestFile);
+      const manifestPath = '/manifest';
+      var bundleRequests = 0;
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        if (request.uri.path == manifestPath) {
+          request.response.headers.contentType = ContentType.json;
+          request.response.write(
+            jsonEncode(<String, Object>{
+              'presenterVersion': '1.0.0',
+              'bundleVersion': 'test-bundle',
+              'devVersion': 1,
+              'downloadUrl': '/bundle.zip',
+              'available': true,
+            }),
+          );
+        } else if (request.uri.path == '/bundle.zip') {
+          bundleRequests++;
+          request.response.add(_presenterZipBytes());
+        } else {
+          request.response.statusCode = HttpStatus.notFound;
+        }
+        await request.response.close();
+      });
+      await cache.manifestFile.writeAsString(
+        jsonEncode(<String, Object>{
+          'manifestUrl': 'http://127.0.0.1:${server.port}$manifestPath',
+          'presenterVersion': '1.0.0',
+          'bundleVersion': 'test-bundle',
+          'devVersion': 1,
+        }),
+      );
+
+      final manifest = await cache.ensureCurrentPresenterSite(
+        bundleManifestUrl: 'http://127.0.0.1:${server.port}$manifestPath',
+        apiBaseUrl: null,
+      );
+
+      expect(manifest.bundleVersion, 'test-bundle');
+      expect(bundleRequests, 0);
+      expect(await cache.isReady(), isTrue);
+    },
+  );
 }
+
+enum _ResourceManifestMode { valid, missingEntry, tamperedHash }
 
 Future<void> _writeReadyPresenter(
   Directory presenterRoot,
   File manifestFile, {
-  String? mainJavaScript,
+  String? presenterJavaScript,
+  String? legacyMainJavaScript,
+  bool includePresenterJavaScript = true,
+  bool includeLegacyFlutterAssets = false,
+  bool includeResourceManifest = true,
+  _ResourceManifestMode resourceManifestMode = _ResourceManifestMode.valid,
 }) async {
   await presenterRoot.create(recursive: true);
   await manifestFile.parent.create(recursive: true);
   await manifestFile.writeAsString('{"bundleVersion":"test"}');
-  await File('${presenterRoot.path}/index.html').writeAsString('<html></html>');
 
-  for (final path in PresenterBundleContract.requiredFiles) {
-    final file = File('${presenterRoot.path}/$path');
-    await file.parent.create(recursive: true);
-    await file.writeAsString(
-      path == 'main.dart.js'
-          ? (mainJavaScript ??
-                PresenterBundleContract.requiredJavaScriptMarkers.join(' '))
-          : path,
+  for (final path in _pureDartFiles) {
+    if (path == 'presenter.js' && !includePresenterJavaScript) continue;
+    if (path == 'resource-manifest.json' && !includeResourceManifest) continue;
+    if (path == 'presenter-manifest.json') {
+      await _writeTextFile(
+        presenterRoot,
+        path,
+        '{"formatVersion":1,"presenterVersion":"1.0.0",'
+        '"devVersion":1,"protocolVersion":1,"entry":"presenter.js",'
+        '"resourceManifest":"resource-manifest.json"}',
+      );
+    } else if (path == 'presenter.js') {
+      await _writeTextFile(
+        presenterRoot,
+        path,
+        presenterJavaScript ?? _lifecycleMarkers.join(' '),
+      );
+    } else if (_fontFiles.contains(path)) {
+      await _writeTextFile(presenterRoot, path, 'font-bytes');
+    } else if (path == 'icons/MaterialIcons-Regular.ttf') {
+      await _writeTextFile(presenterRoot, path, 'icon-bytes');
+    } else if (path != 'resource-manifest.json') {
+      await _writeTextFile(presenterRoot, path, 'bundle-file');
+    }
+  }
+
+  if (includeResourceManifest) {
+    final resources = <String, String>{};
+    for (final path in <String>[
+      ..._fontFiles,
+      'icons/MaterialIcons-Regular.ttf',
+    ]) {
+      if (resourceManifestMode == _ResourceManifestMode.missingEntry &&
+          path == _fontFiles.first) {
+        continue;
+      }
+      resources[path] =
+          resourceManifestMode == _ResourceManifestMode.tamperedHash &&
+              path == _fontFiles.first
+          ? List<String>.filled(64, '0').join()
+          : path == 'icons/MaterialIcons-Regular.ttf'
+          ? '6cbd50037e50937c7aa9ad4a2de7770c8f5db9455c1be9e021bc236060dafa21'
+          : 'a446817d40e4dc37c526fb5e30859fe0dd7bb0a7d5b3c0c56f7a0626d0019307';
+    }
+    await _writeTextFile(
+      presenterRoot,
+      'resource-manifest.json',
+      jsonEncode(<String, Object>{
+        'version': '1.0.0',
+        'bundleSha256': List<String>.filled(64, 'a').join(),
+        'resources': resources,
+      }),
     );
   }
 
-  final assetManifest = File('${presenterRoot.path}/assets/AssetManifest.bin');
-  await assetManifest.parent.create(recursive: true);
-  await assetManifest.writeAsBytes(const <int>[1]);
+  if (includeLegacyFlutterAssets) {
+    await _writeTextFile(
+      presenterRoot,
+      'main.dart.js',
+      legacyMainJavaScript ?? _lifecycleMarkers.join(' '),
+    );
+  }
+  if (includeLegacyFlutterAssets) {
+    await _writeTextFile(presenterRoot, 'flutter_bootstrap.js', 'bootstrap');
+    await _writeTextFile(presenterRoot, 'assets/FontManifest.json', '[]');
+    await _writeTextFile(
+      presenterRoot,
+      'assets/fonts/MaterialIcons-Regular.otf',
+      'legacy-icon-bytes',
+    );
+    await _writeTextFile(
+      presenterRoot,
+      'assets/AssetManifest.bin',
+      'legacy-asset-manifest',
+    );
+  }
 }
 
-List<int> _presenterZipBytes({
-  required String mainJavaScript,
-  bool includeMainJavaScript = true,
-}) {
+Future<void> _writeTextFile(
+  Directory root,
+  String path,
+  String contents,
+) async {
+  final file = File('${root.path}/$path');
+  await file.parent.create(recursive: true);
+  await file.writeAsString(contents);
+}
+
+List<int> _presenterZipBytes({bool includePresenterJavaScript = true}) {
   final archive = Archive();
   final files = <String, String>{
     'index.html': '<!doctype html><html><head><base href="/"></head></html>',
-    'main.dart.js': mainJavaScript,
-    'flutter_bootstrap.js': 'bootstrap',
-    'assets/AssetManifest.bin': 'manifest',
-    'assets/FontManifest.json': '[]',
-    'assets/fonts/MaterialIcons-Regular.otf': 'icons',
-    'assets/assets/fonts/Cairo-Regular.ttf': 'cairo',
-    'assets/assets/fonts/Cairo-Medium.ttf': 'cairo-medium',
-    'assets/assets/fonts/Cairo-Bold.ttf': 'cairo-bold',
-    'assets/assets/fonts/NotoSansArabic-Regular.ttf': 'arabic',
-    'assets/assets/fonts/NotoSansArabic-Medium.ttf': 'arabic-medium',
-    'assets/assets/fonts/NotoSansArabic-Bold.ttf': 'arabic-bold',
-    'assets/assets/fonts/NotoSansMono-Regular.ttf': 'mono',
-    'assets/assets/fonts/NotoSansMono-Medium.ttf': 'mono-medium',
-    'assets/assets/fonts/NotoSansMono-Bold.ttf': 'mono-bold',
+    'presenter-manifest.json':
+        '{"formatVersion":1,"presenterVersion":"1.0.0",'
+        '"devVersion":1,"protocolVersion":1,"entry":"presenter.js",'
+        '"resourceManifest":"resource-manifest.json"}',
+    'resource-manifest.json': jsonEncode(<String, Object>{
+      'version': '1.0.0',
+      'bundleSha256': List<String>.filled(64, 'a').join(),
+      'resources': <String, String>{
+        for (final path in _fontFiles)
+          path:
+              'a446817d40e4dc37c526fb5e30859fe0dd7bb0a7d5b3c0c56f7a0626d0019307',
+        'icons/MaterialIcons-Regular.ttf':
+            '6cbd50037e50937c7aa9ad4a2de7770c8f5db9455c1be9e021bc236060dafa21',
+      },
+    }),
+    for (final path in _fontFiles) path: 'font-bytes',
+    'icons/MaterialIcons-Regular.ttf': 'icon-bytes',
   };
-  if (!includeMainJavaScript) files.remove('main.dart.js');
+  if (includePresenterJavaScript) {
+    files['presenter.js'] = _lifecycleMarkers.join(' ');
+  }
   for (final entry in files.entries) {
     archive.addFile(ArchiveFile.string(entry.key, entry.value));
   }

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:archive/archive.dart';
+import 'package:crypto/crypto.dart';
 
 import 'bridge_cache_namespace.dart';
 import 'bridge_http_fetch.dart';
@@ -58,6 +59,16 @@ class RemotePresenterManifest {
   final DateTime? updatedAt;
 }
 
+class PresenterCacheUpdateException extends BridgeRuntimeException {
+  const PresenterCacheUpdateException({
+    required String code,
+    required String message,
+    required this.enforceUpdate,
+  }) : super(code, message);
+
+  final bool enforceUpdate;
+}
+
 class PresenterCacheService {
   PresenterCacheService({
     required this.presenterRoot,
@@ -89,29 +100,89 @@ class PresenterCacheService {
   Future<bool> supportsCurrentLifecycleContract() async {
     if (!await isReady()) return false;
     return _containsAllMarkers(
-      File('${presenterRoot.path}/main.dart.js'),
+      File(
+        '${presenterRoot.path}/${PresenterBundleContract.presenterEntryFile}',
+      ),
       PresenterBundleContract.requiredJavaScriptMarkers,
     );
   }
 
   Future<bool> _isBundleSiteReady(Directory root) async {
-    if (!await _isNonEmptyFile(File('${root.path}/index.html'))) return false;
-
-    for (final path in PresenterBundleContract.requiredRuntimeFiles) {
+    for (final path in PresenterBundleContract.requiredFiles) {
       if (!await _isNonEmptyFile(File('${root.path}/$path'))) return false;
     }
-
-    var assetManifestReady = false;
-    for (final path in PresenterBundleContract.assetManifestPaths) {
-      if (await _isNonEmptyFile(File('${root.path}/$path'))) {
-        assetManifestReady = true;
-        break;
-      }
-    }
-    if (!assetManifestReady) return false;
-
-    return true;
+    if (!await _isPresenterManifestValid(root)) return false;
+    return _isResourceManifestValid(root);
   }
+
+  Future<bool> _isPresenterManifestValid(Directory root) async {
+    try {
+      final decoded = jsonDecode(
+        await File(
+          '${root.path}/${PresenterBundleContract.presenterManifestFile}',
+        ).readAsString(),
+      );
+      if (decoded is! Map<String, dynamic>) return false;
+
+      final presenterVersion = decoded['presenterVersion'];
+      final devVersion = decoded['devVersion'];
+      return decoded['formatVersion'] == 1 &&
+          presenterVersion is String &&
+          BridgeSemanticVersion.tryParse(presenterVersion) != null &&
+          devVersion is int &&
+          devVersion >= 0 &&
+          decoded['protocolVersion'] == 1 &&
+          decoded['entry'] == PresenterBundleContract.presenterEntryFile &&
+          decoded['resourceManifest'] ==
+              PresenterBundleContract.resourceManifestFile;
+    } on FileSystemException {
+      return false;
+    } on FormatException {
+      return false;
+    }
+  }
+
+  Future<bool> _isResourceManifestValid(Directory root) async {
+    try {
+      final decoded = jsonDecode(
+        await File(
+          '${root.path}/${PresenterBundleContract.resourceManifestFile}',
+        ).readAsString(),
+      );
+      if (decoded is! Map<String, dynamic>) return false;
+      final version = decoded['version'];
+      final bundleSha256 = decoded['bundleSha256'];
+      final resources = decoded['resources'];
+      if (version is! String || version.trim().isEmpty) return false;
+      if (bundleSha256 is! String || !_isSha256(bundleSha256)) return false;
+      if (resources is! Map ||
+          resources.length !=
+              PresenterBundleContract.requiredResourceFiles.length) {
+        return false;
+      }
+
+      for (final path in PresenterBundleContract.requiredResourceFiles) {
+        final expectedHash = resources[path];
+        if (expectedHash is! String || !_isSha256(expectedHash)) return false;
+
+        final resourceFile = File('${root.path}/$path');
+        if (!await _isNonEmptyFile(resourceFile)) return false;
+        final actualHash = await sha256.bind(resourceFile.openRead()).first;
+        if (actualHash.toString() != expectedHash) return false;
+      }
+      return resources.keys.every(
+        (path) =>
+            path is String &&
+            PresenterBundleContract.requiredResourceFiles.contains(path),
+      );
+    } on FileSystemException {
+      return false;
+    } on FormatException {
+      return false;
+    }
+  }
+
+  bool _isSha256(String value) => RegExp(r'^[0-9a-f]{64}$').hasMatch(value);
 
   Future<bool> _isNonEmptyFile(File file) async {
     try {
@@ -172,6 +243,101 @@ class PresenterCacheService {
     );
   }
 
+  Future<PresenterCacheManifest?> readCachedManifest({
+    required String? bundleManifestUrl,
+    required String? apiBaseUrl,
+  }) async {
+    final expectedUri = _resolveManifestUri(
+      bundleManifestUrl: bundleManifestUrl,
+      apiBaseUrl: apiBaseUrl,
+    );
+    if (expectedUri == null || !await isReady()) return null;
+
+    try {
+      final decoded = jsonDecode(await manifestFile.readAsString());
+      if (decoded is! Map) return null;
+      final manifestUri = Uri.tryParse(
+        decoded['manifestUrl']?.toString().trim() ?? '',
+      );
+      final presenterVersion = decoded['presenterVersion']?.toString().trim();
+      final bundleVersion = decoded['bundleVersion']?.toString().trim();
+      final devVersion = _asInt(decoded['devVersion']);
+      if (manifestUri != expectedUri ||
+          presenterVersion == null ||
+          BridgeSemanticVersion.tryParse(presenterVersion) == null ||
+          bundleVersion == null ||
+          bundleVersion.isEmpty ||
+          devVersion == null) {
+        return null;
+      }
+
+      return PresenterCacheManifest(
+        presenterVersion: presenterVersion,
+        bundleVersion: bundleVersion,
+        devVersion: devVersion,
+        rootPath: presenterRoot.path,
+        updatedAt: DateTime.tryParse(decoded['updatedAt']?.toString() ?? ''),
+        syncedAt: DateTime.tryParse(decoded['syncedAt']?.toString() ?? ''),
+      );
+    } on FormatException {
+      return null;
+    } on FileSystemException {
+      return null;
+    }
+  }
+
+  Future<PresenterCacheManifest> ensureCurrentPresenterSite({
+    required String? bundleManifestUrl,
+    required String? apiBaseUrl,
+    Map<String, String> headers = const <String, String>{},
+    void Function(double progress)? onProgress,
+  }) async {
+    final manifestUri = _requiredManifestUri(
+      bundleManifestUrl: bundleManifestUrl,
+      apiBaseUrl: apiBaseUrl,
+    );
+    final cached = await readCachedManifest(
+      bundleManifestUrl: bundleManifestUrl,
+      apiBaseUrl: apiBaseUrl,
+    );
+    RemotePresenterManifest remote;
+    try {
+      remote = await fetchRemoteManifest(
+        bundleManifestUrl: bundleManifestUrl,
+        apiBaseUrl: apiBaseUrl,
+        headers: headers,
+      );
+    } on Object catch (error) {
+      throw _updateException(error, enforceUpdate: false);
+    }
+
+    if (!remote.available) {
+      throw PresenterCacheUpdateException(
+        code: BridgeRuntimeErrorCodes.offlineAssetsNotReady,
+        message: 'Presenter bundle is not available from manifest endpoint.',
+        enforceUpdate: remote.enforceUpdate,
+      );
+    }
+    if (cached != null &&
+        cached.presenterVersion == remote.presenterVersion &&
+        cached.bundleVersion == remote.bundleVersion &&
+        cached.devVersion == remote.devVersion) {
+      onProgress?.call(1);
+      return cached;
+    }
+
+    try {
+      return await _downloadAndActivate(
+        manifestUri: manifestUri,
+        remote: remote,
+        headers: headers,
+        onProgress: onProgress,
+      );
+    } on Object catch (error) {
+      throw _updateException(error, enforceUpdate: remote.enforceUpdate);
+    }
+  }
+
   Future<PresenterCacheManifest> syncPresenterSite({
     required String? bundleManifestUrl,
     required String? apiBaseUrl,
@@ -198,6 +364,24 @@ class PresenterCacheService {
         'Presenter bundle is not available from manifest endpoint.',
       );
     }
+    return _downloadAndActivate(
+      manifestUri: manifestUri,
+      remote: remote,
+      headers: headers,
+      onProgress: onProgress,
+    );
+  }
+
+  Future<PresenterCacheManifest> _downloadAndActivate({
+    required Uri manifestUri,
+    required RemotePresenterManifest remote,
+    required Map<String, String> headers,
+    void Function(double progress)? onProgress,
+  }) async {
+    void report(num value) =>
+        onProgress?.call(value.clamp(0.0, 1.0).toDouble());
+
+    report(0.05);
     final rawDownloadUrl = remote.downloadUrl;
     if (rawDownloadUrl == null || rawDownloadUrl.isEmpty) {
       throw BridgeRuntimeException(
@@ -354,6 +538,24 @@ class PresenterCacheService {
       return manifestUri.replace(path: '$mountPrefix$rawDownloadUrl');
     }
     return manifestUri.resolve(rawDownloadUrl);
+  }
+
+  PresenterCacheUpdateException _updateException(
+    Object error, {
+    required bool enforceUpdate,
+  }) {
+    if (error is BridgeRuntimeException) {
+      return PresenterCacheUpdateException(
+        code: error.code,
+        message: error.message,
+        enforceUpdate: enforceUpdate,
+      );
+    }
+    return PresenterCacheUpdateException(
+      code: BridgeRuntimeErrorCodes.offlineAssetsNotReady,
+      message: 'Presenter cache update failed: $error',
+      enforceUpdate: enforceUpdate,
+    );
   }
 
   Future<Directory> _extractBundleToStaging(List<int> zipBytes) async {

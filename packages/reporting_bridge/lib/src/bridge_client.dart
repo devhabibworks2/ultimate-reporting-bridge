@@ -6,6 +6,7 @@ import 'bridge_http_fetch.dart';
 import 'bridge_identity_context.dart';
 import 'bridge_presenter_cache.dart';
 import 'bridge_presenter_server.dart';
+import 'bridge_presenter_resource_cache.dart';
 import 'bridge_presenter_session.dart';
 import 'bridge_runtime_error.dart';
 import 'bridge_runtime_storage.dart';
@@ -63,6 +64,9 @@ class ReportingBridgeClient {
       httpClientFactory: sharedHttpClientFactory,
       closeClientAfterRequest: false,
     );
+    _presenterResourceCache = PresenterResourceCacheStore(
+      cacheRoot: Directory('${bridgeRoot.path}/presenter_resources'),
+    );
     _serverGateway = PresenterServerGateway(
       apiBaseUrl: apiBaseUrl,
       cacheIdentityBaseUrl: cacheIdentityBaseUrl ?? apiBaseUrl,
@@ -77,7 +81,7 @@ class ReportingBridgeClient {
       runtimeStorage: RuntimeSessionStorage(
         runtimeRoot: Directory('${bridgeRoot.path}/runtime'),
       ),
-      onlinePresenterUrl: presenterEntryUrl,
+      resourceCacheStore: _presenterResourceCache,
       apiBaseUrl: this.apiBaseUrl,
       bundleManifestUrl: bundleManifestUrl,
       headers: _staticHeaders,
@@ -93,6 +97,7 @@ class ReportingBridgeClient {
   late final HttpClient _sharedHttpClient;
   late final BridgeHttpFetch _http;
   late final PresenterCacheService _presenterCache;
+  late final PresenterResourceCacheStore _presenterResourceCache;
   late final PresenterServerGateway _serverGateway;
   late final PresenterSessionCoordinator _sessionCoordinator;
 

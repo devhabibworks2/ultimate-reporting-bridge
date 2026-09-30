@@ -20,6 +20,7 @@ dependencies:
   path_provider: ^2.1.5
   printing: ^5.14.2
   shared_preferences: ^2.3.0
+  pdfx: 2.11.0
 
 dev_dependencies:
   flutter_test:

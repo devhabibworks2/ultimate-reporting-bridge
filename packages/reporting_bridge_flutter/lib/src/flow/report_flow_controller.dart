@@ -42,7 +42,7 @@ abstract interface class ReportFlowController
   void presenterLoadStarted();
   void presenterLoadProgress(double progress);
   void presenterProtocolDetected(int contractVersion);
-  void completePresenterRender({String? sessionId});
+  Future<void> completePresenterRender({String? sessionId});
   void failPresenterRender(String diagnostic, {String? sessionId});
   Future<void> savePdf();
   Future<void> sharePdf();

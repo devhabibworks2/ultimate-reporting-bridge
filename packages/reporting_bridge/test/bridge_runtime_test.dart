@@ -323,19 +323,11 @@ void main() {
         await File('${presenterRoot.path}/old.txt').writeAsString('stale');
 
         final zipBytes = _zipFromEntries(<String, String>{
-          'index.html':
-              '<!doctype html><head><base href="/UltimateReport/apps/presenter/"></head><body>new</body>',
-          'main.dart.js': PresenterBundleContract.requiredJavaScriptMarkers
-              .join(' '),
-          'flutter_bootstrap.js': 'bootstrap',
-          'assets/AssetManifest.bin': 'manifest',
-          'assets/FontManifest.json': '[]',
+          ..._validPureDartBundleEntries(
+            indexHtml:
+                '<!doctype html><head><base href="/UltimateReport/apps/presenter/"></head><body>new</body>',
+          ),
           'assets/app.js': 'window.presenter=true;',
-          for (final path in PresenterBundleContract.requiredFiles)
-            if (path != 'main.dart.js' &&
-                path != 'flutter_bootstrap.js' &&
-                path != 'assets/FontManifest.json')
-              path: path,
         });
 
         final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -752,4 +744,35 @@ List<int> _zipFromEntries(Map<String, String> files) {
     archive.addFile(ArchiveFile(entry.key, bytes.length, bytes));
   }
   return ZipEncoder().encode(archive);
+}
+
+Map<String, String> _validPureDartBundleEntries({required String indexHtml}) {
+  const fontHash =
+      'a446817d40e4dc37c526fb5e30859fe0dd7bb0a7d5b3c0c56f7a0626d0019307';
+  const iconHash =
+      '6cbd50037e50937c7aa9ad4a2de7770c8f5db9455c1be9e021bc236060dafa21';
+  final resources = <String, String>{
+    for (final path in PresenterBundleContract.requiredResourceFiles)
+      path: path == 'icons/MaterialIcons-Regular.ttf' ? iconHash : fontHash,
+  };
+  return <String, String>{
+    'index.html': indexHtml,
+    'presenter.js': PresenterBundleContract.requiredJavaScriptMarkers.join(' '),
+    'presenter-manifest.json': jsonEncode(<String, Object>{
+      'formatVersion': 1,
+      'presenterVersion': '1.0.0',
+      'devVersion': 1,
+      'protocolVersion': 1,
+      'entry': 'presenter.js',
+      'resourceManifest': 'resource-manifest.json',
+    }),
+    'resource-manifest.json': jsonEncode(<String, Object>{
+      'version': 'fixture-v1',
+      'bundleSha256': List<String>.filled(64, 'a').join(),
+      'resources': resources,
+    }),
+    for (final path in PresenterBundleContract.requiredFontFiles)
+      path: 'font-bytes',
+    'icons/MaterialIcons-Regular.ttf': 'icon-bytes',
+  };
 }

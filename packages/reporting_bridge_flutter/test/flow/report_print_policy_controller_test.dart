@@ -76,6 +76,7 @@ void main() {
 
     expect(result.status, ReportPrintStatus.submitted);
     expect(printPlatform.calls, 1);
+    expect(fixture.exportLoads, 1);
     final request = printPlatform.lastRequest!;
     expect(request.extra['system'], 'motakamel_transactions');
     expect(request.extra['reportType'], 'sales_invoice');
@@ -262,6 +263,7 @@ Future<void> _ready(_ControllerFixture fixture) async {
     sessionId: launch.sessionId,
     templateName: fixture.controller.value.selectedTemplate!.templateName,
     evaluateJavaScript: (_) async {
+      fixture.exportLoads += 1;
       fixture.surface.acceptMessage(<String, dynamic>{
         'channel': bridgeWebMessageChannel,
         'method': BridgeWebMethods.exportPdf,
@@ -278,18 +280,20 @@ Future<void> _ready(_ControllerFixture fixture) async {
     onLifecycle: (_) {},
   );
   fixture.controller.presenterProtocolDetected(BridgeContract.payloadVersion);
-  fixture.controller.completePresenterRender(sessionId: launch.sessionId);
+  await fixture.controller.completePresenterRender(sessionId: launch.sessionId);
   expect(fixture.controller.outputReady, isTrue);
+  expect(fixture.exportLoads, 1);
 }
 
 Matcher _failure(ReportFlowFailureCode code) =>
     isA<ReportFlowFailure>().having((failure) => failure.code, 'code', code);
 
 class _ControllerFixture {
-  const _ControllerFixture({required this.controller, required this.surface});
+  _ControllerFixture({required this.controller, required this.surface});
 
   final ReportFlowControllerImpl controller;
   final PresenterSurfaceBinding surface;
+  int exportLoads = 0;
 }
 
 class _FakePrintPlatform implements ReportPrintPlatform {

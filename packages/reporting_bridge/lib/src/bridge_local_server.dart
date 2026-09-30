@@ -1,5 +1,7 @@
 import 'dart:io';
+import 'dart:typed_data';
 
+import 'bridge_presenter_resource_cache.dart';
 import 'bridge_runtime_error.dart';
 
 class PortPolicy {
@@ -26,16 +28,16 @@ class LocalPresenterServer {
   LocalPresenterServer({
     required this.presenterRoot,
     required this.runtimeRoot,
+    this.resourceCacheStore,
   });
 
   final Directory presenterRoot;
   final Directory runtimeRoot;
+  final PresenterResourceCacheStore? resourceCacheStore;
   static const String _presenterRoutePrefix = '/UltimateReport/apps/presenter/';
   HttpServer? _server;
   final Set<String> _sessionIds = <String>{};
   bool _servePresenter = false;
-  Uri? _proxyPresenterUrl;
-  HttpClient? _proxyClient;
 
   Future<LocalServerHandle> start({
     required String sessionId,
@@ -59,30 +61,10 @@ class LocalPresenterServer {
     );
   }
 
-  Future<LocalServerHandle> startProxy({
-    required String sessionId,
-    required Uri presenterUrl,
-    PortPolicy portPolicy = const PortPolicy(),
-  }) async {
-    if (!presenterUrl.path.startsWith(_presenterRoutePrefix)) {
-      throw const BridgeRuntimeException(
-        BridgeRuntimeErrorCodes.localhostServerUnavailable,
-        'Online Presenter URL must use the deployment-aligned Presenter route.',
-      );
-    }
-    return _start(
-      sessionId: sessionId,
-      portPolicy: portPolicy,
-      servePresenter: false,
-      proxyPresenterUrl: presenterUrl,
-    );
-  }
-
   Future<LocalServerHandle> _start({
     required String sessionId,
     required PortPolicy portPolicy,
     required bool servePresenter,
-    Uri? proxyPresenterUrl,
   }) async {
     final activeSessionId = _validatedSessionId(sessionId);
     if (servePresenter &&
@@ -99,17 +81,13 @@ class LocalPresenterServer {
           portPolicy.preferredPort != existing.port) {
         await stop();
       } else {
-        _replaceRouting(
-          servePresenter: servePresenter,
-          proxyPresenterUrl: proxyPresenterUrl,
-        );
+        _replaceRouting(servePresenter: servePresenter);
       }
     } else if (existing != null &&
         !_isCompatibleReuse(
           server: existing,
           portPolicy: portPolicy,
           servePresenter: servePresenter,
-          proxyPresenterUrl: proxyPresenterUrl,
         )) {
       throw const BridgeRuntimeException(
         BridgeRuntimeErrorCodes.localhostServerUnavailable,
@@ -128,27 +106,17 @@ class LocalPresenterServer {
         createdServer = true;
         _server = server;
         _servePresenter = servePresenter;
-        _proxyPresenterUrl = proxyPresenterUrl;
-        _proxyClient = proxyPresenterUrl == null ? null : HttpClient();
         server.listen(_handleRequest);
       }
 
       _sessionIds.add(activeSessionId);
       final baseUrl = 'http://127.0.0.1:${server.port}';
-      final proxyLaunchUrl = proxyPresenterUrl == null
-          ? null
-          : Uri.parse(baseUrl).replace(
-              path: proxyPresenterUrl.path,
-              query: proxyPresenterUrl.hasQuery
-                  ? proxyPresenterUrl.query
-                  : null,
-            );
       return LocalServerHandle(
         port: server.port,
         baseUrl: baseUrl,
         presenterUrl: servePresenter
             ? '$baseUrl/UltimateReport/apps/presenter/index.html?sessionId=$activeSessionId'
-            : proxyLaunchUrl?.toString() ?? baseUrl,
+            : baseUrl,
         stop: () => releaseSession(activeSessionId),
       );
     } on Object catch (error) {
@@ -164,33 +132,20 @@ class LocalPresenterServer {
     }
   }
 
-  void _replaceRouting({
-    required bool servePresenter,
-    required Uri? proxyPresenterUrl,
-  }) {
-    final oldProxyClient = _proxyClient;
+  void _replaceRouting({required bool servePresenter}) {
     _servePresenter = servePresenter;
-    _proxyPresenterUrl = proxyPresenterUrl;
-    _proxyClient = proxyPresenterUrl == null ? null : HttpClient();
-    oldProxyClient?.close(force: true);
   }
 
   bool _isCompatibleReuse({
     required HttpServer server,
     required PortPolicy portPolicy,
     required bool servePresenter,
-    required Uri? proxyPresenterUrl,
   }) {
     if (portPolicy.preferredPort != 0 &&
         portPolicy.preferredPort != server.port) {
       return false;
     }
-    if (_servePresenter != servePresenter) return false;
-    final currentProxy = _proxyPresenterUrl;
-    if (currentProxy == null || proxyPresenterUrl == null) {
-      return currentProxy == null && proxyPresenterUrl == null;
-    }
-    return currentProxy == proxyPresenterUrl;
+    return _servePresenter == servePresenter;
   }
 
   Future<void> releaseSession(String sessionId) async {
@@ -199,13 +154,9 @@ class LocalPresenterServer {
 
   Future<void> stop() async {
     final server = _server;
-    final proxyClient = _proxyClient;
     _server = null;
     _sessionIds.clear();
     _servePresenter = false;
-    _proxyPresenterUrl = null;
-    _proxyClient = null;
-    proxyClient?.close(force: true);
     await server?.close(force: true);
   }
 
@@ -216,11 +167,6 @@ class LocalPresenterServer {
       await request.response.close();
       return;
     }
-    if (request.method != 'GET' && request.method != 'HEAD') {
-      await _sendMethodNotAllowed(request);
-      return;
-    }
-
     late final String path;
     try {
       path = Uri.decodeComponent(request.uri.path);
@@ -229,13 +175,16 @@ class LocalPresenterServer {
       return;
     }
 
-    if (_proxyPresenterUrl != null && path.startsWith(_presenterRoutePrefix)) {
-      final relative = path.substring(_presenterRoutePrefix.length);
-      if (!_isSafeRelativePath(relative.isEmpty ? 'index.html' : relative)) {
-        await _sendNotFound(request);
+    if (path.startsWith('/runtime/')) {
+      final segments = path.split('/');
+      if (segments.length >= 4 && segments[3] == 'resource-cache') {
+        await _handleResourceCacheRequest(request, segments);
         return;
       }
-      await _proxyPresenterRequest(request, relative);
+    }
+
+    if (request.method != 'GET' && request.method != 'HEAD') {
+      await _sendMethodNotAllowed(request);
       return;
     }
 
@@ -259,38 +208,71 @@ class LocalPresenterServer {
     await file.openRead().pipe(request.response);
   }
 
-  Future<void> _proxyPresenterRequest(
+  Future<void> _handleResourceCacheRequest(
     HttpRequest request,
-    String relativePath,
+    List<String> segments,
   ) async {
-    final proxyBase = _proxyPresenterUrl;
-    final client = _proxyClient;
-    if (proxyBase == null || client == null) {
+    if (segments.length < 3 || !_sessionIds.contains(segments[2])) {
+      await _sendNotFound(request);
+      return;
+    }
+    if (segments.length != 5 || segments[4].isEmpty) {
+      request.response.statusCode = HttpStatus.badRequest;
+      await request.response.close();
+      return;
+    }
+    final key = segments[4];
+    if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(key)) {
+      request.response.statusCode = HttpStatus.badRequest;
+      await request.response.close();
+      return;
+    }
+    final store = resourceCacheStore;
+    if (store == null) {
       await _sendNotFound(request);
       return;
     }
 
-    final target = proxyBase
-        .resolve(relativePath.isEmpty ? 'index.html' : relativePath)
-        .replace(query: request.uri.hasQuery ? request.uri.query : null);
-    try {
-      final upstreamRequest = await client.openUrl(request.method, target);
-      final upstreamResponse = await upstreamRequest.close();
-      request.response.statusCode = upstreamResponse.statusCode;
-      final contentType = upstreamResponse.headers.contentType;
-      if (contentType != null) {
-        request.response.headers.contentType = contentType;
+    if (request.method == 'GET') {
+      final bytes = await store.read(key);
+      if (bytes == null) {
+        await _sendNotFound(request);
+        return;
       }
-      if (request.method == 'HEAD') {
-        await upstreamResponse.drain<void>();
+      request.response
+        ..statusCode = HttpStatus.ok
+        ..headers.contentType = ContentType.binary
+        ..contentLength = bytes.length;
+      request.response.add(bytes);
+      await request.response.close();
+      return;
+    }
+    if (request.method != 'PUT') {
+      await _sendMethodNotAllowed(request);
+      return;
+    }
+
+    const maxEntryBytes = 5 * 1024 * 1024;
+    final body = BytesBuilder(copy: false);
+    var length = 0;
+    await for (final chunk in request) {
+      length += chunk.length;
+      if (length > maxEntryBytes) {
+        request.response.statusCode = HttpStatus.requestEntityTooLarge;
         await request.response.close();
         return;
       }
-      await upstreamResponse.pipe(request.response);
-    } on Object {
-      request.response.statusCode = HttpStatus.badGateway;
-      await request.response.close();
+      body.add(chunk);
     }
+    try {
+      await store.write(key, body.takeBytes());
+    } on ArgumentError {
+      request.response.statusCode = HttpStatus.requestEntityTooLarge;
+      await request.response.close();
+      return;
+    }
+    request.response.statusCode = HttpStatus.noContent;
+    await request.response.close();
   }
 
   File? _resolveFile(String path) {
@@ -339,14 +321,14 @@ class LocalPresenterServer {
 
   Future<void> _sendMethodNotAllowed(HttpRequest request) async {
     request.response.statusCode = HttpStatus.methodNotAllowed;
-    request.response.headers.set('Allow', 'GET, HEAD, OPTIONS');
+    request.response.headers.set('Allow', 'GET, HEAD, PUT, OPTIONS');
     await request.response.close();
   }
 
   void _addCommonHeaders(HttpResponse response) {
     response.headers
       ..set('Access-Control-Allow-Origin', '*')
-      ..set('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS')
+      ..set('Access-Control-Allow-Methods', 'GET, HEAD, PUT, OPTIONS')
       ..set('Access-Control-Allow-Headers', '*')
       ..set('Cache-Control', 'no-store');
   }

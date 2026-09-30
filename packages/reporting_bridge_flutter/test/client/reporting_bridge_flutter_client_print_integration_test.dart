@@ -489,7 +489,7 @@ Future<void> _ready(
     onLifecycle: (_) {},
   );
   controller.presenterProtocolDetected(BridgeContract.payloadVersion);
-  controller.completePresenterRender(sessionId: launch.sessionId);
+  await controller.completePresenterRender(sessionId: launch.sessionId);
   expect(controller.outputReady, isTrue);
 }
 
@@ -545,7 +545,7 @@ final class _RecordingWarmableSurface
       onLifecycle: (_) {},
     );
     controller.presenterProtocolDetected(BridgeContract.payloadVersion);
-    controller.completePresenterRender(sessionId: launch.sessionId);
+    await controller.completePresenterRender(sessionId: launch.sessionId);
   }
 
   @override
