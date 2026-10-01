@@ -187,15 +187,18 @@ void main() {
           bridge: bridge,
           preferences: store,
           system: UrbSystem.motakamelTransactions.value,
+          // Keep migration isolation independent of first-compatible entry.
+          entryPolicy: ReportEntryPolicy.alwaysSelectTemplate,
         );
         addTearDown(controller.dispose);
         await controller.initialize();
-        expect(controller.value.selectedTemplateId, isNull);
         final scope = ReportPreferenceScope(
           connectionKey: connection.preferenceSourceKey,
           system: UrbSystem.motakamelTransactions.value,
           reportType: 'sales_invoice',
         );
+        // Catalog UI may preselect an eligible template, but V1 numeric
+        // records must not migrate into durable preference storage.
         expect(await store.load(scope), isNull);
         expect(
           prefs.getKeys().where((key) => key.contains('selected_template.v5.')),
@@ -301,12 +304,13 @@ ReportFlowControllerImpl _openController({
   required ReportingBridgeClient bridge,
   required ReportFlowPreferenceStore preferences,
   required String system,
+  ReportEntryPolicy entryPolicy = ReportEntryPolicy.smart,
 }) {
   return ReportFlowControllerImpl(
     request: buildTestOpenRequest(
       system: system,
       reportType: 'sales_invoice',
-      entryPolicy: ReportEntryPolicy.smart,
+      entryPolicy: entryPolicy,
     ),
     features: const BridgeUiFeatures(),
     runtime: ReportFlowRuntime(

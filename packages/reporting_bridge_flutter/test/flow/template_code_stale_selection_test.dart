@@ -144,7 +144,7 @@ class _SingleTemplateBridgeClient extends ReportingBridgeClient {
 
 class _StalePreferenceStore implements ReportFlowPreferenceStore {
   ReportFlowPreferences? value = const ReportFlowPreferences(
-    templateId: 'missing-legacy-id',
+    templateCode: 'MISSING-CODE',
     mode: PresenterModePreference.online,
   );
 

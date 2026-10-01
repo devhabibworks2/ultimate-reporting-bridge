@@ -83,7 +83,7 @@ void main() {
       expect(controller.value.templates.length, 1);
       expect(controller.value.selectedTemplateId, 'valid');
 
-      await controller.continueFromPreparation();
+      controller.openTemplateSelection();
       expect(controller.value.stage, ReportFlowStage.selectingTemplate);
       expect(controller.value.templates.length, 1);
 
