@@ -31,6 +31,30 @@ Do not add a second direct `reporting_bridge` dependency unless the consumer imp
 
 Ultimate Report Builder consumes this repo as a git submodule at `ultimate-reporting-bridge/`.
 
+## Host compatibility
+
+| Item | Supported |
+| --- | --- |
+| Minimum Flutter | `3.35.0` |
+| Minimum Dart | `3.9.0` |
+| Current verified Flutter | `3.44.6` |
+| Latest stable | CI `channel: stable` (authoritative tip-of-tree) |
+| `file_picker` | `>=11.0.1 <14.0.0` |
+| `share_plus` | Host-owned; **no** Bridge direct dependency |
+
+The Host and Bridge resolve one compatible package version. Older Hosts can stay on the lower compatible release inside each range; newer Hosts can take newer releases that still satisfy the Bridge constraints.
+
+**`file_picker` 10.x is not supported.** The public Save PDF API changed in `file_picker` 11. Hosts locked to 10.x need either a Host-provided `ReportFilePlatform` or a separate compatibility task.
+
+**Android Gradle Plugin:** compatibility fixtures and `example/minimal_host` verify on **AGP 8.11.1**. **AGP 9 is not supported** on the stable `flutter_inappwebview` path Hosts resolve from `flutter_inappwebview: ">=6.1.5 <7.0.0"` (stable `6.1.5` pulls `flutter_inappwebview_android 1.1.3`, which still calls the removed `getDefaultProguardFile('proguard-android.txt')` API). Do not treat an AGP 8.x green build as AGP 9 proof.
+
+Local Host compatibility checks:
+
+```bash
+bash tool/verify_host_compatibility.sh legacy   # file_picker 11 / share_plus 11
+bash tool/verify_host_compatibility.sh modern   # file_picker 13 / share_plus 13
+```
+
 ## Local development
 
 ```bash
