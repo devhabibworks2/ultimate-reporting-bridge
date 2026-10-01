@@ -13,6 +13,7 @@ concurrency:
 
 env:
   FLUTTER_VERSION: '3.44.6'
+  FLUTTER_MIN_VERSION: '3.29.0'
 
 jobs:
   reporting-bridge:
@@ -78,12 +79,137 @@ jobs:
         working-directory: example/minimal_host
         run: flutter analyze
 
+  host-compat-min-downgrade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_MIN_VERSION }}
+          channel: stable
+          cache: true
+      - name: Core package pub downgrade
+        working-directory: packages/reporting_bridge
+        run: |
+          dart pub downgrade
+          dart analyze
+          dart test
+      - name: Flutter package pub downgrade
+        working-directory: packages/reporting_bridge_flutter
+        run: |
+          flutter pub downgrade
+          flutter analyze
+          flutter test
+      - name: Legacy host compatibility
+        run: bash tool/verify_host_compatibility.sh legacy
+
+  host-compat-min-upgrade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_MIN_VERSION }}
+          channel: stable
+          cache: true
+      - name: Core package pub upgrade
+        working-directory: packages/reporting_bridge
+        run: |
+          dart pub upgrade
+          dart analyze
+          dart test
+      - name: Flutter package pub upgrade
+        working-directory: packages/reporting_bridge_flutter
+        run: |
+          flutter pub upgrade
+          flutter analyze
+          flutter test
+      - name: Legacy host compatibility
+        run: bash tool/verify_host_compatibility.sh legacy
+
+  host-compat-current:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Core package pub upgrade
+        working-directory: packages/reporting_bridge
+        run: |
+          dart pub upgrade
+          dart analyze
+          dart test
+      - name: Flutter package pub upgrade
+        working-directory: packages/reporting_bridge_flutter
+        run: |
+          flutter pub upgrade
+          flutter analyze
+          flutter test
+      - name: Modern host compatibility
+        run: bash tool/verify_host_compatibility.sh modern
+
+  host-compat-latest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Record Flutter version
+        run: flutter --version
+      - name: Core package pub upgrade
+        working-directory: packages/reporting_bridge
+        run: |
+          dart pub upgrade
+          dart analyze
+          dart test
+      - name: Flutter package pub upgrade
+        working-directory: packages/reporting_bridge_flutter
+        run: |
+          flutter pub upgrade
+          flutter analyze
+          flutter test
+      - name: Modern host compatibility
+        run: bash tool/verify_host_compatibility.sh modern
+
   publish-authority:
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     needs:
       - reporting-bridge
       - reporting-bridge-flutter
       - minimal-host
+      - host-compat-min-downgrade
+      - host-compat-min-upgrade
+      - host-compat-current
+      - host-compat-latest
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -120,7 +246,15 @@ jobs:
             'runAttempt':int(os.environ['GITHUB_RUN_ATTEMPT']),
             'event':'push',
             'branch':'main',
-            'requiredJobs':['reporting-bridge','reporting-bridge-flutter','minimal-host'],
+            'requiredJobs':[
+              'reporting-bridge',
+              'reporting-bridge-flutter',
+              'minimal-host',
+              'host-compat-min-downgrade',
+              'host-compat-min-upgrade',
+              'host-compat-current',
+              'host-compat-latest',
+            ],
           }
           pathlib.Path(os.environ['AUTHORITY_PATH']).write_text(json.dumps(p,indent=2,sort_keys=True)+'\n')
           PY
