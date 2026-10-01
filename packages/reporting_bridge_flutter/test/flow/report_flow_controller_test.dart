@@ -348,6 +348,56 @@ void main() {
     },
   );
 
+  test('first Presenter download switches and persists Offline mode', () async {
+    bridge.presenterCached = false;
+    preferences.valuesBySystem['legacy_system_1'] = const ReportFlowPreferences(
+      templateId: 't1',
+      mode: PresenterModePreference.online,
+    );
+    final controller = createController(mode: PresenterModePreference.online);
+    addTearDown(controller.dispose);
+
+    await controller.initialize();
+    expect(controller.value.selectedMode, PresenterModePreference.online);
+    expect(controller.value.presenterCached, isFalse);
+
+    await controller.syncPresenter();
+
+    expect(bridge.presenterSyncCalls, 1);
+    expect(controller.value.presenterCached, isTrue);
+    expect(controller.value.selectedMode, PresenterModePreference.offline);
+    expect(
+      preferences.valuesBySystem['legacy_system_1']?.mode,
+      PresenterModePreference.offline,
+    );
+    expect(preferences.valuesBySystem['legacy_system_1']?.templateId, 't1');
+  });
+
+  test(
+    'Presenter refresh keeps an established Online mode unchanged',
+    () async {
+      preferences.valuesBySystem['legacy_system_1'] =
+          const ReportFlowPreferences(
+            templateId: 't1',
+            mode: PresenterModePreference.online,
+          );
+      final controller = createController(mode: PresenterModePreference.online);
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      expect(controller.value.presenterCached, isTrue);
+
+      await controller.syncPresenter();
+
+      expect(bridge.presenterSyncCalls, 1);
+      expect(controller.value.selectedMode, PresenterModePreference.online);
+      expect(
+        preferences.valuesBySystem['legacy_system_1']?.mode,
+        PresenterModePreference.online,
+      );
+    },
+  );
+
   test('template synchronization failure stays on Preparation', () async {
     bridge.failTemplateSync = true;
     final controller = createController(templates: const <CachedTemplate>[]);

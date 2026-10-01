@@ -2,8 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:pdfx/pdfx.dart';
 
-typedef BridgePdfDocumentFactory =
-    Future<PdfDocument> Function(Uint8List bytes);
+typedef BridgePdfDocumentFactory = Future<PdfDocument> Function(Uint8List bytes);
 
 class BridgePdfView extends StatefulWidget {
   const BridgePdfView({
@@ -33,6 +32,8 @@ class _BridgePdfViewState extends State<BridgePdfView> {
   late PdfControllerPinch _controller;
   Object? _viewerError;
   Object? _documentFactoryError;
+  Size? _viewportSize;
+  bool _initialPositionApplied = false;
 
   @override
   void initState() {
@@ -48,6 +49,8 @@ class _BridgePdfViewState extends State<BridgePdfView> {
       _controller.dispose();
       _viewerError = null;
       _documentFactoryError = null;
+      _viewportSize = null;
+      _initialPositionApplied = false;
       _controller = _createController();
     }
   }
@@ -62,7 +65,36 @@ class _BridgePdfViewState extends State<BridgePdfView> {
         Error.throwWithStackTrace(error, stackTrace);
       },
     );
-    return PdfControllerPinch(document: document);
+    final controller = PdfControllerPinch(document: document);
+    controller.value = Matrix4.diagonal3Values(0.9, 0.8, 1);
+    return controller;
+  }
+
+  void _applyInitialPreviewPosition() {
+    if (_initialPositionApplied) return;
+
+    final viewportSize = _viewportSize;
+    if (viewportSize == null || viewportSize.isEmpty) return;
+
+    final firstPageRect = _controller.getPageRect(1);
+    if (firstPageRect == null) return;
+
+    const scale = 0.7;
+    final scaledWidth = firstPageRect.width * scale;
+    final scaledHeight = firstPageRect.height * scale;
+
+    final dx = scaledWidth < viewportSize.width
+        ? (viewportSize.width - scaledWidth) / 2 - firstPageRect.left * scale
+        : 0.0;
+    final dy = scaledHeight < viewportSize.height
+        ? (viewportSize.height - scaledHeight) / 2 - firstPageRect.top * scale
+        : 0.0;
+
+    final transform = Matrix4.diagonal3Values(scale, scale, 1)
+      ..setEntry(0, 3, dx)
+      ..setEntry(1, 3, dy);
+    _controller.value = transform;
+    _initialPositionApplied = true;
   }
 
   void _handleViewerError(Object error) {
@@ -83,20 +115,29 @@ class _BridgePdfViewState extends State<BridgePdfView> {
       );
     }
 
-    return PdfViewPinch(
-      key: const Key('bridge-pdf-view'),
-      controller: _controller,
-      minScale: 0.5,
-      maxScale: 8,
-      onDocumentLoaded: (_) {
-        widget.onDocumentLoaded?.call();
-        if (widget.onFirstFrameAfterDocument != null) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) widget.onFirstFrameAfterDocument?.call();
-          });
-        }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        _viewportSize = constraints.biggest;
+        return PdfViewPinch(
+          key: const Key('bridge-pdf-view'),
+          controller: _controller,
+          minScale: 0.6,
+          maxScale: 4,
+          onDocumentLoaded: (_) {
+            widget.onDocumentLoaded?.call();
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              _applyInitialPreviewPosition();
+              if (widget.onFirstFrameAfterDocument != null) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) widget.onFirstFrameAfterDocument?.call();
+                });
+              }
+            });
+          },
+          onDocumentError: _handleViewerError,
+        );
       },
-      onDocumentError: _handleViewerError,
     );
   }
 

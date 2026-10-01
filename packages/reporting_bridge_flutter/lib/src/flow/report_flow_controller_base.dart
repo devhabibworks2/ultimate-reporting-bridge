@@ -437,6 +437,7 @@ class ReportFlowControllerImpl
                 _value.stage != ReportFlowStage.preparingResources))) {
       return;
     }
+    final firstPresenterDownload = !_value.presenterCached;
     final returnStage = _resourceReturnStage();
     _set(
       _value.copyWith(
@@ -476,10 +477,43 @@ class ReportFlowControllerImpl
           presenterCached: true,
           presenterManifest: manifest,
           presenterDownloadProgress: 1,
+          selectedMode: firstPresenterDownload
+              ? PresenterModePreference.offline
+              : _value.selectedMode,
+          committedMode: firstPresenterDownload
+              ? PresenterModePreference.offline
+              : _value.committedMode,
+          settingsDraft: firstPresenterDownload
+              ? _value.settingsDraft?.copyWith(
+                  mode: PresenterModePreference.offline,
+                )
+              : _value.settingsDraft,
           clearPresenterSyncFailure: true,
           clearFailure: true,
         ),
       );
+      if (firstPresenterDownload) {
+        final offlinePreferences =
+            (_persistedPreferences ??
+                    const ReportFlowPreferences(
+                      mode: PresenterModePreference.offline,
+                    ))
+                .copyWith(mode: PresenterModePreference.offline);
+        try {
+          await _runtime.preferences.save(_scope, offlinePreferences);
+          _persistedPreferences = offlinePreferences;
+        } catch (error) {
+          _addEvent(
+            ReportFlowEvent(
+              type: ReportFlowEventType.failure,
+              failure: ReportFlowFailure(
+                code: ReportFlowFailureCode.persistenceFailed,
+                diagnostic: error.toString(),
+              ),
+            ),
+          );
+        }
+      }
       _addEvent(
         const ReportFlowEvent(type: ReportFlowEventType.presenterSynchronized),
       );
