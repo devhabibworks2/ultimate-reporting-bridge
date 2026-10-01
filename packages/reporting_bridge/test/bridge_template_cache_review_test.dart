@@ -12,7 +12,7 @@ void main() {
     for (final id in <String>['a/b', 'a?b']) {
       await cache.putTemplate(
         CachedTemplate(
-          id: id,
+          code: id,
           type: 'invoice',
           document: const <String, dynamic>{'meta': <String, dynamic>{}},
         ),
@@ -21,9 +21,12 @@ void main() {
     await File('${root.path}/broken.json').writeAsString('{broken');
 
     final templates = await cache.listTemplates();
-    expect(templates.map((item) => item.id).toSet(), <String>{'a/b', 'a?b'});
-    expect((await cache.getTemplate('a/b'))?.id, 'a/b');
-    expect((await cache.getTemplate('a?b'))?.id, 'a?b');
+    expect(templates.map((item) => item.templateCode).toSet(), <String>{
+      'a/b',
+      'a?b',
+    });
+    expect((await cache.getTemplateByCode('a/b'))?.templateCode, 'a/b');
+    expect((await cache.getTemplateByCode('a?b'))?.templateCode, 'a?b');
   });
 
   test('filters approved headers without case sensitivity', () {

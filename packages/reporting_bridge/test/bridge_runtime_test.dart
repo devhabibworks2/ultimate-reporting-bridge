@@ -29,7 +29,7 @@ void main() {
             templateDocument: <String, dynamic>{
               'meta': <String, dynamic>{'version': '1'},
             },
-            selectedTemplate: SelectedTemplate(id: '34', type: 'invoice'),
+            selectedTemplate: SelectedTemplate(type: 'invoice', code: 'INV-34'),
             branding: BrandConfig(primaryColor: '#2563EB'),
             apiHeaders: ApiHeaderConfig(<String, String>{
               'Authorization': 'Bearer secret-token',
@@ -109,7 +109,7 @@ void main() {
           },
           templateDocument: raw,
           selectedTemplate: const SelectedTemplate(
-            id: 'canonical',
+            code: 'canonical',
             type: 'invoice',
           ),
         ),
@@ -159,7 +159,7 @@ void main() {
 
         await cache.putTemplate(
           const CachedTemplate(
-            id: '34',
+            code: '34',
             type: 'invoice',
             systemId: 10,
             document: <String, dynamic>{
@@ -170,7 +170,7 @@ void main() {
         );
         await cache.putTemplate(
           const CachedTemplate(
-            id: '35',
+            code: '35',
             type: 'invoice',
             systemId: 20,
             document: <String, dynamic>{
@@ -181,7 +181,7 @@ void main() {
         );
         await cache.putTemplate(
           const CachedTemplate(
-            id: '90',
+            code: '90',
             type: 'receipt',
             document: <String, dynamic>{
               'meta': <String, dynamic>{'version': '1'},
@@ -202,27 +202,30 @@ void main() {
           type: 'invoice',
           systemId: 10,
         );
-        expect(systemFiltered.map((template) => template.id), <String>['34']);
+        expect(
+          systemFiltered.map((template) => template.templateCode),
+          <String>['34'],
+        );
 
         final stored = await resolver.resolveSelectedTemplate(
           reportType: 'invoice',
           systemCode: 'test-system',
           presenterDevVersion: 1,
           storedSelection: const SelectedTemplate(
-            id: '34',
+            code: '34',
             type: 'invoice',
             systemCode: 'test-system',
           ),
         );
         expect(stored.status, 'stored-selected');
-        expect(stored.template?.id, '34');
+        expect(stored.template?.templateCode, '34');
 
         final wrongType = await resolver.resolveSelectedTemplate(
           reportType: 'receipt',
           systemCode: 'test-system',
           presenterDevVersion: 1,
           storedSelection: const SelectedTemplate(
-            id: '34',
+            code: '34',
             type: 'invoice',
             systemCode: 'test-system',
           ),
@@ -260,7 +263,7 @@ void main() {
 
       await cache.putTemplate(
         const CachedTemplate(
-          id: '99',
+          code: '99',
           type: 'invoice',
           document: <String, dynamic>{
             'meta': <String, dynamic>{'version': '1'},

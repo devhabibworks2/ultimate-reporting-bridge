@@ -9,12 +9,12 @@ void main() {
         'ReportHeader': <dynamic, dynamic>{'k': 1},
       },
       'bearerToken': 'tok',
-      'templateHints': <dynamic, dynamic>{'templateId': 42},
+      'templateHints': <dynamic, dynamic>{'templateCode': 'INV-42'},
     });
     expect(payload.contractVersion, 1);
     expect(payload.seedData!['ReportHeader'], isA<Map<String, dynamic>>());
     expect(payload.bearerToken, 'tok');
-    expect(payload.templateIdHint, 42);
+    expect(payload.templateCodeHint, 'INV-42');
     expect(payload.toMap()['seedData'], isNotNull);
   });
 
@@ -31,7 +31,10 @@ void main() {
         'Authorization': 'Bearer secret',
         'X-Tenant-Id': 'tenant_001',
       },
-      'selectedTemplate': <dynamic, dynamic>{'id': '34', 'type': 'invoice'},
+      'selectedTemplate': <dynamic, dynamic>{
+        'code': 'INV-34',
+        'type': 'invoice',
+      },
     });
 
     expect(payload.reportType, 'invoice');
@@ -44,13 +47,12 @@ void main() {
       'present': true,
       'redactedKeys': <String>['Authorization', 'X-Tenant-Id'],
     });
-    expect(payload.selectedTemplate?.id, '34');
-    expect(payload.templateIdHint, 34);
+    expect(payload.selectedTemplate?.code, 'INV-34');
+    expect(payload.templateCodeHint, 'INV-34');
   });
 
   test('SelectedTemplate keeps required storage shape', () {
     const selected = SelectedTemplate(
-      id: '34',
       type: 'invoice',
       code: 'INV-34',
       systemCode: 'system-a',
@@ -92,15 +94,15 @@ void main() {
     const status = BridgeStatus(
       mode: 'offline',
       isPresenterCached: true,
-      selectedTemplate: SelectedTemplate(id: '34', type: 'invoice'),
+      selectedTemplate: SelectedTemplate(type: 'invoice', code: 'INV-34'),
       apiHeaders: ApiHeaderConfig(<String, String>{
         'Authorization': 'Bearer secret',
       }),
     );
 
     expect(status.toMap()['selectedTemplates'], <String, dynamic>{
-      'id': '34',
       'type': 'invoice',
+      'code': 'INV-34',
     });
     expect(status.toMap()['apiHeaders'], <String, dynamic>{
       'present': true,

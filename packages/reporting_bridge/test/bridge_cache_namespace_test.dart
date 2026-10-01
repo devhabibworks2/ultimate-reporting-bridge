@@ -135,7 +135,7 @@ void main() {
         apiBaseUrl: api,
       ),
     );
-    expect((await anonymous.listTemplates()).single.id, 'legacy');
+    expect((await anonymous.listTemplates()).single.templateCode, 'legacy');
     expect(await anonymous.hasCatalog, isTrue);
 
     final authenticatedScope = BridgeTemplateCacheScope(
@@ -158,7 +158,7 @@ void main() {
 }
 
 CachedTemplate _template(String id, int systemId) => CachedTemplate(
-  id: id,
+  code: id,
   type: 'sales_invoice',
   systemId: systemId,
   document: const <String, dynamic>{

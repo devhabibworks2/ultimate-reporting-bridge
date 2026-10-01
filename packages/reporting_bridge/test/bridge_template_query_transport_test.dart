@@ -85,9 +85,9 @@ void main() {
     expect(summary.systemName, 'Motakamel Transactions');
     expect(summary.systemDescription, 'Published report catalog');
     expect(summary.appliedFilter?['sizes'], <String>['all']);
-    expect(cached.map((template) => template.id), <String>[
-      'invoice-a4',
-      'voucher-80',
+    expect(cached.map((template) => template.templateCode), <String>[
+      'invoice-a4-code',
+      'voucher-80-code',
     ]);
     expect(cached.first.type, 'sales_invoice');
     expect(cached.first.systemCode, 'motakamel_transactions');
@@ -99,68 +99,54 @@ void main() {
     expect(cached.first.document['schemaVersion'], '1.0.0');
   });
 
-  test(
-    'catalog sync rewrites legacy selection on disk by system and code',
-    () async {
-      final root = await Directory.systemTemp.createTemp(
-        'bridge-query-selection-',
+  test('catalog sync ignores legacy id-only selection', () async {
+    final root = await Directory.systemTemp.createTemp(
+      'bridge-query-selection-',
+    );
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async {
+      await server.close(force: true);
+      if (await root.exists()) await root.delete(recursive: true);
+    });
+    server.listen((request) async {
+      await utf8.decoder.bind(request).join();
+      await _writeJson(
+        request,
+        _queryEnvelope(<Map<String, dynamic>>[
+          _queryTemplate('10', 7, 'sales_invoice'),
+        ]),
       );
-      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-      addTearDown(() async {
-        await server.close(force: true);
-        if (await root.exists()) await root.delete(recursive: true);
-      });
-      server.listen((request) async {
-        await utf8.decoder.bind(request).join();
-        await _writeJson(
-          request,
-          _queryEnvelope(<Map<String, dynamic>>[
-            _queryTemplate('10', 7, 'sales_invoice'),
-          ]),
-        );
-      });
+    });
 
-      final query = TemplateQueryRequest(systemCode: 'motakamel_transactions');
-      final cacheRoot = bridgeTemplateCacheDirectoryForScope(
-        bridgeRoot: root,
-        scope: BridgeTemplateCacheScope(
-          apiBaseUrl: _api(server),
-          systemCode: query.systemCode,
-          identity: query.identity,
-          filter: query.filter,
-          extra: query.extra,
-        ),
-      );
-      await cacheRoot.create(recursive: true);
-      await File('${cacheRoot.path}/.selection.json').writeAsString(
-        jsonEncode(<String, dynamic>{
-          'selectedTemplates': <String, dynamic>{
-            'id': '10',
-            'type': 'sales_invoice',
-          },
-        }),
-      );
-      final gateway = PresenterServerGateway(
+    final query = TemplateQueryRequest(systemCode: 'motakamel_transactions');
+    final cacheRoot = bridgeTemplateCacheDirectoryForScope(
+      bridgeRoot: root,
+      scope: BridgeTemplateCacheScope(
         apiBaseUrl: _api(server),
-        bridgeRoot: root,
-      );
-
-      await gateway.syncTemplates(query: query);
-
-      final persisted =
-          jsonDecode(
-                await File('${cacheRoot.path}/.selection.json').readAsString(),
-              )
-              as Map<String, dynamic>;
-      expect(persisted, <String, dynamic>{
+        systemCode: query.systemCode,
+        identity: query.identity,
+        filter: query.filter,
+        extra: query.extra,
+      ),
+    );
+    await cacheRoot.create(recursive: true);
+    await File('${cacheRoot.path}/.selection.json').writeAsString(
+      jsonEncode(<String, dynamic>{
         'selectedTemplates': <String, dynamic>{
+          'id': '10',
           'type': 'sales_invoice',
-          'code': '10-code',
-          'systemCode': 'motakamel_transactions',
         },
-      });
-    },
-  );
+      }),
+    );
+    final gateway = PresenterServerGateway(
+      apiBaseUrl: _api(server),
+      bridgeRoot: root,
+    );
+
+    await gateway.syncTemplates(query: query);
+
+    expect(await File('${cacheRoot.path}/.selection.json').exists(), isFalse);
+  });
 
   test(
     'maps backend errors and preserves the previous valid catalog',
@@ -218,7 +204,10 @@ void main() {
               .having((error) => error.message, 'message', 'Unknown system.'),
         ),
       );
-      expect((await gateway.listTemplates(query: query)).single.id, 'existing');
+      expect(
+        (await gateway.listTemplates(query: query)).single.templateCode,
+        'existing-code',
+      );
     },
   );
 
@@ -271,7 +260,10 @@ void main() {
           ),
         ),
       );
-      expect((await gateway.listTemplates(query: query)).single.id, 'existing');
+      expect(
+        (await gateway.listTemplates(query: query)).single.templateCode,
+        'existing-code',
+      );
     },
   );
 
@@ -330,16 +322,25 @@ void main() {
     await gateway.syncTemplates(query: queryB, headers: headersA);
 
     expect(
-      (await gateway.listTemplates(query: queryA, headers: headersA)).single.id,
-      'tenant-a|branch-a|user-a|sales',
+      (await gateway.listTemplates(
+        query: queryA,
+        headers: headersA,
+      )).single.templateCode,
+      'tenant-a|branch-a|user-a|sales-code',
     );
     expect(
-      (await gateway.listTemplates(query: queryA, headers: headersB)).single.id,
-      'tenant-b|branch-a|user-a|sales',
+      (await gateway.listTemplates(
+        query: queryA,
+        headers: headersB,
+      )).single.templateCode,
+      'tenant-b|branch-a|user-a|sales-code',
     );
     expect(
-      (await gateway.listTemplates(query: queryB, headers: headersA)).single.id,
-      'tenant-a|branch-b|user-b|inventory',
+      (await gateway.listTemplates(
+        query: queryB,
+        headers: headersA,
+      )).single.templateCode,
+      'tenant-a|branch-b|user-b|inventory-code',
     );
   });
 
@@ -389,8 +390,8 @@ void main() {
       expect(offline.fromCache, isTrue);
       expect(offline.syncedCount, 1);
       expect(
-        (await gateway.listTemplates(query: returning)).single.id,
-        'user-a-template',
+        (await gateway.listTemplates(query: returning)).single.templateCode,
+        'user-a-template-code',
       );
 
       await expectLater(

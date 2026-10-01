@@ -128,7 +128,7 @@ class PresenterSessionCoordinator {
     if (request.template.type != reportType) {
       throw BridgeRuntimeException(
         BridgeRuntimeErrorCodes.templateDocumentInvalid,
-        'Template ${request.template.id} belongs to '
+        'Template ${request.template.templateCode} belongs to '
         '${request.template.type}; expected $reportType.',
       );
     }
@@ -170,7 +170,7 @@ class PresenterSessionCoordinator {
     )) {
       throw BridgeRuntimeException(
         BridgeRuntimeErrorCodes.presenterVersionTooOld,
-        'Template ${request.template.id} requires Presenter '
+        'Template ${request.template.templateCode} requires Presenter '
         '${request.template.minPresenterVersion ?? 'any'} and Bridge '
         '${request.template.minBridgeVersion ?? 'any'}; current versions are '
         '$presenterVersion and ${BridgeContract.implementationVersion}.',

@@ -39,22 +39,15 @@ class BridgeBootPayload {
   final SelectedTemplate? selectedTemplate;
   final Map<String, dynamic>? templateHints;
 
-  int? get templateIdHint {
-    final h = templateHints;
-    if (h != null) {
-      final v = h['templateId'] ?? h['selectedTemplateId'];
-      if (v is int) {
-        return v;
-      }
-      if (v is String) {
-        return int.tryParse(v);
-      }
+  String? get templateCodeHint {
+    final hints = templateHints;
+    if (hints != null) {
+      final value = hints['templateCode'] ?? hints['selectedTemplateCode'];
+      final code = value?.toString().trim();
+      if (code != null && code.isNotEmpty) return code;
     }
-    final selectedId = selectedTemplate?.id;
-    if (selectedId != null) {
-      return int.tryParse(selectedId);
-    }
-    return null;
+    final selectedCode = selectedTemplate?.code.trim();
+    return selectedCode == null || selectedCode.isEmpty ? null : selectedCode;
   }
 
   /// Parses host map; defaults [contractVersion] to [BridgeContract.payloadVersion] if absent.

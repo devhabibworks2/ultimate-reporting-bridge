@@ -43,10 +43,10 @@ void main() {
         }),
       );
 
-      final migrated = await cache.migrateSelectedTemplate(
+      final migrated = await cache.reconcileSelectedTemplate(
         catalog: const <CachedTemplate>[
           CachedTemplate(
-            id: '595',
+            code: '595',
             type: 'sales_invoice',
             systemId: 7,
             systemCode: 'system-a',
@@ -57,7 +57,7 @@ void main() {
       );
 
       expect(migrated, isNull);
-      expect(await File('${temp.path}/.selection.json').exists(), isFalse);
+      expect(await cache.readSelectedTemplate(), isNull);
     },
   );
 
@@ -82,7 +82,6 @@ void main() {
           reportType: 'sales_invoice',
           systemCode: 'system-b',
           storedSelection: const SelectedTemplate(
-            id: '10',
             type: 'sales_invoice',
             code: 'INV-A5-AR',
             systemCode: 'system-a',
@@ -115,7 +114,6 @@ void main() {
           reportType: 'sales_invoice',
           systemCode: 'system-a',
           storedSelection: const SelectedTemplate(
-            id: '10',
             type: 'sales_invoice',
             code: 'INV-OLD',
             systemCode: 'system-a',
@@ -198,7 +196,6 @@ Future<void> _putSingleTemplate(
 }) async {
   await cache.putTemplate(
     CachedTemplate(
-      id: '$systemId-$code',
       type: 'sales_invoice',
       systemId: systemId,
       systemCode: systemCode,

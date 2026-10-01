@@ -311,7 +311,7 @@ class PresenterTemplateSyncService {
     }
 
     final templates = <CachedTemplate>[];
-    final ids = <String>{};
+    final codes = <String>{};
     for (var index = 0; index < rawItems.length; index++) {
       final raw = rawItems[index];
       if (raw is! Map) {
@@ -345,16 +345,16 @@ class PresenterTemplateSyncService {
           'Template query item $index is invalid: ${error.message}',
         );
       }
-      if (!ids.add(template.id)) {
+      if (!codes.add(template.templateCode)) {
         throw BridgeRuntimeException(
           BridgeTemplateSyncErrorCodes.templateCatalogInvalid,
-          'Template query contains duplicate id ${template.id}.',
+          'Template query contains duplicate TemplateCode ${template.templateCode}.',
         );
       }
       if (template.systemId != responseSystemId) {
         throw BridgeRuntimeException(
           BridgeTemplateSyncErrorCodes.templateCatalogInvalid,
-          'Template ${template.id} belongs to system '
+          'Template ${template.templateCode} belongs to system '
           '${template.systemId}; expected $responseSystemId.',
         );
       }
@@ -394,10 +394,10 @@ class PresenterTemplateSyncService {
     }
     await stagedCache.writeCatalogMetadata(metadata);
     if (storedSelection != null && metadata.systemCode != null) {
-      await stagedCache.migrateSelectedTemplate(
+      await stagedCache.reconcileSelectedTemplate(
         catalog: downloaded,
         systemCode: metadata.systemCode!,
-        legacy: storedSelection,
+        stored: storedSelection,
       );
     }
 
