@@ -24,7 +24,8 @@ void main() {
     final view = tester.widget<PdfViewPinch>(
       find.byKey(const Key('bridge-pdf-view')),
     );
-    expect(view.controller.zoomRatio, closeTo(0.9, 0.001));
+    expect(view.controller.value.row0[0], closeTo(0.8, 0.001));
+    expect(view.controller.value.row1[1], closeTo(0.8, 0.001));
   });
 
   testWidgets('PDF preview centers the first page when it fits', (
@@ -51,7 +52,7 @@ void main() {
       find.byKey(const Key('bridge-pdf-view')),
     );
 
-    expect(view.controller.zoomRatio, closeTo(0.9, 0.001));
+    expect(view.controller.zoomRatio, closeTo(0.8, 0.001));
     expect(view.controller.value.row0[3], greaterThan(0));
     expect(view.controller.value.row1[3], greaterThan(100));
   });
@@ -62,7 +63,9 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(400, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
-    final document = _FakePdfDocument(width: 400, height: 1000);
+    // Tall enough that after pdfx page insets and default initialScale 0.8
+    // the first page still exceeds the viewport and stays top-aligned.
+    final document = _FakePdfDocument(width: 400, height: 1200);
 
     await tester.pumpWidget(
       MaterialApp(
@@ -80,7 +83,7 @@ void main() {
       find.byKey(const Key('bridge-pdf-view')),
     );
 
-    expect(view.controller.zoomRatio, closeTo(0.9, 0.001));
+    expect(view.controller.zoomRatio, closeTo(0.8, 0.001));
     expect(view.controller.value.row1[3], closeTo(0, 0.001));
   });
 
@@ -104,9 +107,37 @@ void main() {
     final view = tester.widget<PdfViewPinch>(
       find.byKey(const Key('bridge-pdf-view')),
     );
-    expect(view.minScale, lessThan(1.0));
-    expect(view.maxScale, greaterThanOrEqualTo(6.0));
+    expect(view.minScale, 0.6);
+    expect(view.maxScale, 8.0);
     expect(view.onDocumentLoaded, isNotNull);
+  });
+
+  testWidgets('PDF preview applies custom BridgePdfPreviewConfig', (
+    tester,
+  ) async {
+    final bytes = Uint8List.fromList(<int>[1, 2, 3, 4]);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: BridgePdfView(
+          bytes: bytes,
+          previewConfig: const BridgePdfPreviewConfig(
+            minScale: 0.5,
+            maxScale: 4.0,
+            initialScale: 0.75,
+          ),
+          documentFactory: (_) => Completer<PdfDocument>().future,
+        ),
+      ),
+    );
+
+    final view = tester.widget<PdfViewPinch>(
+      find.byKey(const Key('bridge-pdf-view')),
+    );
+    expect(view.minScale, 0.5);
+    expect(view.maxScale, 4.0);
+    expect(view.controller.value.row0[0], closeTo(0.75, 0.001));
+    expect(view.controller.value.row1[1], closeTo(0.75, 0.001));
   });
 
   testWidgets(

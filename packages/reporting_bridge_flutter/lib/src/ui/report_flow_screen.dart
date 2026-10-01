@@ -12,6 +12,7 @@ import '../flow/report_result.dart';
 import '../localization/report_flow_strings.dart';
 import '../printing/thermal_printer_controller.dart';
 import '../printing/thermal_printer_models.dart';
+import 'bridge_pdf_preview_config.dart';
 import 'bridge_presenter_view.dart';
 import 'bridge_ui_config.dart';
 import 'bridge_ui_features.dart';
@@ -171,6 +172,7 @@ class _ReportFlowScreenState extends State<ReportFlowScreen> {
     final theme = widget.ui.resolve(Theme.of(context));
     final features =
         widget.controller.request.featuresOverride ?? widget.ui.features;
+    final pdfPreview = widget.ui.pdfPreview;
     return Theme(
       data: theme,
       child: Directionality(
@@ -197,6 +199,7 @@ class _ReportFlowScreenState extends State<ReportFlowScreen> {
                   controller: widget.controller,
                   strings: strings,
                   features: features,
+                  pdfPreview: pdfPreview,
                   searchController: _searchController,
                   onClose: _close,
                 )
@@ -232,6 +235,7 @@ class _ReportFlowScreenState extends State<ReportFlowScreen> {
                     controller: widget.controller,
                     strings: strings,
                     features: features,
+                    pdfPreview: pdfPreview,
                     onClose: _close,
                   ),
                   ReportFlowStage.failed => _FailurePage(
@@ -313,6 +317,7 @@ class _PersistentPreviewFlow extends StatelessWidget {
     required this.controller,
     required this.strings,
     required this.features,
+    required this.pdfPreview,
     required this.searchController,
     required this.onClose,
   });
@@ -321,6 +326,7 @@ class _PersistentPreviewFlow extends StatelessWidget {
   final ReportFlowController controller;
   final ReportFlowStrings strings;
   final BridgeUiFeatures features;
+  final BridgePdfPreviewConfig pdfPreview;
   final TextEditingController searchController;
   final Future<void> Function() onClose;
 
@@ -365,6 +371,7 @@ class _PersistentPreviewFlow extends StatelessWidget {
       controller: controller,
       strings: strings,
       features: features,
+      pdfPreview: pdfPreview,
       onClose: onClose,
     );
     final overlayActive = overlay != null;
@@ -2521,6 +2528,7 @@ class _PreviewPage extends StatelessWidget {
     required this.controller,
     required this.strings,
     required this.features,
+    required this.pdfPreview,
     required this.onClose,
   });
 
@@ -2528,6 +2536,7 @@ class _PreviewPage extends StatelessWidget {
   final ReportFlowController controller;
   final ReportFlowStrings strings;
   final BridgeUiFeatures features;
+  final BridgePdfPreviewConfig pdfPreview;
   final Future<void> Function() onClose;
 
   Future<void> _print(BuildContext context) async {
@@ -2628,6 +2637,7 @@ class _PreviewPage extends StatelessWidget {
               templateName: template.templateName,
               controller: controller,
               surfaceBinding: controller.presenterSurface,
+              pdfPreview: pdfPreview,
             ),
           ),
           if (!failed && state.renderStatus == PresenterRenderStatus.loading)

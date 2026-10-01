@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'bridge_pdf_preview_config.dart';
 import 'bridge_ui_features.dart';
 
 enum BridgeUiThemeMode { inheritHost, brand, custom }
@@ -8,6 +9,7 @@ class BridgeUiConfig {
   const BridgeUiConfig._({
     required this.mode,
     required this.features,
+    required this.pdfPreview,
     this.seedColor,
     this.colorScheme,
     this.textTheme,
@@ -15,30 +17,40 @@ class BridgeUiConfig {
 
   const BridgeUiConfig.inheritHost({
     BridgeUiFeatures features = const BridgeUiFeatures(),
-  }) : this._(mode: BridgeUiThemeMode.inheritHost, features: features);
+    BridgePdfPreviewConfig pdfPreview = const BridgePdfPreviewConfig(),
+  }) : this._(
+         mode: BridgeUiThemeMode.inheritHost,
+         features: features,
+         pdfPreview: pdfPreview,
+       );
 
   const BridgeUiConfig.brand({
     required Color seedColor,
     BridgeUiFeatures features = const BridgeUiFeatures(),
+    BridgePdfPreviewConfig pdfPreview = const BridgePdfPreviewConfig(),
   }) : this._(
          mode: BridgeUiThemeMode.brand,
          features: features,
          seedColor: seedColor,
+         pdfPreview: pdfPreview,
        );
 
   const BridgeUiConfig.custom({
     required ColorScheme colorScheme,
     TextTheme? textTheme,
     BridgeUiFeatures features = const BridgeUiFeatures(),
+    BridgePdfPreviewConfig pdfPreview = const BridgePdfPreviewConfig(),
   }) : this._(
          mode: BridgeUiThemeMode.custom,
          features: features,
          colorScheme: colorScheme,
          textTheme: textTheme,
+         pdfPreview: pdfPreview,
        );
 
   final BridgeUiThemeMode mode;
   final BridgeUiFeatures features;
+  final BridgePdfPreviewConfig pdfPreview;
   final Color? seedColor;
   final ColorScheme? colorScheme;
   final TextTheme? textTheme;

@@ -7,6 +7,7 @@ import '../flow/report_flow_controller.dart';
 import '../headless/headless_presenter_surface.dart';
 import '../headless/in_app_headless_presenter_surface.dart';
 import '../platform/presenter_surface_binding.dart';
+import 'bridge_pdf_preview_config.dart';
 import 'bridge_pdf_view.dart';
 
 typedef BridgePdfViewBuilder =
@@ -19,6 +20,7 @@ class BridgePresenterView extends StatefulWidget {
     required this.templateName,
     required this.controller,
     required this.surfaceBinding,
+    this.pdfPreview = const BridgePdfPreviewConfig(),
     @visibleForTesting this.headlessSurfaceFactory,
     @visibleForTesting this.pdfViewBuilder,
   });
@@ -27,6 +29,7 @@ class BridgePresenterView extends StatefulWidget {
   final String templateName;
   final ReportFlowController controller;
   final PresenterSurfaceBinding surfaceBinding;
+  final BridgePdfPreviewConfig pdfPreview;
 
   @visibleForTesting
   final HeadlessPresenterSurfaceFactory? headlessSurfaceFactory;
@@ -131,6 +134,7 @@ class _BridgePresenterViewState extends State<BridgePresenterView> {
     }
     return BridgePdfView(
       bytes: cachedPdf.bytes,
+      previewConfig: widget.pdfPreview,
       onDocumentOpenStarted: widget.surfaceBinding.markViewerOpenStarted,
       onDocumentLoaded: widget.surfaceBinding.markViewerDocumentLoaded,
       onFirstFrameAfterDocument: widget.surfaceBinding.markViewerFirstFrame,
