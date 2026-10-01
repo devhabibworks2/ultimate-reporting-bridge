@@ -43,3 +43,9 @@ Thumbs.db
 # Logs
 *.log
 *.tmp
+
+example/minimal_host/pubspec.lock
+
+.worktrees/
+
+docs/superpowers/plans/
