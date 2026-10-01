@@ -3,7 +3,6 @@ import 'dart:ui' show Rect;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:printing/printing.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../contracts/report_contract_values.dart';
 
@@ -18,26 +17,6 @@ abstract interface class ReportSupportSharePlatform {
     String filename, {
     Rect? sharePositionOrigin,
   });
-}
-
-final class SharePlusReportSupportSharePlatform
-    implements ReportSupportSharePlatform {
-  const SharePlusReportSupportSharePlatform();
-
-  @override
-  Future<void> shareArchive(
-    Uint8List bytes,
-    String filename, {
-    Rect? sharePositionOrigin,
-  }) async {
-    await SharePlus.instance.share(
-      ShareParams(
-        files: <XFile>[XFile.fromData(bytes, mimeType: 'application/zip')],
-        fileNameOverrides: <String>[filename],
-        sharePositionOrigin: sharePositionOrigin,
-      ),
-    );
-  }
 }
 
 final class UnsupportedReportSupportSharePlatform

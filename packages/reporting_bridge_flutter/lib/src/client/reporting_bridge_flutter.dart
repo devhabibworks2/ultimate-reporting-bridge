@@ -26,7 +26,7 @@ class ReportingBridgeFlutter {
     ReportPrintPlatform? printPlatform,
     this.androidPrintConfiguration = const AndroidPrintConfiguration.escPos(),
     this.iosPrintMode = IosPrintMode.airPrint,
-    this.supportSharePlatform = const SharePlusReportSupportSharePlatform(),
+    this.supportSharePlatform = const UnsupportedReportSupportSharePlatform(),
   }) : _printPlatformOverride = printPlatform;
 
   final ReportServerConnection connection;

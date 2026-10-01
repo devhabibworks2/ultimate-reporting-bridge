@@ -58,7 +58,7 @@ class DefaultReportingBridgeFlutterClient
     ThermalPrinterSettingsController? thermalPrinterSettings,
     void Function()? managedPrintDispose,
     ReportSupportSharePlatform supportSharePlatform =
-        const SharePlusReportSupportSharePlatform(),
+        const UnsupportedReportSupportSharePlatform(),
     HeadlessPresenterSurfaceFactory? headlessPresenterSurfaceFactory,
     WarmableHeadlessPresenterSurface? headlessPresenterSurface,
   }) : _connection = connection,
