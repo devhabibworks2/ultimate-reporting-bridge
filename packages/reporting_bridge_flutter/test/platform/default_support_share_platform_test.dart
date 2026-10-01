@@ -25,10 +25,7 @@ void main() {
         bridge.supportSharePlatform,
         isA<UnsupportedReportSupportSharePlatform>(),
       );
-      expect(
-        bridge.filePlatform,
-        isA<DefaultReportFilePlatform>(),
-      );
+      expect(bridge.filePlatform, isA<DefaultReportFilePlatform>());
     },
   );
 
@@ -53,9 +50,6 @@ void main() {
     const platform = DefaultReportFilePlatform();
     expect(platform, isA<ReportFilePlatform>());
     // Compilation of this call site pins the public sharePdf contract.
-    expect(
-      platform.sharePdf,
-      isA<Future<void> Function(Uint8List, String)>(),
-    );
+    expect(platform.sharePdf, isA<Future<void> Function(Uint8List, String)>());
   });
 }

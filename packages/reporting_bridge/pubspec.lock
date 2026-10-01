@@ -98,7 +98,7 @@ packages:
     source: hosted
     version: "2.2.0"
   file:
-    dependency: transitive
+    dependency: "direct dev"
     description:
       name: file
       sha256: a3b4f84adafef897088c160faf7dfffb7696046cb13ae90b508c2cbc95d3b8d4
@@ -114,7 +114,7 @@ packages:
     source: hosted
     version: "5.0.0"
   frontend_server_client:
-    dependency: transitive
+    dependency: "direct dev"
     description:
       name: frontend_server_client
       sha256: f64a0333a82f30b0cca061bc3d143813a486dc086b574bfb233b7c1372427694
@@ -234,7 +234,7 @@ packages:
     source: hosted
     version: "6.5.2"
   pub_semver:
-    dependency: transitive
+    dependency: "direct dev"
     description:
       name: pub_semver
       sha256: "261236774e8b1d69cfc6b9eabbc96c40f25e7a2d6b171f3385d4f65d5734fb24"
@@ -370,7 +370,7 @@ packages:
     source: hosted
     version: "15.3.0"
   watcher:
-    dependency: transitive
+    dependency: "direct dev"
     description:
       name: watcher
       sha256: "1398c9f081a753f9226febe8900fce8f7d0a67163334e1c94a2438339d79d635"

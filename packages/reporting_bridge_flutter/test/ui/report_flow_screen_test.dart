@@ -108,7 +108,7 @@ void main() {
     expect(find.text('Synchronize templates'), findsNothing);
     expect(find.text('Download Presenter'), findsNothing);
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Continue'));
+    await tester.tap(_filledButtonLabeled('Continue'));
     await tester.pump();
 
     expect(controller.continueCalls, 1);
@@ -192,7 +192,7 @@ void main() {
     await _pumpFlow(tester, controller);
 
     final button = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'Continue'),
+      _filledButtonLabeled('Continue'),
     );
     expect(button.onPressed, isNull);
     expect(find.text('Update required'), findsOneWidget);
@@ -206,7 +206,7 @@ void main() {
     );
     await _pumpFlow(tester, controller);
 
-    final buttonFinder = find.widgetWithText(FilledButton, 'Continue');
+    final buttonFinder = _filledButtonLabeled('Continue');
     final button = tester.widget<FilledButton>(buttonFinder);
     expect(button.onPressed, isNull);
     expect(
@@ -352,7 +352,7 @@ void main() {
       findsOneWidget,
     );
     final continueButton = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'Continue'),
+      _filledButtonLabeled('Continue'),
     );
     expect(continueButton.onPressed, isNull);
   });
@@ -1760,6 +1760,11 @@ void main() {
     },
   );
 }
+
+Finder _filledButtonLabeled(String label) => find.ancestor(
+  of: find.text(label),
+  matching: find.bySubtype<FilledButton>(),
+);
 
 Future<void> _pumpDirectFlow(
   WidgetTester tester,

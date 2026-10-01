@@ -4,8 +4,8 @@ publish_to: "none"
 version: 1.0.2
 
 environment:
-  sdk: ">=3.7.0 <4.0.0"
-  flutter: ">=3.29.0"
+  sdk: ">=3.9.0 <4.0.0"
+  flutter: ">=3.35.0"
 
 dependencies:
   flutter:
@@ -20,6 +20,9 @@ dependencies:
   printing: ">=5.14.2 <6.0.0"
   shared_preferences: ">=2.3.0 <3.0.0"
   pdfx: ">=2.11.0 <3.0.0"
+  # Keep `flutter pub downgrade` from selecting platform 3.0.x, which still
+  # references removed dart:io Platform.packageRoot under Dart 3.9 / Flutter 3.35.
+  platform: ">=3.1.5 <4.0.0"
 
 dev_dependencies:
   flutter_test:

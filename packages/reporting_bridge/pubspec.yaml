@@ -4,7 +4,7 @@ publish_to: "none"
 version: 1.0.0
 
 environment:
-  sdk: ">=3.7.0 <4.0.0"
+  sdk: ">=3.9.0 <4.0.0"
 
 dependencies:
   archive: ">=4.0.7 <5.0.0"
@@ -12,4 +12,11 @@ dependencies:
 
 dev_dependencies:
   flutter_lints: ^5.0.0
-  test: ^1.25.0
+  test: ^1.25.15
+  # Floor SDK-incompatible transitive test tooling so `dart pub downgrade`
+  # on the minimum Flutter/Dart lane cannot select packages that fail to
+  # compile/run against the bundled Dart SDK.
+  file: ">=7.0.0 <8.0.0"
+  frontend_server_client: ">=4.0.0 <5.0.0"
+  pub_semver: ">=2.1.5 <3.0.0"
+  watcher: ">=1.1.0 <2.0.0"
