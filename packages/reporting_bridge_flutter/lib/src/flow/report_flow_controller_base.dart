@@ -134,8 +134,7 @@ class ReportFlowControllerImpl
               ? PresenterModePreference.offline
               : PresenterModePreference.online);
 
-      final requestedTemplateId =
-          request.initialTemplateId ?? stored?.templateId;
+      var requestedTemplateId = request.initialTemplateId ?? stored?.templateId;
       var candidate = _validTemplateId(templates, requestedTemplateId);
       final requiresAuthoritativeTemplateResolution =
           templates.isEmpty ||
@@ -177,6 +176,10 @@ class ReportFlowControllerImpl
         final synchronized = await _synchronizeTemplatesForEntry();
         if (_disposed || !synchronized) return;
         templates = _value.templates;
+        if (request.initialTemplateId == null) {
+          stored = _persistedPreferences;
+          requestedTemplateId = stored?.templateId;
+        }
         candidate = _validTemplateId(templates, requestedTemplateId);
       }
 
@@ -184,8 +187,9 @@ class ReportFlowControllerImpl
       // Every workflow catalog lookup is scoped by the active
       // TemplateSyncRequest filter/extra. Absence from that result proves only
       // that the saved template is unavailable for this request; it does not
-      // prove the template was globally deleted. Preserve the V5 selection
-      // until a separate global existence/tombstone authority can prove that.
+      // prove the template was globally deleted. Preserve the durable
+      // TemplateCode selection until explicit reselection or authoritative
+      // resolution proves otherwise.
       final storedTemplateUnavailableForRequest =
           stored != null &&
           storedTemplateId != null &&
@@ -195,9 +199,16 @@ class ReportFlowControllerImpl
 
       // Do not auto-adopt another eligible template when the saved template is
       // unavailable for the current request.
+      String? fallbackTemplateId;
+      if (request.entryPolicy == ReportEntryPolicy.alwaysSelectTemplate) {
+        fallbackTemplateId = templates.length == 1 ? templates.single.id : null;
+      } else {
+        fallbackTemplateId = templates.isEmpty ? null : templates.first.id;
+      }
+
       final selected = storedTemplateUnavailableForRequest
           ? null
-          : (candidate ?? (templates.length == 1 ? templates.single.id : null));
+          : (candidate ?? fallbackTemplateId);
       final fallbackReason = switch (request.entryPolicy) {
         ReportEntryPolicy.alwaysPrepare =>
           ReportEntryFallbackReason.entryPolicy,
@@ -205,15 +216,13 @@ class ReportFlowControllerImpl
           templates.isEmpty
               ? ReportEntryFallbackReason.noCompatibleTemplates
               : null,
-        ReportEntryPolicy.smart when requestedTemplateId == null =>
-          ReportEntryFallbackReason.noSavedDefault,
+        ReportEntryPolicy.smart when storedTemplateUnavailableForRequest =>
+          ReportEntryFallbackReason.noCompatibleTemplates,
+        ReportEntryPolicy.smart when selected == null =>
+          ReportEntryFallbackReason.noCompatibleTemplates,
         ReportEntryPolicy.smart
             when mode == PresenterModePreference.offline && !presenterCached =>
           ReportEntryFallbackReason.offlinePresenterUnavailable,
-        ReportEntryPolicy.smart when storedTemplateUnavailableForRequest =>
-          ReportEntryFallbackReason.noCompatibleTemplates,
-        ReportEntryPolicy.smart when candidate == null && selected == null =>
-          ReportEntryFallbackReason.noCompatibleTemplates,
         ReportEntryPolicy.smart => null,
       };
       _set(
@@ -279,10 +288,16 @@ class ReportFlowControllerImpl
     try {
       final synchronized = await _synchronizeTemplateCatalog();
       final templates = synchronized.compatibleTemplates;
-      final selected =
-          _validTemplateId(templates, _value.selectedTemplateId) ??
-          _validTemplateId(templates, request.initialTemplateId) ??
-          (templates.length == 1 ? templates.single.id : null);
+      try {
+        _persistedPreferences = await _runtime.preferences.load(_scope);
+      } catch (_) {
+        // Selection can still proceed from the current in-memory preference.
+      }
+      final selected = _resolveTemplateAfterSync(templates);
+      final keepAlwaysPrepareGate =
+          request.entryPolicy == ReportEntryPolicy.alwaysPrepare &&
+          _value.resourceOrigin == ResourcePreparationOrigin.initialSetup &&
+          templates.isNotEmpty;
       _set(
         _value.copyWith(
           stage: returnStage,
@@ -294,8 +309,11 @@ class ReportFlowControllerImpl
           templatesSyncedAt: DateTime.now(),
           entryFallbackReason: templates.isEmpty
               ? ReportEntryFallbackReason.noCompatibleTemplates
+              : keepAlwaysPrepareGate
+              ? ReportEntryFallbackReason.entryPolicy
               : null,
-          clearEntryFallbackReason: templates.isNotEmpty,
+          clearEntryFallbackReason:
+              templates.isNotEmpty && !keepAlwaysPrepareGate,
           clearTemplateSyncFailure: true,
           clearFailure: !preservePreviewFailure,
         ),
@@ -333,10 +351,12 @@ class ReportFlowControllerImpl
     try {
       final synchronized = await _synchronizeTemplateCatalog();
       final templates = synchronized.compatibleTemplates;
-      final selected =
-          _validTemplateId(templates, _value.selectedTemplateId) ??
-          _validTemplateId(templates, request.initialTemplateId) ??
-          (templates.length == 1 ? templates.single.id : null);
+      try {
+        _persistedPreferences = await _runtime.preferences.load(_scope);
+      } catch (_) {
+        // Keep the existing in-memory preference if re-resolution fails.
+      }
+      final selected = _resolveTemplateAfterSync(templates);
       _set(
         _value.copyWith(
           stage: ReportFlowStage.preparingResources,
@@ -571,7 +591,17 @@ class ReportFlowControllerImpl
       await preparePreview();
       return;
     }
-    openTemplateSelection();
+
+    if (request.entryPolicy == ReportEntryPolicy.alwaysSelectTemplate) {
+      openTemplateSelection();
+      return;
+    }
+    if (_value.selectedTemplate == null) {
+      openTemplateSelection();
+      return;
+    }
+    _set(_value.copyWith(clearEntryFallbackReason: true, clearFailure: true));
+    await preparePreview();
   }
 
   @override
@@ -848,7 +878,8 @@ class ReportFlowControllerImpl
     if (running != null) return running;
     final allowedStage =
         (_value.stage == ReportFlowStage.preparingResources &&
-            request.entryPolicy == ReportEntryPolicy.smart &&
+            (request.entryPolicy == ReportEntryPolicy.smart ||
+                request.entryPolicy == ReportEntryPolicy.alwaysPrepare) &&
             _value.entryFallbackReason == null) ||
         _value.stage == ReportFlowStage.selectingTemplate ||
         _value.stage == ReportFlowStage.editingSettings ||
@@ -1693,6 +1724,43 @@ class ReportFlowControllerImpl
       if (template.id == id) return id;
     }
     return null;
+  }
+
+  String? _resolveTemplateAfterSync(List<CachedTemplate> templates) {
+    final current = _validTemplateId(templates, _value.selectedTemplateId);
+    if (current != null) return current;
+
+    final initial = _validTemplateId(templates, request.initialTemplateId);
+    if (initial != null) return initial;
+
+    final explicitInitialSupplied =
+        request.initialTemplateId != null &&
+        request.initialTemplateId!.trim().isNotEmpty;
+
+    if (!explicitInitialSupplied) {
+      final persisted = _validTemplateId(
+        templates,
+        _persistedPreferences?.templateId,
+      );
+      if (persisted != null) return persisted;
+    }
+
+    if (_value.resourceOrigin != ResourcePreparationOrigin.initialSetup) {
+      return templates.length == 1 ? templates.single.id : null;
+    }
+
+    if (!explicitInitialSupplied) {
+      final savedId = _persistedPreferences?.templateId?.trim();
+      if (savedId != null && savedId.isNotEmpty) {
+        return null;
+      }
+    }
+
+    if (request.entryPolicy == ReportEntryPolicy.alwaysSelectTemplate) {
+      return templates.length == 1 ? templates.single.id : null;
+    }
+
+    return templates.isEmpty ? null : templates.first.id;
   }
 
   Future<void> _persistSelection() async {

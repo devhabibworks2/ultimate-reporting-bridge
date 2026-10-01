@@ -60,7 +60,7 @@ void main() {
     final controller = ReportFlowControllerImpl(
       request: buildTestOpenRequest(
         system: 'legacy_system_1',
-        entryPolicy: ReportEntryPolicy.smart,
+        entryPolicy: ReportEntryPolicy.alwaysPrepare,
       ),
       runtime: ReportFlowRuntime(
         connection: connection,
@@ -74,18 +74,12 @@ void main() {
     await controller.initialize();
 
     expect(controller.value.selectedMode, mode);
-    expect(controller.value.selectedTemplateId, isNot('T'));
-    expect(
-      controller.value.stage,
-      anyOf(
-        ReportFlowStage.preparingResources,
-        ReportFlowStage.selectingTemplate,
-        ReportFlowStage.previewing,
-      ),
-    );
+    expect(controller.value.selectedTemplateId, 'alive');
+    expect(controller.value.stage, ReportFlowStage.preparingResources);
 
     final reloaded = await store.load(scope);
     expect(reloaded?.templateId, isNull);
+    expect(reloaded?.templateId, isNot('T'));
     expect(reloaded?.mode, mode);
   }
 

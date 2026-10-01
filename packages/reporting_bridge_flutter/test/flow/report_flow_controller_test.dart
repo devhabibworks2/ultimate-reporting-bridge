@@ -37,6 +37,9 @@ void main() {
     ReportEntryPolicy entryPolicy = ReportEntryPolicy.alwaysPrepare,
     bool directPrintAfterSave = false,
     int systemId = 1,
+    String? initialTemplateId,
+    TemplateCompatibilityConstraints compatibility =
+        const TemplateCompatibilityConstraints(),
   }) {
     bridge.templates = templates ?? <CachedTemplate>[_template('t1')];
     return ReportFlowControllerImpl(
@@ -47,6 +50,8 @@ void main() {
         reportType: 'sales_invoice',
         presenterMode: mode,
         entryPolicy: entryPolicy,
+        initialTemplateId: initialTemplateId,
+        compatibility: compatibility,
       ).copyWith(directPrintAfterSave: directPrintAfterSave),
       runtime: ReportFlowRuntime(
         connection: ReportServerConnection(
@@ -67,20 +72,25 @@ void main() {
     );
   }
 
-  test('initialize opens Preparation and online mode can continue', () async {
-    final controller = createController();
-    addTearDown(controller.dispose);
+  test(
+    'alwaysPrepare opens Preparation then continues directly when a template is available',
+    () async {
+      final controller = createController();
+      addTearDown(controller.dispose);
 
-    await controller.initialize();
+      await controller.initialize();
 
-    expect(controller.value.stage, ReportFlowStage.preparingResources);
-    expect(controller.value.templatesReady, isTrue);
-    expect(controller.value.presenterCached, isTrue);
-    expect(controller.value.preparationReady, isTrue);
+      expect(controller.value.stage, ReportFlowStage.preparingResources);
+      expect(controller.value.templatesReady, isTrue);
+      expect(controller.value.presenterCached, isTrue);
+      expect(controller.value.preparationReady, isTrue);
 
-    await controller.continueFromPreparation();
-    expect(controller.value.stage, ReportFlowStage.selectingTemplate);
-  });
+      await controller.continueFromPreparation();
+      expect(controller.value.stage, ReportFlowStage.previewing);
+      expect(controller.value.committedTemplateId, 't1');
+      expect(bridge.prepareCalls, 1);
+    },
+  );
 
   test(
     'initialize defaults to offline when Presenter is already cached',
@@ -97,7 +107,7 @@ void main() {
 
   test('smart entry opens Preview for a valid online default', () async {
     preferences.valuesBySystem['legacy_system_1'] = const ReportFlowPreferences(
-      templateId: 't1',
+      templateCode: 'CODE-t1',
       mode: PresenterModePreference.online,
     );
     final controller = createController(entryPolicy: ReportEntryPolicy.smart);
@@ -224,15 +234,302 @@ void main() {
   );
 
   test(
+    'initialSetup syncTemplates auto-selects first compatible after empty catalog',
+    () async {
+      bridge.failTemplateSync = true;
+      final controller = createController(
+        templates: const <CachedTemplate>[],
+        entryPolicy: ReportEntryPolicy.alwaysPrepare,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      expect(controller.value.stage, ReportFlowStage.preparingResources);
+      expect(controller.value.selectedTemplateId, isNull);
+
+      bridge.failTemplateSync = false;
+      bridge.templatesAfterSync = <CachedTemplate>[
+        _template('t1'),
+        _template('t2'),
+      ];
+      await controller.syncTemplates();
+
+      expect(controller.value.selectedTemplateId, 't1');
+      expect(controller.value.stage, ReportFlowStage.preparingResources);
+    },
+  );
+
+  test(
+    'initialSetup syncTemplates prefers saved template that becomes valid',
+    () async {
+      preferences.valuesBySystem['legacy_system_1'] =
+          const ReportFlowPreferences(
+            templateCode: 'CODE-t2',
+            mode: PresenterModePreference.online,
+          );
+      bridge.failTemplateSync = true;
+      final controller = createController(
+        templates: const <CachedTemplate>[],
+        entryPolicy: ReportEntryPolicy.alwaysPrepare,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      expect(controller.value.stage, ReportFlowStage.preparingResources);
+
+      bridge.failTemplateSync = false;
+      bridge.templatesAfterSync = <CachedTemplate>[
+        _template('t1'),
+        _template('t2'),
+      ];
+      await controller.syncTemplates();
+
+      expect(controller.value.selectedTemplateId, 't2');
+    },
+  );
+
+  test(
+    'initialSetup syncTemplates does not replace still-stale saved template',
+    () async {
+      preferences.valuesBySystem['legacy_system_1'] =
+          const ReportFlowPreferences(
+            templateCode: 'CODE-removed',
+            mode: PresenterModePreference.online,
+          );
+      bridge.failTemplateSync = true;
+      final controller = createController(
+        templates: const <CachedTemplate>[],
+        entryPolicy: ReportEntryPolicy.alwaysPrepare,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      expect(controller.value.stage, ReportFlowStage.preparingResources);
+
+      bridge.failTemplateSync = false;
+      bridge.templatesAfterSync = <CachedTemplate>[
+        _template('t1'),
+        _template('t2'),
+      ];
+      await controller.syncTemplates();
+
+      expect(controller.value.selectedTemplateId, isNull);
+    },
+  );
+
+  test(
+    'alwaysPrepare syncTemplates keeps entryPolicy so Preview still needs Continue',
+    () async {
+      bridge.failTemplateSync = true;
+      final controller = createController(
+        templates: const <CachedTemplate>[],
+        entryPolicy: ReportEntryPolicy.alwaysPrepare,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      expect(controller.value.stage, ReportFlowStage.preparingResources);
+
+      bridge.failTemplateSync = false;
+      bridge.templatesAfterSync = <CachedTemplate>[
+        _template('t1'),
+        _template('t2'),
+      ];
+      await controller.syncTemplates();
+
+      expect(controller.value.selectedTemplateId, 't1');
+      expect(
+        controller.value.entryFallbackReason,
+        ReportEntryFallbackReason.entryPolicy,
+      );
+      expect(controller.value.stage, ReportFlowStage.preparingResources);
+
+      await controller.preparePreview();
+      expect(controller.value.stage, ReportFlowStage.preparingResources);
+      expect(bridge.prepareCalls, 0);
+
+      await controller.continueFromPreparation();
+      expect(controller.value.stage, ReportFlowStage.previewing);
+      expect(bridge.prepareCalls, 1);
+    },
+  );
+
+  test(
+    'smart entry recovers durable template code after one transient preference-lookup sync failure',
+    () async {
+      preferences.valuesBySystem['legacy_system_1'] =
+          const ReportFlowPreferences(
+            templateCode: 'CODE-t2',
+            mode: PresenterModePreference.online,
+          );
+      bridge.failTemplateSyncRemaining = 1;
+      bridge.templatesAfterSync = <CachedTemplate>[
+        _template('t1'),
+        _template('t2'),
+      ];
+      final controller = createController(
+        templates: const <CachedTemplate>[],
+        entryPolicy: ReportEntryPolicy.smart,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      expect(bridge.templateSyncCalls, greaterThanOrEqualTo(2));
+      expect(controller.value.selectedTemplateId, 't2');
+      expect(controller.value.committedTemplateId, 't2');
+      expect(controller.value.stage, ReportFlowStage.previewing);
+      expect(bridge.prepareCalls, 1);
+      expect(
+        preferences.valuesBySystem['legacy_system_1']?.templateCode,
+        'CODE-t2',
+      );
+    },
+  );
+
+  test(
+    'smart entry auto-selects first compatible template when no default exists',
+    () async {
+      final controller = createController(
+        templates: <CachedTemplate>[_template('t1'), _template('t2')],
+        entryPolicy: ReportEntryPolicy.smart,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      expect(controller.value.stage, ReportFlowStage.previewing);
+      expect(controller.value.selectedTemplateId, 't1');
+      expect(controller.value.committedTemplateId, 't1');
+      expect(controller.value.presenterLaunch, isNotNull);
+      expect(bridge.prepareCalls, 1);
+      expect(preferences.valuesBySystem['legacy_system_1']?.templateId, 't1');
+    },
+  );
+
+  test(
+    'smart entry chooses first eligible template, not first raw catalog item',
+    () async {
+      final controller = createController(
+        templates: <CachedTemplate>[
+          _familyTemplate('wrong-family', 'sales_return'),
+          _sizedTemplate('wrong-size', 'A4'),
+          _sizedTemplate('thermal-1', '80mm'),
+          _sizedTemplate('thermal-2', '80mm'),
+        ],
+        compatibility: const TemplateCompatibilityConstraints(
+          size: ReportPageSize.thermal80,
+        ),
+        entryPolicy: ReportEntryPolicy.smart,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      expect(controller.eligibleTemplates.map((e) => e.id), <String>[
+        'thermal-1',
+        'thermal-2',
+      ]);
+      expect(controller.value.selectedTemplateId, 'thermal-1');
+      expect(controller.value.stage, ReportFlowStage.previewing);
+      expect(bridge.prepareCalls, 1);
+    },
+  );
+
+  test(
+    'smart entry prefers explicit initialTemplateId over first compatible',
+    () async {
+      final controller = createController(
+        templates: <CachedTemplate>[
+          _template('t1'),
+          _template('t2'),
+          _template('t3'),
+        ],
+        initialTemplateId: 't2',
+        entryPolicy: ReportEntryPolicy.smart,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      expect(controller.value.selectedTemplateId, 't2');
+      expect(controller.value.committedTemplateId, 't2');
+      expect(controller.value.stage, ReportFlowStage.previewing);
+      expect(bridge.prepareCalls, 1);
+    },
+  );
+
+  test(
+    'smart entry prefers saved default over first compatible template',
+    () async {
+      preferences.valuesBySystem['legacy_system_1'] =
+          const ReportFlowPreferences(
+            templateCode: 'CODE-t2',
+            mode: PresenterModePreference.online,
+          );
+      final controller = createController(
+        templates: <CachedTemplate>[_template('t1'), _template('t2')],
+        entryPolicy: ReportEntryPolicy.smart,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      expect(controller.value.selectedTemplateId, 't2');
+      expect(controller.value.committedTemplateId, 't2');
+      expect(controller.value.stage, ReportFlowStage.previewing);
+      expect(bridge.prepareCalls, 1);
+    },
+  );
+
+  test('smart entry with zero compatible templates does not Preview', () async {
+    final controller = createController(
+      templates: <CachedTemplate>[
+        _familyTemplate('wrong-family', 'sales_return'),
+      ],
+      entryPolicy: ReportEntryPolicy.smart,
+    );
+    addTearDown(controller.dispose);
+
+    await controller.initialize();
+
+    expect(controller.value.selectedTemplateId, isNull);
+    expect(controller.value.presenterLaunch, isNull);
+    expect(controller.value.stage, ReportFlowStage.preparingResources);
+    expect(
+      controller.value.entryFallbackReason,
+      ReportEntryFallbackReason.noCompatibleTemplates,
+    );
+    expect(bridge.prepareCalls, 0);
+  });
+
+  test(
+    'alwaysSelectTemplate keeps Template Selection with multiple templates',
+    () async {
+      final controller = createController(
+        templates: <CachedTemplate>[_template('t1'), _template('t2')],
+        entryPolicy: ReportEntryPolicy.alwaysSelectTemplate,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      expect(controller.value.stage, ReportFlowStage.selectingTemplate);
+      expect(controller.value.presenterLaunch, isNull);
+      expect(bridge.prepareCalls, 0);
+    },
+  );
+
+  test(
     'scoped catalog absence preserves saved default without global deletion authority',
     () async {
       preferences.valuesBySystem
         ..['legacy_system_1'] = const ReportFlowPreferences(
-          templateId: 'removed',
+          templateCode: 'CODE-removed',
           mode: PresenterModePreference.online,
         )
         ..['legacy_system_2'] = const ReportFlowPreferences(
-          templateId: 'other',
+          templateCode: 'CODE-other',
           mode: PresenterModePreference.online,
         );
       final controller = createController(entryPolicy: ReportEntryPolicy.smart);
@@ -246,14 +543,17 @@ void main() {
         controller.value.entryFallbackReason,
         ReportEntryFallbackReason.noCompatibleTemplates,
       );
-      expect(preferences.valuesBySystem['legacy_system_1']?.templateId, isNull);
+      expect(
+        preferences.valuesBySystem['legacy_system_1']?.templateCode,
+        'CODE-removed',
+      );
       expect(
         preferences.valuesBySystem['legacy_system_1']?.mode,
         PresenterModePreference.online,
       );
       expect(
-        preferences.valuesBySystem['legacy_system_2']?.templateId,
-        'other',
+        preferences.valuesBySystem['legacy_system_2']?.templateCode,
+        'CODE-other',
       );
       // A stale saved identity requires explicit user reselection; the sole
       // compatible alternative must not be silently preselected.
@@ -269,7 +569,7 @@ void main() {
     () async {
       preferences.valuesBySystem['legacy_system_1'] =
           const ReportFlowPreferences(
-            templateId: 't_a4',
+            templateCode: 'CODE-t_a4',
             mode: PresenterModePreference.online,
           );
       bridge.templates = <CachedTemplate>[
@@ -303,7 +603,10 @@ void main() {
 
       await controller.initialize();
 
-      expect(preferences.valuesBySystem['legacy_system_1']?.templateId, 't_a4');
+      expect(
+        preferences.valuesBySystem['legacy_system_1']?.templateCode,
+        'CODE-t_a4',
+      );
       expect(controller.value.selectedTemplateId, isNot('t_a4'));
     },
   );
@@ -344,7 +647,87 @@ void main() {
 
       expect(bridge.presenterSyncCalls, 1);
       expect(controller.value.presenterCached, isTrue);
+      expect(controller.value.stage, ReportFlowStage.previewing);
+      expect(bridge.prepareCalls, 1);
+    },
+  );
+
+  test(
+    'alwaysPrepare multi-template Continue goes to Preview with first compatible',
+    () async {
+      final controller = createController(
+        templates: <CachedTemplate>[_template('t1'), _template('t2')],
+        entryPolicy: ReportEntryPolicy.alwaysPrepare,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      expect(controller.value.stage, ReportFlowStage.preparingResources);
+      expect(controller.value.selectedTemplateId, 't1');
+      expect(controller.value.presenterLaunch, isNull);
+      expect(
+        controller.value.entryFallbackReason,
+        ReportEntryFallbackReason.entryPolicy,
+      );
+
+      await controller.continueFromPreparation();
+
+      expect(controller.value.stage, ReportFlowStage.previewing);
+      expect(controller.value.committedTemplateId, 't1');
+      expect(bridge.prepareCalls, 1);
+      expect(preferences.valuesBySystem['legacy_system_1']?.templateId, 't1');
+    },
+  );
+
+  test(
+    'alwaysPrepare stale saved template Continues to Template Selection',
+    () async {
+      preferences.valuesBySystem['legacy_system_1'] =
+          const ReportFlowPreferences(
+            templateCode: 'CODE-removed',
+            mode: PresenterModePreference.online,
+          );
+      final controller = createController(
+        templates: <CachedTemplate>[_template('t1'), _template('t2')],
+        entryPolicy: ReportEntryPolicy.alwaysPrepare,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      expect(controller.value.selectedTemplateId, isNull);
+
+      await controller.continueFromPreparation();
+
       expect(controller.value.stage, ReportFlowStage.selectingTemplate);
+      expect(controller.value.presenterLaunch, isNull);
+      expect(bridge.prepareCalls, 0);
+    },
+  );
+
+  test(
+    'alwaysPrepare with no compatible templates does not Preview on Continue',
+    () async {
+      final controller = createController(
+        templates: <CachedTemplate>[
+          _familyTemplate('wrong-family', 'sales_return'),
+        ],
+        entryPolicy: ReportEntryPolicy.alwaysPrepare,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      await controller.continueFromPreparation();
+
+      expect(bridge.prepareCalls, 0);
+      expect(controller.value.presenterLaunch, isNull);
+      expect(
+        controller.value.stage,
+        anyOf(
+          ReportFlowStage.preparingResources,
+          ReportFlowStage.selectingTemplate,
+        ),
+      );
     },
   );
 
@@ -544,7 +927,9 @@ void main() {
     addTearDown(controller.dispose);
 
     await controller.initialize();
-    await controller.continueFromPreparation();
+    controller.openTemplateSelection();
+    expect(controller.value.stage, ReportFlowStage.selectingTemplate);
+
     controller.backToPreparation();
 
     expect(controller.value.stage, ReportFlowStage.preparingResources);
@@ -681,7 +1066,7 @@ void main() {
       bridge.prepareBarrier = Completer<void>();
 
       await controller.initialize();
-      await controller.continueFromPreparation();
+      controller.openTemplateSelection();
       final first = controller.preparePreview();
       final second = controller.preparePreview();
 
@@ -714,7 +1099,7 @@ void main() {
       bridge.prepareBarrier = Completer<void>();
 
       await controller.initialize();
-      await controller.continueFromPreparation();
+      controller.openTemplateSelection();
       final preview = controller.preparePreview();
       final disposal = controller.dispose();
       bridge.prepareBarrier!.complete();
@@ -1119,7 +1504,6 @@ void main() {
 
       await controller.initialize();
       await controller.continueFromPreparation();
-      await controller.preparePreview();
 
       expect(bridge.stopCalls, 1);
       expect(controller.value.presenterLaunch, isNull);
@@ -1529,6 +1913,7 @@ class _FakeBridgeClient extends ReportingBridgeClient {
   bool failPrepare = false;
   bool failStop = false;
   bool failTemplateSync = false;
+  int failTemplateSyncRemaining = 0;
   bool failPresenterSync = false;
   List<String> templateSyncErrors = const <String>[];
   bool failReplacementCommit = false;
@@ -1562,6 +1947,10 @@ class _FakeBridgeClient extends ReportingBridgeClient {
   }) async {
     templateSyncCalls += 1;
     if (failTemplateSync) throw StateError('template sync failed');
+    if (failTemplateSyncRemaining > 0) {
+      failTemplateSyncRemaining -= 1;
+      throw StateError('template sync failed');
+    }
     final synchronized = templatesAfterSync;
     if (synchronized != null) templates = synchronized;
     return TemplateSyncSummary(
