@@ -2,12 +2,16 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:pdfx/pdfx.dart';
 
-typedef BridgePdfDocumentFactory = Future<PdfDocument> Function(Uint8List bytes);
+import 'bridge_pdf_preview_config.dart';
+
+typedef BridgePdfDocumentFactory =
+    Future<PdfDocument> Function(Uint8List bytes);
 
 class BridgePdfView extends StatefulWidget {
   const BridgePdfView({
     super.key,
     required this.bytes,
+    this.previewConfig = const BridgePdfPreviewConfig(),
     this.onViewerError,
     this.onDocumentOpenStarted,
     this.onDocumentLoaded,
@@ -16,6 +20,7 @@ class BridgePdfView extends StatefulWidget {
   });
 
   final Uint8List bytes;
+  final BridgePdfPreviewConfig previewConfig;
   final ValueChanged<Object>? onViewerError;
   final VoidCallback? onDocumentOpenStarted;
   final VoidCallback? onDocumentLoaded;
@@ -66,7 +71,8 @@ class _BridgePdfViewState extends State<BridgePdfView> {
       },
     );
     final controller = PdfControllerPinch(document: document);
-    controller.value = Matrix4.diagonal3Values(0.9, 0.8, 1);
+    final scale = widget.previewConfig.initialScale;
+    controller.value = Matrix4.diagonal3Values(scale, scale, 1);
     return controller;
   }
 
@@ -79,7 +85,7 @@ class _BridgePdfViewState extends State<BridgePdfView> {
     final firstPageRect = _controller.getPageRect(1);
     if (firstPageRect == null) return;
 
-    const scale = 0.7;
+    final scale = widget.previewConfig.initialScale;
     final scaledWidth = firstPageRect.width * scale;
     final scaledHeight = firstPageRect.height * scale;
 
@@ -121,8 +127,8 @@ class _BridgePdfViewState extends State<BridgePdfView> {
         return PdfViewPinch(
           key: const Key('bridge-pdf-view'),
           controller: _controller,
-          minScale: 0.6,
-          maxScale: 4,
+          minScale: widget.previewConfig.minScale,
+          maxScale: widget.previewConfig.maxScale,
           onDocumentLoaded: (_) {
             widget.onDocumentLoaded?.call();
             WidgetsBinding.instance.addPostFrameCallback((_) {

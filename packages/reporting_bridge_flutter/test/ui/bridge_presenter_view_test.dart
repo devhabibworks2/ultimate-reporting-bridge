@@ -14,6 +14,16 @@ void main() {
     expect(source, isNot(contains('initialUrlRequest: URLRequest')));
   });
 
+  test(
+    'BridgePresenterView forwards pdfPreview into default BridgePdfView',
+    () {
+      final source = File(
+        'lib/src/ui/bridge_presenter_view.dart',
+      ).readAsStringSync();
+      expect(source, contains('previewConfig: widget.pdfPreview'));
+    },
+  );
+
   testWidgets('starts headless runtime and renders exact cached PDF bytes', (
     tester,
   ) async {

@@ -958,6 +958,28 @@ void main() {
     expect(find.text('Sending to printer'), findsOneWidget);
   });
 
+  testWidgets('Preview forwards Bridge UI PDF preview config to presenter', (
+    WidgetTester tester,
+  ) async {
+    InAppWebViewPlatform.instance = _TestInAppWebViewPlatform();
+    final controller = _FakeController(_previewState());
+    const ui = BridgeUiConfig.inheritHost(
+      pdfPreview: BridgePdfPreviewConfig(
+        minScale: 0.5,
+        maxScale: 4.0,
+        initialScale: 0.75,
+      ),
+    );
+    await _pumpFlow(tester, controller, ui: ui);
+
+    final presenter = tester.widget<BridgePresenterView>(
+      find.byType(BridgePresenterView),
+    );
+    expect(presenter.pdfPreview.minScale, 0.5);
+    expect(presenter.pdfPreview.maxScale, 4.0);
+    expect(presenter.pdfPreview.initialScale, 0.75);
+  });
+
   testWidgets(
     'Preview has no visible WebView; navigation policy belongs to the headless runtime',
     (WidgetTester tester) async {
@@ -1765,6 +1787,7 @@ Future<void> _pumpFlow(
   WidgetTester tester,
   _FakeController controller, {
   double textScale = 1,
+  BridgeUiConfig ui = const BridgeUiConfig.inheritHost(),
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -1776,10 +1799,7 @@ Future<void> _pumpFlow(
                 data: MediaQuery.of(
                   routeContext,
                 ).copyWith(textScaler: TextScaler.linear(textScale)),
-                child: ReportFlowScreen(
-                  controller: controller,
-                  ui: const BridgeUiConfig.inheritHost(),
-                ),
+                child: ReportFlowScreen(controller: controller, ui: ui),
               ),
             ),
           ),
