@@ -136,7 +136,7 @@ class DefaultReportFilePlatform implements ReportFilePlatform {
 
   @override
   Future<bool> savePdf(Uint8List bytes, String filename) async {
-    final path = await FilePicker.platform.saveFile(
+    final path = await FilePicker.saveFile(
       dialogTitle: 'Save PDF',
       fileName: filename,
       type: FileType.custom,
