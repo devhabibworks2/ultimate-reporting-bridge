@@ -4,22 +4,22 @@ publish_to: "none"
 version: 1.0.2
 
 environment:
-  sdk: ^3.9.0
-  flutter: ">=3.35.0"
+  sdk: ">=3.7.0 <4.0.0"
+  flutter: ">=3.29.0"
 
 dependencies:
   flutter:
     sdk: flutter
   reporting_bridge:
     path: ../reporting_bridge
-  flutter_inappwebview: ^6.1.5
-  archive: 4.0.9
-  crypto: ^3.0.6
+  flutter_inappwebview: ">=6.1.5 <7.0.0"
+  archive: ">=4.0.9 <5.0.0"
+  crypto: ">=3.0.6 <4.0.0"
   file_picker: ">=11.0.1 <14.0.0"
-  path_provider: ^2.1.5
-  printing: ^5.14.2
-  shared_preferences: ^2.3.0
-  pdfx: 2.11.0
+  path_provider: ">=2.1.5 <3.0.0"
+  printing: ">=5.14.2 <6.0.0"
+  shared_preferences: ">=2.3.0 <3.0.0"
+  pdfx: ">=2.11.0 <3.0.0"
 
 dev_dependencies:
   flutter_test:
