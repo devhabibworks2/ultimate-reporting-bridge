@@ -7,6 +7,7 @@ import 'bridge_contract.dart';
 import 'bridge_runtime_error.dart';
 import 'bridge_selected_template.dart';
 import 'bridge_semantic_version.dart';
+import 'bridge_template_default.dart';
 
 class CachedTemplate {
   const CachedTemplate({
@@ -232,6 +233,7 @@ final class TemplateCatalogMetadata {
     required this.extraFingerprint,
     this.systemId,
     this.appliedFilter = const <String, dynamic>{},
+    this.defaultTemplates = const <TemplateDefaultHint>[],
     DateTime? cachedAt,
   }) : cachedAt = (cachedAt ?? DateTime.now().toUtc()).toUtc();
 
@@ -243,6 +245,7 @@ final class TemplateCatalogMetadata {
   final String? extraFingerprint;
   final int? systemId;
   final Map<String, dynamic> appliedFilter;
+  final List<TemplateDefaultHint> defaultTemplates;
   final DateTime cachedAt;
 
   Map<String, dynamic> toMap() => <String, dynamic>{
@@ -254,6 +257,9 @@ final class TemplateCatalogMetadata {
     if (extraFingerprint != null) 'extraFingerprint': extraFingerprint,
     if (systemId != null) 'systemId': systemId,
     if (appliedFilter.isNotEmpty) 'appliedFilter': appliedFilter,
+    'defaultTemplates': defaultTemplates
+        .map((value) => value.toMap())
+        .toList(growable: false),
     'cachedAt': cachedAt.toIso8601String(),
   };
 
@@ -261,6 +267,26 @@ final class TemplateCatalogMetadata {
     final revision = _stringOrNull(raw['catalogRevision']);
     final cachedAt = DateTime.tryParse(raw['cachedAt']?.toString() ?? '');
     if (revision == null || cachedAt == null) return null;
+
+    final rawDefaults = raw['defaultTemplates'];
+    final List<TemplateDefaultHint> defaults;
+    if (rawDefaults == null) {
+      defaults = const <TemplateDefaultHint>[];
+    } else if (rawDefaults is! List) {
+      return null;
+    } else {
+      final parsed = <TemplateDefaultHint>[];
+      final reportTypes = <String>{};
+      for (final item in rawDefaults) {
+        if (item is! Map) return null;
+        final hint = TemplateDefaultHint.tryFromMap(item);
+        if (hint == null) return null;
+        if (!reportTypes.add(hint.reportType)) return null;
+        parsed.add(hint);
+      }
+      defaults = List<TemplateDefaultHint>.unmodifiable(parsed);
+    }
+
     return TemplateCatalogMetadata(
       catalogRevision: revision,
       systemCode: _stringOrNull(raw['systemCode']),
@@ -272,6 +298,7 @@ final class TemplateCatalogMetadata {
       appliedFilter: raw['appliedFilter'] is Map
           ? _stringMap(raw['appliedFilter'] as Map)
           : const <String, dynamic>{},
+      defaultTemplates: defaults,
       cachedAt: cachedAt,
     );
   }
