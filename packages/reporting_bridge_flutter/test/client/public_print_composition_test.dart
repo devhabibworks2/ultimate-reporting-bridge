@@ -50,7 +50,7 @@ void main() {
 
     expect(result.status, ReportPrintStatus.submitted);
     expect(printPlatform.calls, 1);
-    expect(printPlatform.lastRequest?.extra['templateId'], 'thermal-en');
+    expect(printPlatform.lastRequest?.extra['templateCode'], 'THERMAL-EN');
     expect(
       logs.map((record) => record.event),
       containsAll(<String>[
@@ -240,7 +240,7 @@ Future<void> _ready(ReportFlowController controller) async {
     await controller.continueFromPreparation();
   }
   if (controller.value.stage == ReportFlowStage.selectingTemplate) {
-    controller.selectTemplate(controller.value.templates.first.id);
+    controller.selectTemplate(controller.value.templates.first.templateCode);
     await controller.preparePreview();
   }
 
@@ -419,7 +419,6 @@ final class _FakeBridgeClient extends ReportingBridgeClient {
 }
 
 CachedTemplate _template() => CachedTemplate(
-  id: 'thermal-en',
   type: 'sales_invoice',
   systemId: 7,
   systemCode: 'motakamel_transactions',

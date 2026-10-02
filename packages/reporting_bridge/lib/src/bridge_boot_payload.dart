@@ -6,7 +6,7 @@ import 'bridge_selected_template.dart';
 
 /// Boot context from Host (`bridge_contract.md`: config, seedData, headers, hints).
 class BridgeBootPayload {
-  const BridgeBootPayload({
+  BridgeBootPayload({
     required this.contractVersion,
     this.seedData,
     this.bearerToken,
@@ -19,8 +19,8 @@ class BridgeBootPayload {
     this.branding,
     this.apiHeaders,
     this.selectedTemplate,
-    this.templateHints,
-  });
+    Map<String, dynamic>? templateHints,
+  }) : templateHints = _sanitizeTemplateHints(templateHints);
 
   final int contractVersion;
   final Map<String, dynamic>? seedData;
@@ -103,6 +103,15 @@ class BridgeBootPayload {
       if (templateHints != null) 'templateHints': templateHints,
     };
   }
+}
+
+Map<String, dynamic>? _sanitizeTemplateHints(Map<String, dynamic>? value) {
+  if (value == null) return null;
+  final sanitized = Map<String, dynamic>.from(value)
+    ..remove('templateId')
+    ..remove('selectedTemplateId');
+  if (sanitized.isEmpty) return null;
+  return Map<String, dynamic>.unmodifiable(sanitized);
 }
 
 Map<dynamic, dynamic>? _map(Object? value) {

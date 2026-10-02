@@ -283,7 +283,7 @@ void main() {
         ),
       );
       addTearDown(controller.dispose);
-      await _ready(controller, templateId: 'pages-ar');
+      await _ready(controller, templateCode: 'PAGES-AR');
 
       final result = await controller.printPdf();
       final request = printPlatform.lastRequest!;
@@ -443,7 +443,7 @@ Future<void> _seedSavedTemplate(
       reportType: 'sales_invoice',
     ),
     const ReportFlowPreferences(
-      templateId: 'thermal-en',
+      templateCode: 'THERMAL-EN',
       mode: PresenterModePreference.online,
       language: 'en',
       layout: 'thermal',
@@ -454,14 +454,14 @@ Future<void> _seedSavedTemplate(
 
 Future<void> _ready(
   ReportFlowController controller, {
-  String templateId = 'thermal-en',
+  String templateCode = 'THERMAL-EN',
 }) async {
   await controller.initialize();
   if (controller.value.stage == ReportFlowStage.preparingResources) {
     await controller.continueFromPreparation();
   }
   if (controller.value.stage == ReportFlowStage.selectingTemplate) {
-    controller.selectTemplate(templateId);
+    controller.selectTemplate(templateCode);
     await controller.preparePreview();
   }
 
@@ -665,7 +665,6 @@ final class _FakeBridgeClient extends ReportingBridgeClient {
 }
 
 CachedTemplate _template() => CachedTemplate(
-  id: 'thermal-en',
   type: 'sales_invoice',
   systemId: 7,
   systemCode: 'motakamel_transactions',
@@ -697,7 +696,6 @@ CachedTemplate _template() => CachedTemplate(
 );
 
 CachedTemplate _arabicTemplate() => CachedTemplate(
-  id: 'pages-ar',
   type: 'sales_invoice',
   systemId: 7,
   systemCode: 'motakamel_transactions',

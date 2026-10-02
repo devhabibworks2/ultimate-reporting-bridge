@@ -30,6 +30,7 @@ void main() {
         request: buildTestOpenRequest(
           system: 'legacy_system_1',
           reportType: 'sales_invoice',
+          presenterMode: PresenterModePreference.online,
           entryPolicy: ReportEntryPolicy.alwaysPrepare,
         ),
         runtime: ReportFlowRuntime(
@@ -94,14 +95,14 @@ void main() {
       );
       controller.selectTemplate('t2');
 
-      expect(controller.value.settingsDraft?.templateId, 't1');
-      expect(controller.value.selectedTemplateId, 't2');
+      expect(controller.value.settingsDraft?.templateCode, 't1');
+      expect(controller.value.selectedTemplateCode, 't2');
 
       controller.cancelSettings();
 
       expect(controller.value.stage, ReportFlowStage.previewing);
       expect(controller.value.settingsDraft, isNull);
-      expect(controller.value.selectedTemplateId, 't1');
+      expect(controller.value.selectedTemplateCode, 't1');
       expect(controller.value.selectedMode, PresenterModePreference.online);
       expect(controller.value.presenterLaunch, same(launch));
 
@@ -129,6 +130,7 @@ void main() {
         request: buildTestOpenRequest(
           system: 'legacy_system_1',
           reportType: 'sales_invoice',
+          presenterMode: PresenterModePreference.online,
           entryPolicy: ReportEntryPolicy.alwaysPrepare,
         ),
         runtime: ReportFlowRuntime(
@@ -231,6 +233,7 @@ void main() {
         request: buildTestOpenRequest(
           system: 'legacy_system_1',
           reportType: 'sales_invoice',
+          presenterMode: PresenterModePreference.online,
           entryPolicy: ReportEntryPolicy.alwaysPrepare,
         ),
         runtime: ReportFlowRuntime(
@@ -283,19 +286,18 @@ void main() {
   );
 }
 
-CachedTemplate _template(String id) => CachedTemplate(
-  id: id,
+CachedTemplate _template(String code) => CachedTemplate(
   type: 'sales_invoice',
   systemId: 1,
-  code: 'CODE-$id',
-  name: 'Template $id',
+  code: code,
+  name: 'Template $code',
   version: '1.0.0',
   document: <String, dynamic>{
     'schemaVersion': '1.0.0',
     'meta': <String, dynamic>{
       'name': 'Invoice',
       'family': 'sales_invoice',
-      'code': 'CODE-$id',
+      'code': code,
     },
     'page': <String, dynamic>{
       'layout': 'Pages',
@@ -331,6 +333,13 @@ class _UiBridgeClient extends ReportingBridgeClient {
     TemplateSyncFilter? filter,
     Map<String, Object?> extra = const <String, Object?>{},
   }) async => List<CachedTemplate>.unmodifiable(templates);
+
+  @override
+  Future<List<TemplateDefaultHint>> listTemplateDefaults({
+    required String systemCode,
+    TemplateSyncFilter? filter,
+    Map<String, Object?> extra = const <String, Object?>{},
+  }) async => const <TemplateDefaultHint>[];
 
   @override
   Future<ReportingBridgeStatus> getStatus() async => ReportingBridgeStatus(
@@ -382,7 +391,7 @@ class _UiPreferenceStore implements ReportFlowPreferenceStore {
   @override
   Future<void> removeSelectedTemplate(ReportPreferenceScope scope) async {
     if (value == null) return;
-    value = ReportFlowPreferences(templateId: null, mode: value!.mode);
+    value = ReportFlowPreferences(templateCode: null, mode: value!.mode);
   }
 
   @override

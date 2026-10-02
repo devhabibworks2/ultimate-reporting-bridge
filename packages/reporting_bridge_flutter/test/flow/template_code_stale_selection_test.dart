@@ -45,8 +45,8 @@ void main() {
       await controller.initialize();
 
       expect(controller.value.stage, ReportFlowStage.selectingTemplate);
-      expect(controller.value.selectedTemplateId, isNull);
-      expect(controller.value.committedTemplateId, isNull);
+      expect(controller.value.selectedTemplateCode, isNull);
+      expect(controller.value.committedTemplateCode, isNull);
       expect(controller.value.presenterLaunch, isNull);
       expect(bridge.prepareCalls, 0);
     },
@@ -54,7 +54,6 @@ void main() {
 }
 
 CachedTemplate _template() => const CachedTemplate(
-  id: '17',
   type: 'sales_invoice',
   systemId: 1,
   systemCode: 'legacy_system_1',

@@ -88,7 +88,16 @@ void main() {
       addTearDown(() async {
         if (await root.exists()) await root.delete(recursive: true);
       });
-      final delegate = _RecordingBridgeClient(root);
+      final delegate = _RecordingBridgeClient(
+        root,
+        defaultTemplates: const <TemplateDefaultHint>[
+          TemplateDefaultHint(
+            reportType: 'sales_invoice',
+            templateCode: 'invoice-a4-code',
+            selectionReason: 'SYSTEM_DEFAULT',
+          ),
+        ],
+      );
       addTearDown(delegate.dispose);
       final filter = TemplateSyncFilter(reportTypes: const <String>['invoice']);
       const extra = <String, Object?>{'source': 'compatibility'};
@@ -142,10 +151,7 @@ void main() {
       addTearDown(() async {
         if (await root.exists()) await root.delete(recursive: true);
       });
-      final delegate = _RecordingBridgeClient(
-        root,
-        throwDefaultsOffline: true,
-      );
+      final delegate = _RecordingBridgeClient(root, throwDefaultsOffline: true);
       addTearDown(delegate.dispose);
       final client = createWorkflowBridgeClientForTesting(
         delegate: delegate,
@@ -302,13 +308,7 @@ final class _RecordingBridgeClient extends ReportingBridgeClient {
   _RecordingBridgeClient(
     Directory root, {
     this.templates = const <CachedTemplate>[],
-    this.defaultTemplates = const <TemplateDefaultHint>[
-      TemplateDefaultHint(
-        reportType: 'sales_invoice',
-        templateCode: 'invoice-a4-code',
-        selectionReason: 'SYSTEM_DEFAULT',
-      ),
-    ],
+    this.defaultTemplates = const <TemplateDefaultHint>[],
     this.throwDefaultsOffline = false,
   }) : super(
          apiBaseUrl: Uri.parse('https://example.test/backend/'),

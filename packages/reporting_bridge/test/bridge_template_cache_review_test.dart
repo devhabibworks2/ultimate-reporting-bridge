@@ -45,7 +45,9 @@ void main() {
   });
 
   test('catalog metadata round-trips default template hints', () async {
-    final root = await Directory.systemTemp.createTemp('bridge_cache_defaults_');
+    final root = await Directory.systemTemp.createTemp(
+      'bridge_cache_defaults_',
+    );
     addTearDown(() => root.delete(recursive: true));
     final cache = TemplateCacheService(cacheRoot: root);
     final hints = <TemplateDefaultHint>[
@@ -82,25 +84,30 @@ void main() {
     expect(metadata.defaultTemplates[1].selectionReason, 'BRANCH_DEFAULT');
   });
 
-  test('old catalog metadata without defaultTemplates yields empty list', () async {
-    final root = await Directory.systemTemp.createTemp('bridge_cache_legacy_');
-    addTearDown(() => root.delete(recursive: true));
-    final cache = TemplateCacheService(cacheRoot: root);
-    await root.create(recursive: true);
-    await File('${root.path}/.catalog.json').writeAsString(
-      jsonEncode(<String, dynamic>{
-        'catalogRevision': 'rev-legacy',
-        'systemCode': 'erp',
-        'filterFingerprint': 'filter',
-        'extraFingerprint': 'extra',
-        'cachedAt': DateTime.utc(2026, 10, 1).toIso8601String(),
-      }),
-    );
+  test(
+    'old catalog metadata without defaultTemplates yields empty list',
+    () async {
+      final root = await Directory.systemTemp.createTemp(
+        'bridge_cache_legacy_',
+      );
+      addTearDown(() => root.delete(recursive: true));
+      final cache = TemplateCacheService(cacheRoot: root);
+      await root.create(recursive: true);
+      await File('${root.path}/.catalog.json').writeAsString(
+        jsonEncode(<String, dynamic>{
+          'catalogRevision': 'rev-legacy',
+          'systemCode': 'erp',
+          'filterFingerprint': 'filter',
+          'extraFingerprint': 'extra',
+          'cachedAt': DateTime.utc(2026, 10, 1).toIso8601String(),
+        }),
+      );
 
-    final metadata = await cache.readCatalogMetadata();
-    expect(metadata, isNotNull);
-    expect(metadata!.defaultTemplates, isEmpty);
-  });
+      final metadata = await cache.readCatalogMetadata();
+      expect(metadata, isNotNull);
+      expect(metadata!.defaultTemplates, isEmpty);
+    },
+  );
 
   test('malformed defaultTemplates metadata is rejected', () async {
     final root = await Directory.systemTemp.createTemp('bridge_cache_bad_');
@@ -142,6 +149,18 @@ void main() {
         'selectionReason': 'SYSTEM_DEFAULT',
       },
     ]);
+    expect(await cache.readCatalogMetadata(), isNull);
+
+    await writeRaw(<Map<String, dynamic>>[
+      <String, dynamic>{
+        'reportType': 'sales_invoice',
+        'templateCode': 123,
+        'selectionReason': 'SYSTEM_DEFAULT',
+      },
+    ]);
+    expect(await cache.readCatalogMetadata(), isNull);
+
+    await writeRaw(null);
     expect(await cache.readCatalogMetadata(), isNull);
   });
 }

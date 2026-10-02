@@ -16,7 +16,7 @@ const String ultimatePrinterMimeType = 'application/pdf';
 const Set<String> reservedHostExternalPrintExtraKeys = <String>{
   'system',
   'reportType',
-  'templateId',
+  'templateCode',
   'userId',
   'branchId',
   'systemUnit',

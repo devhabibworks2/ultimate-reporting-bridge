@@ -182,7 +182,7 @@ Inline Presenter data must not require backend id. If any current session payloa
 
 ## Public compatibility and migration policy
 
-This is an intentional breaking Bridge API cleanup for release `1.0.2`.
+This is an intentional breaking Bridge API cleanup **after the already-published `1.0.2` release**. The next release should use a new immutable version/tag, normally `1.0.3`.
 
 No compatibility aliases such as `initialTemplateId`, `selectedTemplateId`, `templateId`, deprecated id getters, or id-based selector overloads are retained in the Bridge public API. The user explicitly chose TemplateCode-only behavior rather than legacy-id support.
 
@@ -239,7 +239,7 @@ Required final gates:
 - `git diff --check`;
 - source scan for forbidden template-id identity names/uses;
 - merged-result verification after combining with PDF preview commit `e0880f687f17a33d1ed1ddeb1f434315e79e09a3`;
-- package/release version review and tag `1.0.2` only after the merged `main` tree is green.
+- package/release version review for the next release (normally `1.0.3`) only after the merged `main` tree is green.
 
 ## Forbidden Bridge identity patterns
 
@@ -269,8 +269,8 @@ The final release sequence after implementation approval is:
 3. integrate reviewed PDF preview commit `e0880f687f17a33d1ed1ddeb1f434315e79e09a3`;
 4. merge the combined reviewed work into `main` without disturbing unrelated untracked main-checkout files;
 5. run fresh merged-result analyzers/tests/source-scan/diff checks;
-6. create immutable tag `1.0.2` at the verified `main` commit;
-7. push `main` and tag `1.0.2` to origin;
+6. when separately authorized for release, create a new immutable tag (normally `1.0.3`) at the verified `main` commit;
+7. push `main` and that new tag only with explicit push/tag authority;
 8. verify remote branch and tag identities.
 
 No push, tag, or release occurs before the combined tree is green.

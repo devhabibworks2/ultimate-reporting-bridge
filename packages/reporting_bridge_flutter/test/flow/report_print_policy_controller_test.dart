@@ -80,7 +80,7 @@ void main() {
     final request = printPlatform.lastRequest!;
     expect(request.extra['system'], 'motakamel_transactions');
     expect(request.extra['reportType'], 'sales_invoice');
-    expect(request.extra['templateId'], 'thermal-en');
+    expect(request.extra['templateCode'], 'thermal-en');
     expect(request.document.unit, 'mm');
     expect(request.document.layout, 'Thermal');
     expect(request.document.size, '80mm');
@@ -140,7 +140,7 @@ void main() {
       await preferences.save(
         scope,
         const ReportFlowPreferences(
-          templateId: 'thermal-landscape',
+          templateCode: 'thermal-landscape',
           mode: PresenterModePreference.online,
           language: 'en',
           layout: 'thermal',
@@ -162,9 +162,12 @@ void main() {
 
       await fixture.controller.initialize();
 
-      expect((await preferences.load(scope))?.templateId, 'thermal-landscape');
+      expect(
+        (await preferences.load(scope))?.templateCode,
+        'thermal-landscape',
+      );
       expect(fixture.controller.value.stage, ReportFlowStage.selectingTemplate);
-      expect(fixture.controller.value.selectedTemplateId, 'thermal-en');
+      expect(fixture.controller.value.selectedTemplateCode, 'thermal-en');
     },
   );
 
@@ -193,10 +196,12 @@ void main() {
       ReportLanguage.en,
     );
     expect(
-      fixture.controller.eligibleTemplates.map((template) => template.id),
+      fixture.controller.eligibleTemplates.map(
+        (template) => template.templateCode,
+      ),
       <String>['thermal-en'],
     );
-    expect(fixture.controller.value.selectedTemplateId, 'thermal-en');
+    expect(fixture.controller.value.selectedTemplateCode, 'thermal-en');
   });
 }
 
@@ -390,21 +395,20 @@ class _FakeBridgeClient extends ReportingBridgeClient {
   Future<void> stopSession() async {}
 }
 
-CachedTemplate _template(String id, {String orientation = 'portrait'}) =>
+CachedTemplate _template(String code, {String orientation = 'portrait'}) =>
     CachedTemplate(
-      id: id,
       type: 'sales_invoice',
       systemId: 1,
       systemCode: 'motakamel_transactions',
-      code: 'CODE-$id',
-      name: id,
+      code: code,
+      name: code,
       document: <String, dynamic>{
         'schemaVersion': '1.0.0',
         'meta': <String, dynamic>{
           'name': 'Thermal invoice',
           'family': 'sales_invoice',
           'systemCode': 'motakamel_transactions',
-          'code': 'CODE-$id',
+          'code': code,
         },
         'page': <String, dynamic>{
           'unit': 'mm',
@@ -423,20 +427,19 @@ CachedTemplate _template(String id, {String orientation = 'portrait'}) =>
       },
     );
 
-CachedTemplate _pagesTemplate(String id) => CachedTemplate(
-  id: id,
+CachedTemplate _pagesTemplate(String code) => CachedTemplate(
   type: 'sales_invoice',
   systemId: 1,
   systemCode: 'motakamel_transactions',
-  code: 'CODE-$id',
-  name: id,
+  code: code,
+  name: code,
   document: <String, dynamic>{
     'schemaVersion': '1.0.0',
     'meta': <String, dynamic>{
       'name': 'A4 invoice',
       'family': 'sales_invoice',
       'systemCode': 'motakamel_transactions',
-      'code': 'CODE-$id',
+      'code': code,
     },
     'page': <String, dynamic>{
       'unit': 'mm',

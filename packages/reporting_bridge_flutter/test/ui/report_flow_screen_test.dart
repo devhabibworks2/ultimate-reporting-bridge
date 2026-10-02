@@ -719,7 +719,7 @@ void main() {
         ),
         findsOneWidget,
       );
-      expect(controller.value.selectedTemplateId, 't1');
+      expect(controller.value.selectedTemplateCode, 't1');
     },
   );
 
@@ -1067,8 +1067,8 @@ void main() {
       final controller = _SupportFakeController(
         _selectionState().copyWith(
           stage: ReportFlowStage.failed,
-          selectedTemplateId: 't1',
-          committedTemplateId: 't1',
+          selectedTemplateCode: 't1',
+          committedTemplateCode: 't1',
           presenterLaunch: const PresenterSessionLaunch(
             presenterUrl: 'https://presenter.test/session',
             sessionId: 'session-failed',
@@ -1141,7 +1141,7 @@ void main() {
       final controller = _FakeController(
         _selectionState().copyWith(
           stage: ReportFlowStage.failed,
-          committedTemplateId: 't1',
+          committedTemplateCode: 't1',
           presenterLaunch: const PresenterSessionLaunch(
             presenterUrl: 'https://presenter.test/session',
             sessionId: 'session-dedupe',
@@ -1186,7 +1186,7 @@ void main() {
     final controller = _FakeController(
       _selectionState().copyWith(
         stage: ReportFlowStage.failed,
-        committedTemplateId: 't1',
+        committedTemplateCode: 't1',
         presenterLaunch: const PresenterSessionLaunch(
           presenterUrl: 'https://presenter.test/session',
           sessionId: 'session-long-error',
@@ -1238,7 +1238,7 @@ void main() {
       final controller = _FakeController(
         _selectionState().copyWith(
           stage: ReportFlowStage.failed,
-          committedTemplateId: 't1',
+          committedTemplateCode: 't1',
           presenterLaunch: const PresenterSessionLaunch(
             presenterUrl: 'https://presenter.test/session',
             sessionId: 'session-accessible-error',
@@ -1302,8 +1302,8 @@ void main() {
         final controller = _FakeController(
           _selectionState().copyWith(
             stage: ReportFlowStage.failed,
-            selectedTemplateId: 't1',
-            committedTemplateId: 't1',
+            selectedTemplateCode: 't1',
+            committedTemplateCode: 't1',
             presenterLaunch: const PresenterSessionLaunch(
               presenterUrl: 'https://presenter.test/session',
               sessionId: 'session-visual',
@@ -1822,7 +1822,7 @@ ReportFlowState _preparationState() => ReportFlowState(
   selectedMode: PresenterModePreference.online,
   templates: <CachedTemplate>[
     CachedTemplate(
-      id: 't1',
+      code: 't1',
       type: 'sales_invoice',
       systemId: 1,
       name: 'Template 1',
@@ -1846,7 +1846,7 @@ ReportFlowState _preparationState() => ReportFlowState(
       },
     ),
   ],
-  selectedTemplateId: 't1',
+  selectedTemplateCode: 't1',
   templateSync: ReportOperationStatus.succeeded,
   presenterSync: ReportOperationStatus.succeeded,
   presenterCached: true,
@@ -1864,7 +1864,7 @@ ReportFlowState _selectionState({
   templates: List<CachedTemplate>.generate(
     count,
     (index) => CachedTemplate(
-      id: 't${index + 1}',
+      code: 't${index + 1}',
       type: 'sales_invoice',
       systemId: 1,
       name: 'Template ${index + 1}',
@@ -1888,7 +1888,7 @@ ReportFlowState _selectionState({
       },
     ),
   ),
-  selectedTemplateId: 't1',
+  selectedTemplateCode: 't1',
 );
 
 ReportFlowState _mixedTemplateSelectionState({
@@ -1899,7 +1899,7 @@ ReportFlowState _mixedTemplateSelectionState({
   selectedMode: PresenterModePreference.online,
   templates: <CachedTemplate>[
     CachedTemplate(
-      id: 't1',
+      code: 't1',
       type: 'receipt_voucher',
       systemId: 1,
       name: 'إشعار استلام دفعة عميل — A4 (case 3)',
@@ -1923,7 +1923,7 @@ ReportFlowState _mixedTemplateSelectionState({
       },
     ),
     CachedTemplate(
-      id: 't2',
+      code: 't2',
       type: 'sales_invoice',
       systemId: 1,
       name: 'Invoice A4',
@@ -1947,7 +1947,7 @@ ReportFlowState _mixedTemplateSelectionState({
       },
     ),
     CachedTemplate(
-      id: 't3',
+      code: 't3',
       type: 'receipt_voucher',
       systemId: 1,
       name: 'Receipt 80 mm',
@@ -1971,7 +1971,7 @@ ReportFlowState _mixedTemplateSelectionState({
       },
     ),
     CachedTemplate(
-      id: 't4',
+      code: 't4',
       type: 'receipt_voucher',
       systemId: 1,
       name: 'Receipt 58 mm',
@@ -1995,13 +1995,13 @@ ReportFlowState _mixedTemplateSelectionState({
       },
     ),
   ],
-  selectedTemplateId: 't1',
+  selectedTemplateCode: 't1',
 );
 
 ReportFlowState _previewState() => _selectionState().copyWith(
   stage: ReportFlowStage.previewing,
-  selectedTemplateId: 't1',
-  committedTemplateId: 't1',
+  selectedTemplateCode: 't1',
+  committedTemplateCode: 't1',
   committedMode: PresenterModePreference.online,
   presenterLaunch: PresenterSessionLaunch(
     presenterUrl: 'https://presenter.test/session',
@@ -2017,10 +2017,10 @@ ReportFlowState _previewState() => _selectionState().copyWith(
 
 ReportFlowState _settingsState() => _selectionState().copyWith(
   stage: ReportFlowStage.editingSettings,
-  committedTemplateId: 't1',
+  committedTemplateCode: 't1',
   committedMode: PresenterModePreference.online,
   settingsDraft: const ReportSettingsDraft(
-    templateId: 't1',
+    templateCode: 't1',
     mode: PresenterModePreference.online,
   ),
 );
@@ -2189,7 +2189,7 @@ class _FakeController extends ChangeNotifier implements ReportFlowController {
 
   @override
   void selectTemplate(String templateId) {
-    setState(_value.copyWith(selectedTemplateId: templateId));
+    setState(_value.copyWith(selectedTemplateCode: templateId));
   }
 
   @override

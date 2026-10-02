@@ -71,9 +71,9 @@ void main() {
     expect(await store.load(rotated), isNull);
   });
 
-  test('preference JSON still decodes legacy selector fields', () {
+  test('preference JSON round-trips TemplateCode selector fields', () {
     const preferences = ReportFlowPreferences(
-      templateId: 'template-a',
+      templateCode: 'template-a',
       mode: PresenterModePreference.offline,
       language: 'ar',
       layout: 'thermal',
@@ -83,7 +83,7 @@ void main() {
 
     final decoded = ReportFlowPreferences.fromJson(preferences.toJson())!;
 
-    expect(decoded.templateId, 'template-a');
+    expect(decoded.templateCode, 'template-a');
     expect(decoded.mode, PresenterModePreference.offline);
     expect(decoded.language, 'ar');
     expect(decoded.layout, 'thermal');

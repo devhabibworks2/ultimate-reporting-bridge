@@ -120,7 +120,7 @@ final class ReportSupportPackageBuilder {
       'bridgeVersion': BridgeContract.implementationVersion,
       'bridgePayloadVersion': BridgeContract.payloadVersion,
       'template': <String, Object?>{
-        'id': template.id,
+        'templateCode': template.templateCode,
         'type': template.type,
         if (template.code != null) 'code': template.code,
         if (template.name != null) 'name': template.name,

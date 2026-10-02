@@ -447,7 +447,9 @@ void main() {
   });
 
   test('parses and caches valid defaultTemplates', () async {
-    final root = await Directory.systemTemp.createTemp('bridge-query-defaults-');
+    final root = await Directory.systemTemp.createTemp(
+      'bridge-query-defaults-',
+    );
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() async {
       await server.close(force: true);
@@ -510,32 +512,37 @@ void main() {
     expect(metadata?.defaultTemplates[1].templateCode, 'invoice-a4-code');
   });
 
-  test('missing defaultTemplates remains compatible with old backends', () async {
-    final root = await Directory.systemTemp.createTemp('bridge-query-old-defaults-');
-    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    addTearDown(() async {
-      await server.close(force: true);
-      if (await root.exists()) await root.delete(recursive: true);
-    });
+  test(
+    'missing defaultTemplates remains compatible with old backends',
+    () async {
+      final root = await Directory.systemTemp.createTemp(
+        'bridge-query-old-defaults-',
+      );
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() async {
+        await server.close(force: true);
+        if (await root.exists()) await root.delete(recursive: true);
+      });
 
-    server.listen((request) async {
-      await utf8.decoder.bind(request).join();
-      final envelope = _queryEnvelope(<Map<String, dynamic>>[
-        _queryTemplate('invoice-a4', 7, 'sales_invoice'),
-      ]);
-      (envelope['data'] as Map<String, dynamic>).remove('defaultTemplates');
-      await _writeJson(request, envelope);
-    });
+      server.listen((request) async {
+        await utf8.decoder.bind(request).join();
+        final envelope = _queryEnvelope(<Map<String, dynamic>>[
+          _queryTemplate('invoice-a4', 7, 'sales_invoice'),
+        ]);
+        (envelope['data'] as Map<String, dynamic>).remove('defaultTemplates');
+        await _writeJson(request, envelope);
+      });
 
-    final gateway = PresenterServerGateway(
-      apiBaseUrl: _api(server),
-      bridgeRoot: root,
-    );
-    final summary = await gateway.syncTemplates(
-      query: TemplateQueryRequest(systemCode: 'motakamel_transactions'),
-    );
-    expect(summary.defaultTemplates, isEmpty);
-  });
+      final gateway = PresenterServerGateway(
+        apiBaseUrl: _api(server),
+        bridgeRoot: root,
+      );
+      final summary = await gateway.syncTemplates(
+        query: TemplateQueryRequest(systemCode: 'motakamel_transactions'),
+      );
+      expect(summary.defaultTemplates, isEmpty);
+    },
+  );
 
   test('duplicate default reportType is rejected', () async {
     await _expectInvalidDefaults(
@@ -747,7 +754,9 @@ void main() {
 Future<void> _expectInvalidDefaults({
   required List<Map<String, dynamic>> defaultTemplates,
 }) async {
-  final root = await Directory.systemTemp.createTemp('bridge-query-bad-defaults-');
+  final root = await Directory.systemTemp.createTemp(
+    'bridge-query-bad-defaults-',
+  );
   final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
   addTearDown(() async {
     await server.close(force: true);
@@ -758,12 +767,9 @@ Future<void> _expectInvalidDefaults({
     await utf8.decoder.bind(request).join();
     await _writeJson(
       request,
-      _queryEnvelope(
-        <Map<String, dynamic>>[
-          _queryTemplate('invoice-a4', 7, 'sales_invoice'),
-        ],
-        defaultTemplates: defaultTemplates,
-      ),
+      _queryEnvelope(<Map<String, dynamic>>[
+        _queryTemplate('invoice-a4', 7, 'sales_invoice'),
+      ], defaultTemplates: defaultTemplates),
     );
   });
 

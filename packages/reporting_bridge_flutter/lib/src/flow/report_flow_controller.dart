@@ -33,7 +33,7 @@ abstract interface class ReportFlowController
   void openResourcePreparation(ResourcePreparationOrigin origin);
   void returnFromResourcePreparation();
   void confirmTemplateSelection();
-  void selectTemplate(String templateId);
+  void selectTemplate(String templateCode);
   void selectMode(PresenterModePreference mode);
   void editSettings();
   Future<void> commitSettings();

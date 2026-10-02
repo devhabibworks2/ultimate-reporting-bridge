@@ -69,23 +69,24 @@ void main() {
   );
 
   test(
-    'legacy numeric templateId is never written as a durable V6 selection',
+    'legacy numeric templateId input is ignored and never becomes V6 selection',
     () async {
       const scope = ReportPreferenceScope(
         connectionKey: 'deployed|https://example.test',
         system: 'system_a',
         reportType: 'sales_invoice',
       );
+      final decoded = ReportFlowPreferences.fromJson(<String, dynamic>{
+        'templateId': '17',
+        'mode': 'online',
+      });
+
+      expect(decoded, isNotNull);
+      expect(decoded!.templateCode, isNull);
+
       final preferences = await SharedPreferences.getInstance();
       final store = SharedPreferencesReportFlowPreferenceStore(preferences);
-
-      await store.save(
-        scope,
-        const ReportFlowPreferences(
-          templateId: '17',
-          mode: PresenterModePreference.online,
-        ),
-      );
+      await store.save(scope, decoded);
 
       expect(
         preferences.getKeys().where(

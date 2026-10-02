@@ -18,6 +18,45 @@ void main() {
     expect(payload.toMap()['seedData'], isNotNull);
   });
 
+  test(
+    'BridgeBootPayload strips legacy template id hints from public state',
+    () {
+      final payload = BridgeBootPayload.fromMap(<dynamic, dynamic>{
+        'contractVersion': 1,
+        'templateHints': <dynamic, dynamic>{
+          'templateId': 42,
+          'selectedTemplateId': 43,
+          'templateCode': 'INV-42',
+          'layout': 'thermal',
+        },
+      });
+
+      expect(payload.templateCodeHint, 'INV-42');
+      expect(payload.templateHints, <String, dynamic>{
+        'templateCode': 'INV-42',
+        'layout': 'thermal',
+      });
+      final serializedHints =
+          payload.toMap()['templateHints'] as Map<String, dynamic>;
+      expect(serializedHints.containsKey('templateId'), isFalse);
+      expect(serializedHints.containsKey('selectedTemplateId'), isFalse);
+    },
+  );
+
+  test('BridgeBootPayload drops id-only template hints entirely', () {
+    final payload = BridgeBootPayload.fromMap(<dynamic, dynamic>{
+      'contractVersion': 1,
+      'templateHints': <dynamic, dynamic>{
+        'templateId': 42,
+        'selectedTemplateId': 43,
+      },
+    });
+
+    expect(payload.templateCodeHint, isNull);
+    expect(payload.templateHints, isNull);
+    expect(payload.toMap().containsKey('templateHints'), isFalse);
+  });
+
   test('BridgeBootPayload parses host config and custom headers', () {
     final payload = BridgeBootPayload.fromMap(<dynamic, dynamic>{
       'contractVersion': 1,

@@ -16,7 +16,7 @@ void main() {
       final document = Map<String, dynamic>.from(decoded as Map);
 
       final template = CachedTemplate(
-        id: 'mixed',
+        code: 'mixed',
         type: 'invoice',
         systemId: 1,
         document: document,

@@ -36,9 +36,7 @@ class SelectedTemplate {
     if (!hasDurableIdentity) {
       throw StateError('Durable template selection requires TemplateCode.');
     }
-    return <String, dynamic>{
-      'selectedTemplates': toMap(),
-    };
+    return <String, dynamic>{'selectedTemplates': toMap()};
   }
 
   static SelectedTemplate? fromMap(Map<dynamic, dynamic>? raw) {
@@ -54,20 +52,7 @@ class SelectedTemplate {
     return SelectedTemplate(
       type: type,
       code: code,
-      systemCode:
-          systemCode == null || systemCode.isEmpty ? null : systemCode,
+      systemCode: systemCode == null || systemCode.isEmpty ? null : systemCode,
     );
   }
-}
-
-class SelectedTemplateCatalogEntry {
-  const SelectedTemplateCatalogEntry({
-    required this.type,
-    required this.code,
-    required this.systemCode,
-  });
-
-  final String type;
-  final String code;
-  final String systemCode;
 }

@@ -173,9 +173,8 @@ class CachedTemplate {
     Map<dynamic, dynamic> raw, {
     String? systemCode,
   }) {
-    // Backend 'id' is intentionally parse-only/opaque. It is tolerated here
-    // for wire compatibility but never retained as Bridge template identity.
-    raw['id'];
+    // Backend may include an opaque 'id' field. Unknown wire fields are
+    // tolerated by this parser and are intentionally not retained.
     final type = raw['type'] ?? raw['reportType'];
     final document = raw['document'];
     if (type == null || document is! Map) {
@@ -268,9 +267,10 @@ final class TemplateCatalogMetadata {
     final cachedAt = DateTime.tryParse(raw['cachedAt']?.toString() ?? '');
     if (revision == null || cachedAt == null) return null;
 
+    final hasDefaults = raw.containsKey('defaultTemplates');
     final rawDefaults = raw['defaultTemplates'];
     final List<TemplateDefaultHint> defaults;
-    if (rawDefaults == null) {
+    if (!hasDefaults) {
       defaults = const <TemplateDefaultHint>[];
     } else if (rawDefaults is! List) {
       return null;

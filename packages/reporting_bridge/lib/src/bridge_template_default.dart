@@ -31,7 +31,7 @@ final class TemplateDefaultHint {
 }
 
 String? _trimmed(Object? value) {
-  if (value == null) return null;
-  final text = value.toString().trim();
+  if (value is! String) return null;
+  final text = value.trim();
   return text.isEmpty ? null : text;
 }

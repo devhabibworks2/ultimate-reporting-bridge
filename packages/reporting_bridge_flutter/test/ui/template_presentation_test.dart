@@ -17,7 +17,7 @@ void main() {
       direction: 'rtl',
     );
     final template = CachedTemplate(
-      id: 't1',
+      code: 't1',
       type: 'sales_invoice',
       name: 'Sales Invoice A4',
       version: '2.1.0',
@@ -65,7 +65,7 @@ void main() {
     final presented = TemplatePresentationMetadata.fromReportMetadata(
       metadata,
       template: CachedTemplate(
-        id: 't2',
+        code: 't2',
         type: 'receipt_voucher',
         name: 'Receipt',
         version: '1.0.0',
@@ -95,7 +95,7 @@ void main() {
         direction: 'ltr',
       ),
       template: CachedTemplate(
-        id: 'custom',
+        code: 'custom',
         type: 'report',
         name: 'Custom',
         document: const <String, dynamic>{},
@@ -210,7 +210,7 @@ void main() {
         final presented = TemplatePresentationMetadata.fromReportMetadata(
           metadata,
           template: CachedTemplate(
-            id: 'preview',
+            code: 'preview',
             type: reportType.value,
             name: 'Preview',
             document: const <String, dynamic>{},
@@ -369,7 +369,7 @@ void main() {
         direction: 'ltr',
       ),
       template: CachedTemplate(
-        id: 'compact-custom',
+        code: 'compact-custom',
         type: 'report',
         name: 'Compact custom',
         document: const <String, dynamic>{},
@@ -429,7 +429,7 @@ void main() {
             direction: 'ltr',
           ),
           template: CachedTemplate(
-            id: reportType.value,
+            code: reportType.value,
             type: reportType.value,
             name: reportType.value,
             document: const <String, dynamic>{},
@@ -481,7 +481,7 @@ void main() {
             direction: 'ltr',
           ),
           template: CachedTemplate(
-            id: 'orientation-authority-${orientation.value}',
+            code: 'orientation-authority-${orientation.value}',
             type: UrbReportType.salesInvoice.value,
             name: 'Orientation authority',
             document: const <String, dynamic>{},
@@ -533,7 +533,7 @@ void main() {
           direction: 'rtl',
         ),
         template: CachedTemplate(
-          id: 'mobile-preview',
+          code: 'mobile-preview',
           type: 'receipt_voucher',
           name: 'Mobile preview',
           document: const <String, dynamic>{},

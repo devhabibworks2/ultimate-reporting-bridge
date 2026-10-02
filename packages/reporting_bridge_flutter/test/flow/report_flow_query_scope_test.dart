@@ -224,7 +224,7 @@ final class _RecordingScopedBridgeClient extends ReportingBridgeClient {
     );
     return <CachedTemplate>[
       CachedTemplate(
-        id: 't1',
+        code: 't1',
         type: 'sales_invoice',
         name: 'Invoice',
         version: '1',
@@ -289,7 +289,7 @@ final class _MemoryPreferences implements ReportFlowPreferenceStore {
   @override
   Future<void> removeSelectedTemplate(ReportPreferenceScope scope) async {
     if (stored == null) return;
-    stored = ReportFlowPreferences(templateId: null, mode: stored!.mode);
+    stored = ReportFlowPreferences(templateCode: null, mode: stored!.mode);
   }
 }
 

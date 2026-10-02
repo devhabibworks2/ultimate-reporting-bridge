@@ -155,13 +155,13 @@ class ReportFlowControllerImpl extends base.ReportFlowControllerImpl
       value.exportReady && presenterSurface.cachedPdf != null;
 
   @override
-  void selectTemplate(String templateId) {
-    final template = _templateById(templateId);
+  void selectTemplate(String templateCode) {
+    final template = _templateByCode(templateCode);
     if (template == null || !_isEligible(template)) {
       return;
     }
     _scopedPreferences.acceptExplicitReselection();
-    super.selectTemplate(templateId);
+    super.selectTemplate(templateCode);
   }
 
   @override
@@ -279,7 +279,7 @@ class ReportFlowControllerImpl extends base.ReportFlowControllerImpl
         details: <String, Object?>{
           'systemCode': request.templateSyncRequest.systemCode.value,
           'reportType': request.reportType.value,
-          'templateId': template.id,
+          'templateCode': template.templateCode,
         },
         action: () async {
           final metadata = template.reportMetadata;
@@ -312,7 +312,7 @@ class ReportFlowControllerImpl extends base.ReportFlowControllerImpl
               extra: <String, Object?>{
                 'system': request.templateSyncRequest.systemCode.value,
                 'reportType': request.reportType.value,
-                'templateId': template.id,
+                'templateCode': template.templateCode,
                 if (request.selectedTemplateCriteria.identity.branchId != null)
                   'branchId':
                       request.selectedTemplateCriteria.identity.branchId,
@@ -440,7 +440,9 @@ class ReportFlowControllerImpl extends base.ReportFlowControllerImpl
       return;
     }
     final templates = eligibleTemplates;
-    if (templates.isNotEmpty) super.selectTemplate(templates.first.id);
+    if (templates.isNotEmpty) {
+      super.selectTemplate(templates.first.templateCode);
+    }
   }
 
   bool _isEligible(CachedTemplate template) {
@@ -452,10 +454,10 @@ class ReportFlowControllerImpl extends base.ReportFlowControllerImpl
     );
   }
 
-  CachedTemplate? _templateById(String templateId) {
-    final id = templateId.trim();
+  CachedTemplate? _templateByCode(String templateCode) {
+    final code = templateCode.trim();
     for (final template in value.templates) {
-      if (template.id == id) return template;
+      if (template.templateCode == code) return template;
     }
     return null;
   }
@@ -477,8 +479,6 @@ class _RequestScopedPreferenceStore implements ReportFlowPreferenceStore {
     required this.connectionKey,
     required this.bridgeClient,
   });
-
-  static const _staleRuntimeId = '__urb_template_code_reselection_required__';
 
   final ReportFlowPreferenceStore delegate;
   final ReportOpenRequest request;
@@ -510,73 +510,27 @@ class _RequestScopedPreferenceStore implements ReportFlowPreferenceStore {
     }
 
     final templateCode = stored.templateCode?.trim();
-    if (templateCode != null && templateCode.isNotEmpty) {
-      final resolved = await _lookupTemplate(
-        (template) => template.durableTemplateCode == templateCode,
-      );
-      if (resolved.template != null) {
-        final runtime = ReportFlowPreferences(
-          templateId: resolved.template!.id,
-          templateCode: templateCode,
-          mode: stored.mode,
-        );
-        loadedPreferences = runtime;
-        return runtime;
-      }
-
-      // A request-scoped catalog may exclude an otherwise valid Code. Preserve
-      // the durable Code, but never substitute another template silently.
-      selectionRequiresExplicitReselection = true;
-      final stale = ReportFlowPreferences(
-        templateId: _staleRuntimeId,
-        templateCode: templateCode,
-        mode: stored.mode,
-      );
-      loadedPreferences = stale;
-      return stale;
+    if (templateCode == null || templateCode.isEmpty) {
+      loadedPreferences = stored;
+      return stored;
     }
 
-    final legacyId = stored.templateId?.trim();
-    if (legacyId != null && legacyId.isNotEmpty) {
-      final resolved = await _lookupTemplate(
-        (template) => template.id == legacyId,
+    final resolved = await _lookupTemplate(
+      (template) => template.templateCode == templateCode,
+    );
+    if (resolved.template != null) {
+      final runtime = stored.copyWith(
+        templateCode: resolved.template!.templateCode,
       );
-      final template = resolved.template;
-      final durableCode = template?.durableTemplateCode;
-      if (template != null &&
-          durableCode != null &&
-          _legacyTemplateMatchesActiveSystem(template)) {
-        await delegate.save(
-          scope,
-          ReportFlowPreferences(
-            templateId: template.id,
-            templateCode: durableCode,
-            mode: stored.mode,
-          ),
-        );
-        final runtime = ReportFlowPreferences(
-          templateId: template.id,
-          templateCode: durableCode,
-          mode: stored.mode,
-        );
-        loadedPreferences = runtime;
-        return runtime;
-      }
-
-      // A successful refresh is authoritative enough to reject a legacy ID
-      // for the active System. Clear that ID once; never manufacture a Code.
-      if (resolved.refreshed) {
-        await delegate.removeSelectedTemplate(scope);
-      }
-      selectionRequiresExplicitReselection = true;
-      final stale = ReportFlowPreferences(
-        templateId: _staleRuntimeId,
-        mode: stored.mode,
-      );
-      loadedPreferences = stale;
-      return stale;
+      loadedPreferences = runtime;
+      return runtime;
     }
 
+    // A failed refresh is transient: preserve the durable TemplateCode so a
+    // later authoritative synchronization can recover it. A successful
+    // refresh that omits the code is authoritative for this request and
+    // requires explicit reselection, but the durable code remains unchanged.
+    selectionRequiresExplicitReselection = resolved.refreshed;
     loadedPreferences = stored;
     return stored;
   }
@@ -589,7 +543,7 @@ class _RequestScopedPreferenceStore implements ReportFlowPreferenceStore {
     await delegate.removeSelectedTemplate(scope);
     selectionRequiresExplicitReselection = false;
     if (loadedPreferences != null) {
-      loadedPreferences = ReportFlowPreferences(mode: loadedPreferences!.mode);
+      loadedPreferences = loadedPreferences!.copyWith(clearTemplateCode: true);
     }
   }
 
@@ -605,7 +559,7 @@ class _RequestScopedPreferenceStore implements ReportFlowPreferenceStore {
     await delegate.removeSelectedTemplate(scope);
     selectionRequiresExplicitReselection = false;
     if (loadedPreferences != null) {
-      loadedPreferences = ReportFlowPreferences(mode: loadedPreferences!.mode);
+      loadedPreferences = loadedPreferences!.copyWith(clearTemplateCode: true);
     }
   }
 
@@ -614,49 +568,28 @@ class _RequestScopedPreferenceStore implements ReportFlowPreferenceStore {
     ReportPreferenceScope _,
     ReportFlowPreferences preferences,
   ) async {
-    final explicitCode = preferences.templateCode?.trim();
-    if (explicitCode != null && explicitCode.isNotEmpty) {
-      final durable = ReportFlowPreferences(
-        templateId: preferences.templateId,
-        templateCode: explicitCode,
-        mode: preferences.mode,
-      );
-      await delegate.save(scope, durable);
-      loadedPreferences = preferences;
+    final templateCode = preferences.templateCode?.trim();
+    if (templateCode == null || templateCode.isEmpty) {
+      final modeOnly = preferences.copyWith(clearTemplateCode: true);
+      await delegate.save(scope, modeOnly);
+      loadedPreferences = modeOnly;
       selectionRequiresExplicitReselection = false;
       return;
     }
 
-    final templateId = preferences.templateId?.trim();
-    if (templateId == null || templateId.isEmpty) {
-      await delegate.save(scope, ReportFlowPreferences(mode: preferences.mode));
-      loadedPreferences = preferences;
-      return;
-    }
-
     final resolved = await _lookupTemplate(
-      (template) => template.id == templateId,
+      (template) => template.templateCode == templateCode,
     );
     final template = resolved.template;
-    final templateCode = template?.durableTemplateCode;
-    if (template == null || templateCode == null) {
+    if (template == null) {
       throw StateError(
-        'Selected template cannot be persisted without a genuine Template Code.',
+        'Selected template cannot be persisted without a valid TemplateCode.',
       );
     }
-    await delegate.save(
-      scope,
-      ReportFlowPreferences(
-        templateId: template.id,
-        templateCode: templateCode,
-        mode: preferences.mode,
-      ),
-    );
-    loadedPreferences = ReportFlowPreferences(
-      templateId: template.id,
-      templateCode: templateCode,
-      mode: preferences.mode,
-    );
+
+    final durable = preferences.copyWith(templateCode: template.templateCode);
+    await delegate.save(scope, durable);
+    loadedPreferences = durable;
     selectionRequiresExplicitReselection = false;
   }
 
@@ -690,16 +623,6 @@ class _RequestScopedPreferenceStore implements ReportFlowPreferenceStore {
     } catch (_) {
       return (template: null, refreshed: false);
     }
-  }
-
-  bool _legacyTemplateMatchesActiveSystem(CachedTemplate template) {
-    final activeSystem = scope.effectiveSystem;
-    final templateSystem = template.systemCode?.trim().toLowerCase();
-    if (templateSystem != null && templateSystem.isNotEmpty) {
-      return templateSystem == activeSystem;
-    }
-    final legacySystemId = scope.resolvedLegacySystemId;
-    return legacySystemId != null && template.systemId == legacySystemId;
   }
 }
 
