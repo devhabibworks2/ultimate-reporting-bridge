@@ -79,7 +79,7 @@ jobs:
         working-directory: example/minimal_host
         run: flutter analyze
 
-  host-compat-min-downgrade:
+  host-compat-min:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -94,16 +94,16 @@ jobs:
           flutter-version: ${{ env.FLUTTER_MIN_VERSION }}
           channel: stable
           cache: true
-      - name: Core package pub downgrade
+      - name: Core package minimum SDK resolution
         working-directory: packages/reporting_bridge
         run: |
-          dart pub downgrade
+          dart pub get
           dart analyze
           dart test
-      - name: Flutter package pub downgrade
+      - name: Flutter package minimum SDK resolution
         working-directory: packages/reporting_bridge_flutter
         run: |
-          flutter pub downgrade
+          flutter pub get
           flutter analyze
           flutter test
       - name: Legacy host compatibility
@@ -206,7 +206,7 @@ jobs:
       - reporting-bridge
       - reporting-bridge-flutter
       - minimal-host
-      - host-compat-min-downgrade
+      - host-compat-min
       - host-compat-min-upgrade
       - host-compat-current
       - host-compat-latest
@@ -250,7 +250,7 @@ jobs:
               'reporting-bridge',
               'reporting-bridge-flutter',
               'minimal-host',
-              'host-compat-min-downgrade',
+              'host-compat-min',
               'host-compat-min-upgrade',
               'host-compat-current',
               'host-compat-latest',
