@@ -795,6 +795,28 @@ class _WorkflowBridgeClient extends ReportingBridgeClient {
     }
   }
 
+  @override
+  Future<List<TemplateDefaultHint>> listTemplateDefaults({
+    required String systemCode,
+    TemplateSyncFilter? filter,
+    Map<String, Object?> extra = const <String, Object?>{},
+  }) async {
+    await _ensureRequestScope();
+    final sync = templateSyncRequest;
+    try {
+      return await delegate.listTemplateDefaults(
+        systemCode: sync.systemCode.value,
+        filter: sync.filter,
+        extra: sync.extra,
+      );
+    } on BridgeRuntimeException catch (error) {
+      if (error.code == BridgeTemplateSyncErrorCodes.offlineCacheUnavailable) {
+        return const <TemplateDefaultHint>[];
+      }
+      rethrow;
+    }
+  }
+
   bool _matchesSystem(CachedTemplate template) {
     final document = template.document;
     final meta = document['meta'];

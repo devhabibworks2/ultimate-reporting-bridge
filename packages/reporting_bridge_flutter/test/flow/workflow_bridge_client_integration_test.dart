@@ -74,7 +74,7 @@ void main() {
       expect(queryBody?['systemCode'], 'motakamel_transactions');
       expect(queryBody?['filter'], filter.toJson());
       expect(queryBody?['extra'], extra);
-      expect(templates.single.id, 'invoice-80');
+      expect(templates.single.templateCode, 'invoice-80');
       expect(templates.single.description, 'Thermal invoice');
       expect(templates.single.metadata['layout'], 'Thermal');
       expect(templates.single.compatibility['minPresenterVersion'], '1.0.0');
@@ -113,13 +113,53 @@ void main() {
         filter: TemplateSyncFilter(reportTypes: const <String>['other']),
         extra: const <String, Object?>{'ignored': true},
       );
+      final defaults = await client.listTemplateDefaults(
+        systemCode: 'must_not_be_forwarded',
+        filter: TemplateSyncFilter(reportTypes: const <String>['other']),
+        extra: const <String, Object?>{'ignored': true},
+      );
 
       expect(delegate.syncSystemCode, 'motakamel_transactions');
       expect(delegate.listSystemCode, 'motakamel_transactions');
+      expect(delegate.defaultsSystemCode, 'motakamel_transactions');
       expect(delegate.syncFilter, same(filter));
       expect(delegate.listFilter, same(filter));
+      expect(delegate.defaultsFilter, same(filter));
       expect(delegate.syncExtra, extra);
       expect(delegate.listExtra, extra);
+      expect(delegate.defaultsExtra, extra);
+      expect(defaults, delegate.defaultTemplates);
+      expect(delegate.identityBoundBeforeDefaults, isTrue);
+    },
+  );
+
+  test(
+    'workflow listTemplateDefaults turns cold-cache miss into empty list',
+    () async {
+      final root = await Directory.systemTemp.createTemp(
+        'urb-workflow-defaults-miss-',
+      );
+      addTearDown(() async {
+        if (await root.exists()) await root.delete(recursive: true);
+      });
+      final delegate = _RecordingBridgeClient(
+        root,
+        throwDefaultsOffline: true,
+      );
+      addTearDown(delegate.dispose);
+      final client = createWorkflowBridgeClientForTesting(
+        delegate: delegate,
+        system: 'motakamel_transactions',
+        templateSyncRequest: TemplateSyncRequest(
+          systemCode: UrbSystem.motakamelTransactions,
+        ),
+      );
+      addTearDown(client.dispose);
+
+      final defaults = await client.listTemplateDefaults(
+        systemCode: 'motakamel_transactions',
+      );
+      expect(defaults, isEmpty);
     },
   );
 
@@ -236,7 +276,6 @@ Future<void> _writeJson(HttpRequest request, Map<String, dynamic> body) async {
 
 CachedTemplate _cachedTemplate(String id, {String? systemCode}) =>
     CachedTemplate(
-      id: id,
       type: 'invoice',
       systemId: 7,
       code: '$id-code',
@@ -263,6 +302,14 @@ final class _RecordingBridgeClient extends ReportingBridgeClient {
   _RecordingBridgeClient(
     Directory root, {
     this.templates = const <CachedTemplate>[],
+    this.defaultTemplates = const <TemplateDefaultHint>[
+      TemplateDefaultHint(
+        reportType: 'sales_invoice',
+        templateCode: 'invoice-a4-code',
+        selectionReason: 'SYSTEM_DEFAULT',
+      ),
+    ],
+    this.throwDefaultsOffline = false,
   }) : super(
          apiBaseUrl: Uri.parse('https://example.test/backend/'),
          presenterEntryUrl: Uri.parse('https://example.test/presenter/'),
@@ -270,12 +317,24 @@ final class _RecordingBridgeClient extends ReportingBridgeClient {
        );
 
   final List<CachedTemplate> templates;
+  final List<TemplateDefaultHint> defaultTemplates;
+  final bool throwDefaultsOffline;
   String? syncSystemCode;
   TemplateSyncFilter? syncFilter;
   Map<String, Object?>? syncExtra;
   String? listSystemCode;
   TemplateSyncFilter? listFilter;
   Map<String, Object?>? listExtra;
+  String? defaultsSystemCode;
+  TemplateSyncFilter? defaultsFilter;
+  Map<String, Object?>? defaultsExtra;
+  bool identityBoundBeforeDefaults = false;
+
+  @override
+  Future<void> updateIdentityContext(BridgeIdentityContext identity) async {
+    await super.updateIdentityContext(identity);
+    identityBoundBeforeDefaults = true;
+  }
 
   @override
   Future<TemplateSyncSummary> syncTemplates({
@@ -303,5 +362,23 @@ final class _RecordingBridgeClient extends ReportingBridgeClient {
     listFilter = filter;
     listExtra = extra;
     return templates;
+  }
+
+  @override
+  Future<List<TemplateDefaultHint>> listTemplateDefaults({
+    required String systemCode,
+    TemplateSyncFilter? filter,
+    Map<String, Object?> extra = const <String, Object?>{},
+  }) async {
+    defaultsSystemCode = systemCode;
+    defaultsFilter = filter;
+    defaultsExtra = extra;
+    if (throwDefaultsOffline) {
+      throw const BridgeRuntimeException(
+        BridgeTemplateSyncErrorCodes.offlineCacheUnavailable,
+        'No cached template catalog is available for the current scope.',
+      );
+    }
+    return defaultTemplates;
   }
 }

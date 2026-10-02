@@ -4,6 +4,7 @@ import 'bridge_cache_namespace.dart';
 import 'bridge_identity_context.dart';
 import 'bridge_runtime_error.dart';
 import 'bridge_template_cache.dart';
+import 'bridge_template_default.dart';
 import 'bridge_template_query.dart';
 import 'bridge_template_sync.dart';
 
@@ -84,6 +85,27 @@ class PresenterServerGateway {
       );
     }
     return cache.listTemplates();
+  }
+
+  Future<List<TemplateDefaultHint>> listTemplateDefaults({
+    required TemplateQueryRequest query,
+    Map<String, String>? headers,
+  }) async {
+    final effectiveHeaders = filterPresenterBridgeHeaders(headers ?? _headers);
+    final cache = await _queryTemplateCache(query, effectiveHeaders);
+    final metadata = await cache.readCatalogMetadata();
+    final validCatalog =
+        metadata != null &&
+        metadata.systemCode == query.systemCode &&
+        metadata.filterFingerprint == query.filterFingerprint &&
+        metadata.extraFingerprint == query.extraFingerprint;
+    if (!validCatalog) {
+      throw const BridgeRuntimeException(
+        BridgeTemplateSyncErrorCodes.offlineCacheUnavailable,
+        'No cached template catalog is available for the current scope.',
+      );
+    }
+    return metadata.defaultTemplates;
   }
 
   Future<void> clearTemplates() async {

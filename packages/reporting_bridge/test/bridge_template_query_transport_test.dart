@@ -713,6 +713,34 @@ void main() {
     final summary = await gateway.syncTemplates(query: query);
     expect(summary.fromCache, isTrue);
     expect(summary.defaultTemplates.single.templateCode, 'invoice-a4-code');
+
+    final defaults = await gateway.listTemplateDefaults(query: query);
+    expect(defaults.single.templateCode, 'invoice-a4-code');
+  });
+
+  test('listTemplateDefaults throws when cache scope is missing', () async {
+    final root = await Directory.systemTemp.createTemp(
+      'bridge-query-defaults-miss-',
+    );
+    addTearDown(() async {
+      if (await root.exists()) await root.delete(recursive: true);
+    });
+    final gateway = PresenterServerGateway(
+      apiBaseUrl: Uri.parse('https://reports.example/'),
+      bridgeRoot: root,
+    );
+    await expectLater(
+      gateway.listTemplateDefaults(
+        query: TemplateQueryRequest(systemCode: 'motakamel_transactions'),
+      ),
+      throwsA(
+        isA<BridgeRuntimeException>().having(
+          (error) => error.code,
+          'code',
+          BridgeTemplateSyncErrorCodes.offlineCacheUnavailable,
+        ),
+      ),
+    );
   });
 }
 
