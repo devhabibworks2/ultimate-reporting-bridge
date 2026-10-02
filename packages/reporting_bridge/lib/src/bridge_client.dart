@@ -11,6 +11,7 @@ import 'bridge_presenter_session.dart';
 import 'bridge_runtime_error.dart';
 import 'bridge_runtime_storage.dart';
 import 'bridge_template_cache.dart';
+import 'bridge_template_default.dart';
 import 'bridge_template_query.dart';
 import 'bridge_template_sync.dart';
 
@@ -179,6 +180,30 @@ class ReportingBridgeClient {
     );
     _lastTemplateQuery = query;
     return templates;
+  }
+
+  Future<List<TemplateDefaultHint>> listTemplateDefaults({
+    required String systemCode,
+    TemplateSyncFilter? filter,
+    Map<String, Object?> extra = const <String, Object?>{},
+  }) async {
+    _ensureActive();
+    final query = TemplateQueryRequest(
+      systemCode: systemCode,
+      identity: _identityContext,
+      filter: filter,
+      extra: extra,
+    );
+    final headers = await _resolveHeaders(
+      BridgeHeaderOperation.listTemplates,
+      query: query,
+    );
+    final defaults = await _serverGateway.listTemplateDefaults(
+      query: query,
+      headers: headers,
+    );
+    _lastTemplateQuery = query;
+    return defaults;
   }
 
   Future<void> clearTemplateCache() async {

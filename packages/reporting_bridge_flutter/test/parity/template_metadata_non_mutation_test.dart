@@ -29,7 +29,7 @@ void main() {
       };
       final before = jsonEncode(document);
       final template = CachedTemplate(
-        id: 'invoice',
+        code: 'invoice',
         type: 'sales_invoice',
         document: document,
         version: '1.0.0',

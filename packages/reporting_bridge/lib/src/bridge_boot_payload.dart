@@ -6,7 +6,7 @@ import 'bridge_selected_template.dart';
 
 /// Boot context from Host (`bridge_contract.md`: config, seedData, headers, hints).
 class BridgeBootPayload {
-  const BridgeBootPayload({
+  BridgeBootPayload({
     required this.contractVersion,
     this.seedData,
     this.bearerToken,
@@ -19,8 +19,8 @@ class BridgeBootPayload {
     this.branding,
     this.apiHeaders,
     this.selectedTemplate,
-    this.templateHints,
-  });
+    Map<String, dynamic>? templateHints,
+  }) : templateHints = _sanitizeTemplateHints(templateHints);
 
   final int contractVersion;
   final Map<String, dynamic>? seedData;
@@ -39,22 +39,15 @@ class BridgeBootPayload {
   final SelectedTemplate? selectedTemplate;
   final Map<String, dynamic>? templateHints;
 
-  int? get templateIdHint {
-    final h = templateHints;
-    if (h != null) {
-      final v = h['templateId'] ?? h['selectedTemplateId'];
-      if (v is int) {
-        return v;
-      }
-      if (v is String) {
-        return int.tryParse(v);
-      }
+  String? get templateCodeHint {
+    final hints = templateHints;
+    if (hints != null) {
+      final value = hints['templateCode'] ?? hints['selectedTemplateCode'];
+      final code = value?.toString().trim();
+      if (code != null && code.isNotEmpty) return code;
     }
-    final selectedId = selectedTemplate?.id;
-    if (selectedId != null) {
-      return int.tryParse(selectedId);
-    }
-    return null;
+    final selectedCode = selectedTemplate?.code.trim();
+    return selectedCode == null || selectedCode.isEmpty ? null : selectedCode;
   }
 
   /// Parses host map; defaults [contractVersion] to [BridgeContract.payloadVersion] if absent.
@@ -110,6 +103,15 @@ class BridgeBootPayload {
       if (templateHints != null) 'templateHints': templateHints,
     };
   }
+}
+
+Map<String, dynamic>? _sanitizeTemplateHints(Map<String, dynamic>? value) {
+  if (value == null) return null;
+  final sanitized = Map<String, dynamic>.from(value)
+    ..remove('templateId')
+    ..remove('selectedTemplateId');
+  if (sanitized.isEmpty) return null;
+  return Map<String, dynamic>.unmodifiable(sanitized);
 }
 
 Map<dynamic, dynamic>? _map(Object? value) {

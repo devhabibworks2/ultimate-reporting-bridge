@@ -51,13 +51,13 @@ void main() {
       ),
       reportName: '  Invoice report  ',
       requestId: '  request-1  ',
-      initialTemplateId: '  template-1  ',
+      initialTemplateCode: '  template-1  ',
       localeOverride: 'ar-YE',
     );
 
     expect(request.reportName, 'Invoice report');
     expect(request.requestId, 'request-1');
-    expect(request.initialTemplateId, 'template-1');
+    expect(request.initialTemplateCode, 'template-1');
     expect(request.localeOverride, 'ar');
 
     final enUs = ReportOpenRequest(
@@ -96,11 +96,11 @@ void main() {
       ),
       reportName: '   ',
       requestId: '',
-      initialTemplateId: '	',
+      initialTemplateCode: '	',
     );
     expect(empty.reportName, isNull);
     expect(empty.requestId, isNull);
-    expect(empty.initialTemplateId, isNull);
+    expect(empty.initialTemplateCode, isNull);
   });
 
   test('ReportOpenRequest rejects non-JSON seed values', () {

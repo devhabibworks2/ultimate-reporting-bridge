@@ -14,7 +14,7 @@ class BridgeInlineSessionPayload {
     this.wantPdf = false,
     this.modeLabel = 'preview',
     this.templateName,
-    this.templateIdHint,
+    this.templateCodeHint,
   });
 
   final int contractVersion;
@@ -24,7 +24,7 @@ class BridgeInlineSessionPayload {
   final bool wantPdf;
   final String modeLabel;
   final String? templateName;
-  final int? templateIdHint;
+  final String? templateCodeHint;
 
   static BridgeInlineSessionPayload fromMap(Map<dynamic, dynamic> raw) {
     return BridgeInlineSessionPayload(
@@ -41,9 +41,7 @@ class BridgeInlineSessionPayload {
       wantPdf: raw['wantPdf'] == true,
       modeLabel: raw['mode']?.toString() ?? 'preview',
       templateName: raw['templateName']?.toString(),
-      templateIdHint: raw['templateId'] is int
-          ? raw['templateId'] as int
-          : null,
+      templateCodeHint: raw['templateCode']?.toString().trim(),
     );
   }
 
@@ -56,7 +54,8 @@ class BridgeInlineSessionPayload {
       'wantPdf': wantPdf,
       if (modeLabel != 'preview') 'mode': modeLabel,
       if (templateName != null) 'templateName': templateName,
-      if (templateIdHint != null) 'templateId': templateIdHint,
+      if (templateCodeHint != null && templateCodeHint!.isNotEmpty)
+        'templateCode': templateCodeHint,
     };
   }
 }

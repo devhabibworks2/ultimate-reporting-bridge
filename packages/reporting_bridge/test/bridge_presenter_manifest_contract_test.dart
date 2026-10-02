@@ -106,7 +106,7 @@ void main() {
 
     test('template compatibility uses Presenter and Bridge semver only', () {
       const template = CachedTemplate(
-        id: 'invoice-1',
+        code: 'invoice-1',
         type: 'invoice',
         document: <String, dynamic>{
           'meta': <String, dynamic>{'name': 'Invoice'},

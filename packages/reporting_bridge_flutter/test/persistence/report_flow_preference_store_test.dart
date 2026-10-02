@@ -197,7 +197,7 @@ void main() {
   });
 
   test(
-    'loads V4 ID for controller migration and persists mode without inventing Code',
+    'ignores V4 ID selection and preserves mode without inventing Code',
     () async {
       const scope = ReportPreferenceScope(
         connectionKey: 'deployed|https://legacy.example',
@@ -222,7 +222,7 @@ void main() {
 
       final migrated = await store.load(scope);
 
-      expect(migrated?.templateId, 'v4-template');
+      expect(migrated?.templateCode, isNull);
       expect(migrated?.mode, PresenterModePreference.offline);
       expect(
         preferences.getKeys().where(
@@ -319,7 +319,7 @@ void main() {
     },
   );
 
-  test('migrates a matching v2 map entry into V5 storage', () async {
+  test('ignores matching v2 ID selection while preserving mode', () async {
     const source = 'https://legacy.example/UltimateReport/backend';
     SharedPreferences.setMockInitialValues(<String, Object>{
       'erp_host.report_defaults.v2': jsonEncode(<String, dynamic>{
@@ -342,12 +342,12 @@ void main() {
     final migrated = await store.load(scope);
     final secondRead = await store.load(scope);
 
-    expect(migrated?.templateId, 'legacy-template');
+    expect(migrated?.templateCode, isNull);
     expect(migrated?.mode, PresenterModePreference.offline);
-    expect(secondRead?.templateId, 'legacy-template');
+    expect(secondRead?.templateCode, isNull);
   });
 
-  test('migrates a matching v1 map entry into V5 storage', () async {
+  test('ignores matching v1 ID selection while preserving mode', () async {
     const source = 'https://legacy-v1.example';
     SharedPreferences.setMockInitialValues(<String, Object>{
       'erp_host.report_defaults.v1': jsonEncode(<String, dynamic>{
@@ -369,11 +369,11 @@ void main() {
 
     final migrated = await store.load(scope);
 
-    expect(migrated?.templateId, 'legacy-v1-template');
+    expect(migrated?.templateCode, isNull);
     expect(migrated?.mode, PresenterModePreference.offline);
   });
 
-  test('migrates matching standalone template and mode settings', () async {
+  test('ignores standalone ID selection and preserves mode settings', () async {
     SharedPreferences.setMockInitialValues(<String, Object>{
       'erp_host.server_url': 'https://standalone.example/',
       'erp_host.server_profile': 'deployed',
@@ -394,7 +394,7 @@ void main() {
 
     final migrated = await store.load(scope);
 
-    expect(migrated?.templateId, 'standalone-template');
+    expect(migrated?.templateCode, isNull);
     expect(migrated?.mode, PresenterModePreference.offline);
   });
 

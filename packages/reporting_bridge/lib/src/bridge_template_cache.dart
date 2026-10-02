@@ -1,14 +1,16 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
+
 import 'bridge_contract.dart';
 import 'bridge_runtime_error.dart';
 import 'bridge_selected_template.dart';
 import 'bridge_semantic_version.dart';
+import 'bridge_template_default.dart';
 
 class CachedTemplate {
   const CachedTemplate({
-    required this.id,
     required this.type,
     required this.document,
     this.systemId,
@@ -27,7 +29,6 @@ class CachedTemplate {
   }) : _legacyMinPresenterDevVersion = minPresenterDevVersion,
        _legacyMaxPresenterDevVersion = maxPresenterDevVersion;
 
-  final String id;
   final String type;
   final Map<String, dynamic> document;
   final int? systemId;
@@ -44,12 +45,8 @@ class CachedTemplate {
   final int? _legacyMinPresenterDevVersion;
   final int? _legacyMaxPresenterDevVersion;
 
-  SelectedTemplate get selectedTemplate => SelectedTemplate(
-    id: id,
-    type: type,
-    code: durableTemplateCode,
-    systemCode: systemCode,
-  );
+  SelectedTemplate get selectedTemplate =>
+      SelectedTemplate(type: type, code: templateCode, systemCode: systemCode);
 
   String get effectiveMinPresenterVersion {
     final canonical = minPresenterVersion?.trim();
@@ -77,7 +74,7 @@ class CachedTemplate {
       final value = meta['name']?.toString().trim();
       if (value != null && value.isNotEmpty) return value;
     }
-    return id;
+    return templateCode;
   }
 
   String? get durableTemplateCode {
@@ -95,17 +92,14 @@ class CachedTemplate {
   String get templateCode {
     final durable = durableTemplateCode;
     if (durable != null) return durable;
-
-    final meta = document['meta'];
-    if (meta is Map) {
-      final legacy = meta['id']?.toString().trim();
-      if (legacy != null && legacy.isNotEmpty) return legacy;
-    }
-    return id;
+    throw const BridgeRuntimeException(
+      BridgeRuntimeErrorCodes.templateDocumentInvalid,
+      'Cached template requires a non-empty TemplateCode.',
+    );
   }
 
   String get searchableMetadata {
-    final values = <String>[id, templateCode, templateName, type];
+    final values = <String>[templateCode, templateName, type];
     final explicitDescription = description?.trim();
     if (explicitDescription != null && explicitDescription.isNotEmpty) {
       values.add(explicitDescription);
@@ -155,7 +149,6 @@ class CachedTemplate {
 
   Map<String, dynamic> toMap() {
     return <String, dynamic>{
-      'id': id,
       'type': type,
       'document': document,
       if (systemId != null) 'systemId': systemId,
@@ -180,13 +173,25 @@ class CachedTemplate {
     Map<dynamic, dynamic> raw, {
     String? systemCode,
   }) {
-    final id = raw['id'];
+    // Backend may include an opaque 'id' field. Unknown wire fields are
+    // tolerated by this parser and are intentionally not retained.
     final type = raw['type'] ?? raw['reportType'];
     final document = raw['document'];
-    if (id == null || type == null || document is! Map) {
+    if (type == null || document is! Map) {
       throw const BridgeRuntimeException(
         BridgeRuntimeErrorCodes.templateDocumentInvalid,
-        'Cached template requires id, type/reportType, and document.',
+        'Cached template requires type/reportType and document.',
+      );
+    }
+    final code =
+        _stringOrNull(raw['code']) ??
+        (document['meta'] is Map
+            ? _stringOrNull((document['meta'] as Map)['code'])
+            : null);
+    if (code == null) {
+      throw const BridgeRuntimeException(
+        BridgeRuntimeErrorCodes.templateDocumentInvalid,
+        'Cached template requires a non-empty TemplateCode.',
       );
     }
 
@@ -196,12 +201,11 @@ class CachedTemplate {
         : const <String, dynamic>{};
 
     return CachedTemplate(
-      id: id.toString(),
       type: type.toString(),
       document: _stringMap(document),
       systemId: _nullablePositiveInt(raw['systemId']),
       systemCode: systemCode ?? _stringOrNull(raw['systemCode']),
-      code: _stringOrNull(raw['code']),
+      code: code,
       name: _stringOrNull(raw['name']),
       description: _stringOrNull(raw['description']),
       publishedVersionNo: _nullablePositiveInt(raw['publishedVersionNo']),
@@ -228,6 +232,7 @@ final class TemplateCatalogMetadata {
     required this.extraFingerprint,
     this.systemId,
     this.appliedFilter = const <String, dynamic>{},
+    this.defaultTemplates = const <TemplateDefaultHint>[],
     DateTime? cachedAt,
   }) : cachedAt = (cachedAt ?? DateTime.now().toUtc()).toUtc();
 
@@ -239,6 +244,7 @@ final class TemplateCatalogMetadata {
   final String? extraFingerprint;
   final int? systemId;
   final Map<String, dynamic> appliedFilter;
+  final List<TemplateDefaultHint> defaultTemplates;
   final DateTime cachedAt;
 
   Map<String, dynamic> toMap() => <String, dynamic>{
@@ -250,6 +256,9 @@ final class TemplateCatalogMetadata {
     if (extraFingerprint != null) 'extraFingerprint': extraFingerprint,
     if (systemId != null) 'systemId': systemId,
     if (appliedFilter.isNotEmpty) 'appliedFilter': appliedFilter,
+    'defaultTemplates': defaultTemplates
+        .map((value) => value.toMap())
+        .toList(growable: false),
     'cachedAt': cachedAt.toIso8601String(),
   };
 
@@ -257,6 +266,27 @@ final class TemplateCatalogMetadata {
     final revision = _stringOrNull(raw['catalogRevision']);
     final cachedAt = DateTime.tryParse(raw['cachedAt']?.toString() ?? '');
     if (revision == null || cachedAt == null) return null;
+
+    final hasDefaults = raw.containsKey('defaultTemplates');
+    final rawDefaults = raw['defaultTemplates'];
+    final List<TemplateDefaultHint> defaults;
+    if (!hasDefaults) {
+      defaults = const <TemplateDefaultHint>[];
+    } else if (rawDefaults is! List) {
+      return null;
+    } else {
+      final parsed = <TemplateDefaultHint>[];
+      final reportTypes = <String>{};
+      for (final item in rawDefaults) {
+        if (item is! Map) return null;
+        final hint = TemplateDefaultHint.tryFromMap(item);
+        if (hint == null) return null;
+        if (!reportTypes.add(hint.reportType)) return null;
+        parsed.add(hint);
+      }
+      defaults = List<TemplateDefaultHint>.unmodifiable(parsed);
+    }
+
     return TemplateCatalogMetadata(
       catalogRevision: revision,
       systemCode: _stringOrNull(raw['systemCode']),
@@ -268,6 +298,7 @@ final class TemplateCatalogMetadata {
       appliedFilter: raw['appliedFilter'] is Map
           ? _stringMap(raw['appliedFilter'] as Map)
           : const <String, dynamic>{},
+      defaultTemplates: defaults,
       cachedAt: cachedAt,
     );
   }
@@ -351,39 +382,42 @@ class TemplateCacheService {
     if (await file.exists()) await file.delete();
   }
 
-  Future<SelectedTemplate?> migrateSelectedTemplate({
+  Future<SelectedTemplate?> reconcileSelectedTemplate({
     required Iterable<CachedTemplate> catalog,
     required String systemCode,
-    SelectedTemplate? legacy,
+    SelectedTemplate? stored,
   }) async {
-    final stored = legacy ?? await readSelectedTemplate();
-    final migrated = SelectedTemplate.migrateLegacyId(
-      legacy: stored,
-      catalog: catalog.expand((template) {
-        final code = template.durableTemplateCode;
-        if (code == null) return const <SelectedTemplateCatalogEntry>[];
-        return <SelectedTemplateCatalogEntry>[
-          SelectedTemplateCatalogEntry(
-            id: template.id,
-            type: template.type,
-            code: code,
-            systemCode: systemCode,
-          ),
-        ];
-      }),
-      systemCode: systemCode,
-    );
-    if (migrated == null) {
+    final selection = stored ?? await readSelectedTemplate();
+    if (selection == null) return null;
+    final normalizedSystemCode = systemCode.trim();
+    final selectionSystemCode = selection.systemCode?.trim();
+    if (selectionSystemCode != null &&
+        selectionSystemCode.isNotEmpty &&
+        selectionSystemCode != normalizedSystemCode) {
       await clearSelectedTemplate();
-    } else {
-      await writeSelectedTemplate(migrated);
+      return null;
     }
-    return migrated;
+    for (final template in catalog) {
+      if (template.templateCode == selection.code.trim()) {
+        final reconciled = SelectedTemplate(
+          type: template.type,
+          code: template.templateCode,
+          systemCode: normalizedSystemCode.isEmpty
+              ? template.systemCode
+              : normalizedSystemCode,
+        );
+        await writeSelectedTemplate(reconciled);
+        return reconciled;
+      }
+    }
+    await clearSelectedTemplate();
+    return null;
   }
 
   Future<void> putTemplate(CachedTemplate template) async {
+    final code = template.templateCode;
     await cacheRoot.create(recursive: true);
-    final file = _templateFile(template.id);
+    final file = _templateFileByCode(code);
     final temporary = File('${file.path}.tmp');
     final backup = File('${file.path}.bak');
 
@@ -391,7 +425,6 @@ class TemplateCacheService {
       await temporary.writeAsString(jsonEncode(template.toMap()), flush: true);
       if (await backup.exists()) await backup.delete();
       if (await file.exists()) await file.rename(backup.path);
-
       try {
         await temporary.rename(file.path);
       } catch (_) {
@@ -400,18 +433,12 @@ class TemplateCacheService {
         }
         rethrow;
       }
-
       if (await backup.exists()) await backup.delete();
     } finally {
       if (await temporary.exists()) await temporary.delete();
       if (await backup.exists() && await file.exists()) {
         await backup.delete();
       }
-    }
-
-    final legacy = _legacyTemplateFile(template.id);
-    if (legacy.path != file.path && await legacy.exists()) {
-      await legacy.delete();
     }
   }
 
@@ -430,9 +457,9 @@ class TemplateCacheService {
     await for (final entity in cacheRoot.list(followLinks: false)) {
       if (entity is! File || !entity.path.endsWith('.json')) continue;
       if (entity.path.endsWith('/$_catalogMetadataFileName') ||
-          entity.path.endsWith('\\$_catalogMetadataFileName') ||
+          entity.path.endsWith('\$_catalogMetadataFileName') ||
           entity.path.endsWith('/$_selectionFileName') ||
-          entity.path.endsWith('\\$_selectionFileName')) {
+          entity.path.endsWith('\$_selectionFileName')) {
         continue;
       }
       final template = await _readTemplateFile(entity);
@@ -442,27 +469,26 @@ class TemplateCacheService {
       final matchesSystem = systemId == null || template.systemId == systemId;
       if (!matchesType || !matchesSystem) continue;
 
-      final canonical = entity.path == _templateFile(template.id).path;
-      if (canonical || !templates.containsKey(template.id)) {
-        templates[template.id] = template;
+      final code = template.templateCode;
+      final canonical = entity.path == _templateFileByCode(code).path;
+      if (canonical || !templates.containsKey(code)) {
+        templates[code] = template;
       }
     }
 
     final result = templates.values.toList(growable: false)
-      ..sort((a, b) => a.id.compareTo(b.id));
+      ..sort((a, b) => a.templateCode.compareTo(b.templateCode));
     return result;
   }
 
-  Future<CachedTemplate?> getTemplate(String id) async {
-    final file = _templateFile(id);
-    if (await file.exists()) {
-      final template = await _readTemplateFile(file);
-      if (template != null) return template;
-    }
-
-    final legacy = _legacyTemplateFile(id);
-    if (!await legacy.exists()) return null;
-    return _readTemplateFile(legacy);
+  Future<CachedTemplate?> getTemplateByCode(String templateCode) async {
+    final code = templateCode.trim();
+    if (code.isEmpty) return null;
+    final file = _templateFileByCode(code);
+    if (!await file.exists()) return null;
+    final template = await _readTemplateFile(file);
+    if (template == null || template.templateCode != code) return null;
+    return template;
   }
 
   Future<CachedTemplate?> _readTemplateFile(File file) async {
@@ -479,14 +505,9 @@ class TemplateCacheService {
     }
   }
 
-  File _templateFile(String id) {
-    final encoded = base64Url.encode(utf8.encode(id)).replaceAll('=', '');
-    return File('${cacheRoot.path}/tpl_$encoded.json');
-  }
-
-  File _legacyTemplateFile(String id) {
-    final safeId = id.replaceAll(RegExp(r'[^A-Za-z0-9_.-]'), '_');
-    return File('${cacheRoot.path}/$safeId.json');
+  File _templateFileByCode(String templateCode) {
+    final digest = sha256.convert(utf8.encode(templateCode)).toString();
+    return File('${cacheRoot.path}/tpl_$digest.json');
   }
 }
 
@@ -550,19 +571,10 @@ class TemplateSelectionResolver {
     if (storedSelection != null) {
       if (storedSelection.matchesType(reportType) &&
           storedSelection.systemCode == systemCode) {
-        final storedCode = storedSelection.code?.trim();
-        if (storedCode != null && storedCode.isNotEmpty) {
+        final storedCode = storedSelection.code.trim();
+        if (storedCode.isNotEmpty) {
           for (final template in compatible) {
             if (template.templateCode == storedCode) {
-              return TemplateSelectionResult(
-                status: 'stored-selected',
-                template: template,
-              );
-            }
-          }
-        } else {
-          for (final template in compatible) {
-            if (template.id == storedSelection.id) {
               return TemplateSelectionResult(
                 status: 'stored-selected',
                 template: template,

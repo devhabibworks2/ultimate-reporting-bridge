@@ -170,7 +170,7 @@ Future<Map<String, String>> _snapshot(Directory directory) async {
 }
 
 CachedTemplate _template() => CachedTemplate(
-  id: 'invoice-template',
+  code: 'invoice-template',
   type: 'invoice',
   document: const <String, Object>{'meta': <String, Object>{}},
 );

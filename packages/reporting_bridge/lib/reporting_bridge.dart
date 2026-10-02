@@ -27,6 +27,7 @@ export 'src/bridge_semantic_version.dart';
 export 'src/bridge_server_endpoints.dart';
 export 'src/bridge_status.dart';
 export 'src/bridge_template_cache.dart';
+export 'src/bridge_template_default.dart';
 export 'src/bridge_template_query.dart';
 export 'src/bridge_template_sync.dart';
 export 'src/bridge_web_channel.dart';

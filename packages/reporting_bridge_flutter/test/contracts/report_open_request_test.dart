@@ -27,7 +27,7 @@ void main() {
         ),
         reportName: 'Sales Invoice',
         requestId: 'req-1',
-        initialTemplateId: 'tpl-1',
+        initialTemplateCode: 'tpl-1',
         presenterMode: PresenterModePreference.online,
         entryPolicy: ReportEntryPolicy.alwaysSelectTemplate,
         localeOverride: 'ar',
@@ -96,6 +96,23 @@ void main() {
       );
     },
   );
+
+  test('ReportOpenRequest defaults presenterMode to offline', () {
+    final identity = const ReportIdentity(userId: 'u1');
+    final request = ReportOpenRequest(
+      seedData: const <String, dynamic>{'id': 1},
+      selectedTemplateCriteria: SelectedTemplateCriteria(
+        reportType: UrbReportType.salesInvoice,
+        identity: identity,
+      ),
+      templateSyncRequest: TemplateSyncRequest(
+        systemCode: UrbSystem.motakamelTransactions,
+        identity: identity,
+      ),
+    );
+
+    expect(request.presenterMode, PresenterModePreference.offline);
+  });
 
   test('TemplateSyncRequest defaults filter to core TemplateSyncFilter', () {
     final sync = TemplateSyncRequest(

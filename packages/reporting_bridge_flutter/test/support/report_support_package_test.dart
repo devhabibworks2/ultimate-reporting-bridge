@@ -59,7 +59,6 @@ void main() {
           },
         },
         template: const CachedTemplate(
-          id: 't1',
           type: 'sales_invoice',
           code: 'invoice-a4',
           name: 'Invoice A4',
@@ -158,7 +157,7 @@ void main() {
       expect(bridge['bridgeVersion'], BridgeContract.implementationVersion);
       expect(bridge['bridgePayloadVersion'], BridgeContract.payloadVersion);
       final bridgeTemplate = bridge['template'] as Map<String, dynamic>;
-      expect(bridgeTemplate['id'], 't1');
+      expect(bridgeTemplate['templateCode'], 'invoice-a4');
       expect(bridgeTemplate['publishedVersionNo'], 3);
       expect(bridgeTemplate.containsKey('document'), isFalse);
 

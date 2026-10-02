@@ -280,8 +280,8 @@ final class _FakeHeadlessController extends ChangeNotifier
       stage: ReportFlowStage.previewing,
       selectedMode: PresenterModePreference.online,
       templates: <CachedTemplate>[template],
-      selectedTemplateId: template.id,
-      committedTemplateId: template.id,
+      selectedTemplateCode: template.templateCode,
+      committedTemplateCode: template.templateCode,
       presenterLaunch: const PresenterSessionLaunch(
         presenterUrl: 'https://presenter.test/session-1',
         sessionId: 'session-1',
@@ -380,7 +380,6 @@ final class _FakeHeadlessController extends ChangeNotifier
 }
 
 CachedTemplate _template() => CachedTemplate(
-  id: 'thermal-en',
   type: 'sales_invoice',
   systemId: 7,
   systemCode: 'motakamel_transactions',

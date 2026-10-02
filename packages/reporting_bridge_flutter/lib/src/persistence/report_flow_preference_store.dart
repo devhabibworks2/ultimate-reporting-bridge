@@ -56,19 +56,6 @@ class ReportPreferenceScope {
       .encode(utf8.encode(selectedTemplateCanonical))
       .replaceAll('=', '');
 
-  /// V5 selected-template key retained for one-way migration reads only.
-  String get legacySelectedTemplateV5Canonical => <String>[
-    'report=${_scopePart(reportType.toLowerCase())}',
-    'user=${_scopePart(userId)}',
-    'branch=${_scopePart(branchId)}',
-    'systemUnit=${_scopePart(systemUnit)}',
-    'customType=${_scopePart(customType)}',
-  ].join('|');
-
-  String get legacySelectedTemplateV5StorageToken => base64Url
-      .encode(utf8.encode(legacySelectedTemplateV5Canonical))
-      .replaceAll('=', '');
-
   /// Presenter-mode operational identity: connection + system + report + identity.
   String get presenterModeCanonical => <String>[
     'source=${_scopePart(connectionKey)}',
@@ -121,7 +108,6 @@ class ReportPreferenceScope {
 
 class ReportFlowPreferences {
   const ReportFlowPreferences({
-    this.templateId,
     this.templateCode,
     required this.mode,
     this.language,
@@ -130,10 +116,6 @@ class ReportFlowPreferences {
     this.customType,
   });
 
-  /// Transient/runtime or legacy template id. Never written as V6 durable identity.
-  final String? templateId;
-
-  /// Permanent business identity used by durable selected-template storage.
   final String? templateCode;
   final PresenterModePreference mode;
   final String? language;
@@ -142,8 +124,6 @@ class ReportFlowPreferences {
   final String? customType;
 
   ReportFlowPreferences copyWith({
-    String? templateId,
-    bool clearTemplateId = false,
     String? templateCode,
     bool clearTemplateCode = false,
     PresenterModePreference? mode,
@@ -152,7 +132,6 @@ class ReportFlowPreferences {
     String? size,
     String? customType,
   }) => ReportFlowPreferences(
-    templateId: clearTemplateId ? null : templateId ?? this.templateId,
     templateCode: clearTemplateCode ? null : templateCode ?? this.templateCode,
     mode: mode ?? this.mode,
     language: language ?? this.language,
@@ -162,7 +141,6 @@ class ReportFlowPreferences {
   );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-    if (templateId != null) 'templateId': templateId,
     if (templateCode != null) 'templateCode': templateCode,
     'mode': mode.name,
     if (language != null) 'language': language,
@@ -173,10 +151,6 @@ class ReportFlowPreferences {
 
   static ReportFlowPreferences? fromJson(Object? raw) {
     if (raw is! Map) return null;
-    final rawTemplateId = raw['templateId']?.toString().trim();
-    final templateId = rawTemplateId == null || rawTemplateId.isEmpty
-        ? null
-        : rawTemplateId;
     final rawTemplateCode = raw['templateCode']?.toString().trim();
     final templateCode = rawTemplateCode == null || rawTemplateCode.isEmpty
         ? null
@@ -185,9 +159,8 @@ class ReportFlowPreferences {
     final mode = PresenterModePreference.values
         .where((value) => value.name == modeName)
         .firstOrNull;
-    if (templateId == null && templateCode == null && mode == null) return null;
+    if (templateCode == null && mode == null) return null;
     return ReportFlowPreferences(
-      templateId: templateId,
       templateCode: templateCode,
       mode: mode ?? PresenterModePreference.online,
       language: _optionalCode(raw['language']),
@@ -218,14 +191,11 @@ class SharedPreferencesReportFlowPreferenceStore
 
   static const _selectedTemplatePrefix =
       'urb.reporting_bridge.selected_template.v6.';
-  static const _legacySelectedTemplateV5Prefix =
-      'urb.reporting_bridge.selected_template.v5.';
   static const _presenterModePrefix = 'urb.reporting_bridge.presenter_mode.v1.';
   static const _legacyV4Prefix = 'urb.reporting_bridge.default.v4.';
   static const _legacyV3Prefix = 'urb.reporting_bridge.default.v3.';
   static const _legacyV2MapKey = 'erp_host.report_defaults.v2';
   static const _legacyV1MapKey = 'erp_host.report_defaults.v1';
-  static const _legacyTemplateIdKey = 'erp_host.template_id';
   static const _legacyRunModeKey = 'erp_host.run_mode';
   static const _legacyServerUrlKey = 'erp_host.server_url';
   static const _legacyServerProfileKey = 'erp_host.server_profile';
@@ -242,9 +212,6 @@ class SharedPreferencesReportFlowPreferenceStore
 
   String _selectedKey(ReportPreferenceScope scope) =>
       '$_selectedTemplatePrefix${scope.selectedTemplateStorageToken}';
-
-  String _legacySelectedV5Key(ReportPreferenceScope scope) =>
-      '$_legacySelectedTemplateV5Prefix${scope.legacySelectedTemplateV5StorageToken}';
 
   String _modeKey(ReportPreferenceScope scope) =>
       '$_presenterModePrefix${scope.presenterModeStorageToken}';
@@ -264,23 +231,12 @@ class SharedPreferencesReportFlowPreferenceStore
           );
         }
 
-        // V5 stored a runtime/cache ID without System. It is returned only as
-        // migration input; the controller must resolve it against the active
-        // System catalog before any V6 durable write can occur.
-        final legacyV5Id = _decodeLegacySelectedId(
-          _preferences.getString(_legacySelectedV5Key(scope)),
-        );
-        if (legacyV5Id != null) {
-          return ReportFlowPreferences(
-            templateId: legacyV5Id,
-            mode: mode ?? PresenterModePreference.online,
-          );
-        }
-
+        // Legacy stores may still contribute mode/settings, but any id-only
+        // template selection is intentionally ignored.
         final legacy = await _loadLegacy(scope);
         if (legacy != null) {
           await _writeMode(scope, legacy.mode);
-          return legacy;
+          return legacy.copyWith(clearTemplateCode: true);
         }
         if (mode != null) {
           return ReportFlowPreferences(mode: mode);
@@ -297,7 +253,6 @@ class SharedPreferencesReportFlowPreferenceStore
   @override
   Future<void> remove(ReportPreferenceScope scope) => _synchronized(() async {
     await _preferences.remove(_selectedKey(scope));
-    await _preferences.remove(_legacySelectedV5Key(scope));
     await _preferences.remove(_modeKey(scope));
   });
 
@@ -305,7 +260,6 @@ class SharedPreferencesReportFlowPreferenceStore
   Future<void> removeSelectedTemplate(ReportPreferenceScope scope) =>
       _synchronized(() async {
         await _preferences.remove(_selectedKey(scope));
-        await _preferences.remove(_legacySelectedV5Key(scope));
       });
 
   Future<void> _writeV6(
@@ -321,9 +275,7 @@ class SharedPreferencesReportFlowPreferenceStore
           'templateCode': templateCode,
         }),
       );
-      // A genuine V6 Code supersedes any old ID record.
-      await _preferences.remove(_legacySelectedV5Key(scope));
-    } else if (preferences.templateId == null) {
+    } else {
       await _preferences.remove(_selectedKey(scope));
     }
     await _writeMode(scope, preferences.mode);
@@ -398,8 +350,6 @@ class SharedPreferencesReportFlowPreferenceStore
   }
 
   ReportFlowPreferences? _legacyStandaloneMatch(ReportPreferenceScope scope) {
-    final templateId = _preferences.getString(_legacyTemplateIdKey)?.trim();
-    if (templateId == null || templateId.isEmpty) return null;
     if (_preferences.getInt(_legacySystemIdKey) !=
         scope.resolvedLegacySystemId) {
       return null;
@@ -418,10 +368,7 @@ class SharedPreferencesReportFlowPreferenceStore
     final mode = PresenterModePreference.values
         .where((value) => value.name == modeName)
         .firstOrNull;
-    return ReportFlowPreferences(
-      templateId: templateId,
-      mode: mode ?? PresenterModePreference.online,
-    );
+    return mode == null ? null : ReportFlowPreferences(mode: mode);
   }
 
   static bool _sameLegacySource(String connectionKey, String legacySource) {
@@ -462,18 +409,6 @@ class SharedPreferencesReportFlowPreferenceStore
       if (systemCode != expectedSystemCode.trim().toLowerCase()) return null;
       final templateCode = decoded['templateCode']?.toString().trim();
       return templateCode == null || templateCode.isEmpty ? null : templateCode;
-    } on FormatException {
-      return null;
-    }
-  }
-
-  static String? _decodeLegacySelectedId(String? raw) {
-    if (raw == null || raw.trim().isEmpty) return null;
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is! Map) return null;
-      final templateId = decoded['templateId']?.toString().trim();
-      return templateId == null || templateId.isEmpty ? null : templateId;
     } on FormatException {
       return null;
     }
@@ -550,10 +485,8 @@ class MemoryReportFlowPreferenceStore implements ReportFlowPreferenceStore {
     ReportPreferenceScope scope,
     ReportFlowPreferences preferences,
   ) async {
-    final templateId = preferences.templateId?.trim();
     final templateCode = preferences.templateCode?.trim();
-    if ((templateId != null && templateId.isNotEmpty) ||
-        (templateCode != null && templateCode.isNotEmpty)) {
+    if (templateCode != null && templateCode.isNotEmpty) {
       _selected[scope.selectedTemplateCanonical] = preferences;
     } else {
       _selected.remove(scope.selectedTemplateCanonical);

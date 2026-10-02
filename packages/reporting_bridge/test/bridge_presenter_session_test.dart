@@ -535,7 +535,7 @@ void main() {
             mode: PresenterSessionMode.online,
             seedData: const <String, dynamic>{'value': 1},
             template: CachedTemplate(
-              id: 'voucher-template',
+              code: 'voucher-template',
               type: 'voucher',
               document: const <String, dynamic>{'meta': <String, dynamic>{}},
             ),
@@ -589,7 +589,7 @@ void main() {
           mode: PresenterSessionMode.online,
           seedData: const <String, dynamic>{'value': 2},
           template: CachedTemplate(
-            id: 'wrong-type',
+            code: 'wrong-type',
             type: 'voucher',
             document: const <String, dynamic>{'meta': <String, dynamic>{}},
           ),
@@ -942,7 +942,7 @@ PresenterSessionRequest _onlineRequest(String sessionId) =>
     );
 
 CachedTemplate _template(String id) => CachedTemplate(
-  id: id,
+  code: id,
   type: 'invoice',
   document: const <String, dynamic>{
     'meta': <String, dynamic>{'name': 'Invoice'},

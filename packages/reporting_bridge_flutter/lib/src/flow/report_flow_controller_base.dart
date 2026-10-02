@@ -33,7 +33,7 @@ class ReportFlowControllerImpl
        _features = features,
        _onDisposed = onDisposed,
        _value = ReportFlowState.initial(
-         request.presenterMode ?? PresenterModePreference.online,
+         request.presenterMode ?? PresenterModePreference.offline,
        );
 
   final ReportFlowRuntime _runtime;
@@ -68,6 +68,7 @@ class ReportFlowControllerImpl
   Future<ReportResult>? _closeFuture;
   Timer? _renderWatchdog;
   ReportFlowPreferences? _persistedPreferences;
+  String? _autoBackendDefaultTemplateCode;
 
   @override
   ReportFlowState get value => _value;
@@ -111,9 +112,14 @@ class ReportFlowControllerImpl
       }
 
       _persistedPreferences = stored;
-      final preferredMode = request.presenterMode ?? stored?.mode;
+      final preferredMode = stored?.mode ?? request.presenterMode;
       final sync = request.templateSyncRequest;
       final catalog = await _runtime.bridgeClient.listTemplates(
+        systemCode: sync.systemCode.value,
+        filter: sync.filter,
+        extra: sync.extra,
+      );
+      var cachedDefaults = await _runtime.bridgeClient.listTemplateDefaults(
         systemCode: sync.systemCode.value,
         filter: sync.filter,
         extra: sync.extra,
@@ -128,19 +134,16 @@ class ReportFlowControllerImpl
       } catch (_) {
         // Online setup can continue even when local cache status is unavailable.
       }
-      final mode =
-          preferredMode ??
-          (presenterCached
-              ? PresenterModePreference.offline
-              : PresenterModePreference.online);
+      final mode = preferredMode ?? PresenterModePreference.offline;
 
-      var requestedTemplateId = request.initialTemplateId ?? stored?.templateId;
-      var candidate = _validTemplateId(templates, requestedTemplateId);
+      var requestedTemplateCode =
+          request.initialTemplateCode ?? stored?.templateCode;
+      var candidate = _validTemplateCode(templates, requestedTemplateCode);
       final requiresAuthoritativeTemplateResolution =
           templates.isEmpty ||
           (stored != null &&
-              request.initialTemplateId == null &&
-              requestedTemplateId != null &&
+              request.initialTemplateCode == null &&
+              requestedTemplateCode != null &&
               candidate == null);
 
       _set(
@@ -148,11 +151,12 @@ class ReportFlowControllerImpl
           stage: ReportFlowStage.preparingResources,
           templates: templates,
           templateCatalogCount: catalog.length,
-          selectedTemplateId:
-              candidate ?? (templates.length == 1 ? templates.single.id : null),
+          selectedTemplateCode:
+              candidate ??
+              (templates.length == 1 ? templates.single.templateCode : null),
           clearSelectedTemplate: candidate == null && templates.length != 1,
           selectedMode: mode,
-          committedTemplateId: candidate,
+          committedTemplateCode: candidate,
           committedMode: mode,
           templateSync: templates.isEmpty
               ? ReportOperationStatus.idle
@@ -172,18 +176,43 @@ class ReportFlowControllerImpl
       );
       _addEvent(const ReportFlowEvent(type: ReportFlowEventType.initialized));
 
-      if (requiresAuthoritativeTemplateResolution) {
-        final synchronized = await _synchronizeTemplatesForEntry();
-        if (_disposed || !synchronized) return;
-        templates = _value.templates;
-        if (request.initialTemplateId == null) {
-          stored = _persistedPreferences;
-          requestedTemplateId = stored?.templateId;
-        }
-        candidate = _validTemplateId(templates, requestedTemplateId);
+      final presenterSyncFuture =
+          mode == PresenterModePreference.offline && !presenterCached
+          ? _syncPresenter()
+          : null;
+      final templateSyncFuture = requiresAuthoritativeTemplateResolution
+          ? _synchronizeTemplatesForEntry()
+          : null;
+
+      final templatesSynchronized = templateSyncFuture == null
+          ? true
+          : await templateSyncFuture;
+      if (presenterSyncFuture != null) {
+        await presenterSyncFuture;
+      }
+      if (_disposed) return;
+
+      if (presenterSyncFuture != null) {
+        presenterCached = _value.presenterCached;
+        presenterManifest = _value.presenterManifest;
       }
 
-      final storedTemplateId = stored?.templateId?.trim();
+      if (requiresAuthoritativeTemplateResolution) {
+        if (!templatesSynchronized) return;
+        templates = _value.templates;
+        if (request.initialTemplateCode == null) {
+          stored = _persistedPreferences;
+          requestedTemplateCode = stored?.templateCode;
+        }
+        candidate = _validTemplateCode(templates, requestedTemplateCode);
+        cachedDefaults = await _runtime.bridgeClient.listTemplateDefaults(
+          systemCode: sync.systemCode.value,
+          filter: sync.filter,
+          extra: sync.extra,
+        );
+      }
+
+      final storedTemplateCode = stored?.templateCode?.trim();
       // Every workflow catalog lookup is scoped by the active
       // TemplateSyncRequest filter/extra. Absence from that result proves only
       // that the saved template is unavailable for this request; it does not
@@ -192,23 +221,40 @@ class ReportFlowControllerImpl
       // resolution proves otherwise.
       final storedTemplateUnavailableForRequest =
           stored != null &&
-          storedTemplateId != null &&
-          storedTemplateId.isNotEmpty &&
+          storedTemplateCode != null &&
+          storedTemplateCode.isNotEmpty &&
           candidate == null &&
-          request.initialTemplateId == null;
+          request.initialTemplateCode == null;
+
+      final backendDefault = _validBackendDefaultCode(
+        templates,
+        cachedDefaults,
+        request.reportType.value,
+      );
 
       // Do not auto-adopt another eligible template when the saved template is
       // unavailable for the current request.
-      String? fallbackTemplateId;
+      String? fallbackTemplateCode;
       if (request.entryPolicy == ReportEntryPolicy.alwaysSelectTemplate) {
-        fallbackTemplateId = templates.length == 1 ? templates.single.id : null;
+        fallbackTemplateCode =
+            backendDefault ??
+            (templates.length == 1 ? templates.single.templateCode : null);
       } else {
-        fallbackTemplateId = templates.isEmpty ? null : templates.first.id;
+        fallbackTemplateCode =
+            backendDefault ??
+            (templates.isEmpty ? null : templates.first.templateCode);
       }
 
       final selected = storedTemplateUnavailableForRequest
           ? null
-          : (candidate ?? fallbackTemplateId);
+          : (candidate ?? fallbackTemplateCode);
+      _autoBackendDefaultTemplateCode =
+          candidate == null &&
+              !storedTemplateUnavailableForRequest &&
+              selected != null &&
+              selected == backendDefault
+          ? selected
+          : null;
       final fallbackReason = switch (request.entryPolicy) {
         ReportEntryPolicy.alwaysPrepare =>
           ReportEntryFallbackReason.entryPolicy,
@@ -232,10 +278,10 @@ class ReportFlowControllerImpl
           templateCatalogCount: requiresAuthoritativeTemplateResolution
               ? _value.templateCatalogCount
               : catalog.length,
-          selectedTemplateId: selected,
+          selectedTemplateCode: selected,
           clearSelectedTemplate: selected == null,
           selectedMode: mode,
-          committedTemplateId: selected,
+          committedTemplateCode: selected,
           committedMode: mode,
           templateSync: templates.isEmpty
               ? ReportOperationStatus.idle
@@ -293,7 +339,10 @@ class ReportFlowControllerImpl
       } catch (_) {
         // Selection can still proceed from the current in-memory preference.
       }
-      final selected = _resolveTemplateAfterSync(templates);
+      final selected = _resolveTemplateAfterSync(
+        templates,
+        synchronized.defaultTemplates,
+      );
       final keepAlwaysPrepareGate =
           request.entryPolicy == ReportEntryPolicy.alwaysPrepare &&
           _value.resourceOrigin == ResourcePreparationOrigin.initialSetup &&
@@ -303,7 +352,7 @@ class ReportFlowControllerImpl
           stage: returnStage,
           templates: templates,
           templateCatalogCount: synchronized.catalogCount,
-          selectedTemplateId: selected,
+          selectedTemplateCode: selected,
           clearSelectedTemplate: selected == null,
           templateSync: ReportOperationStatus.succeeded,
           templatesSyncedAt: DateTime.now(),
@@ -356,13 +405,16 @@ class ReportFlowControllerImpl
       } catch (_) {
         // Keep the existing in-memory preference if re-resolution fails.
       }
-      final selected = _resolveTemplateAfterSync(templates);
+      final selected = _resolveTemplateAfterSync(
+        templates,
+        synchronized.defaultTemplates,
+      );
       _set(
         _value.copyWith(
           stage: ReportFlowStage.preparingResources,
           templates: templates,
           templateCatalogCount: synchronized.catalogCount,
-          selectedTemplateId: selected,
+          selectedTemplateCode: selected,
           clearSelectedTemplate: selected == null,
           templateSync: ReportOperationStatus.succeeded,
           templatesSyncedAt: DateTime.now(),
@@ -398,7 +450,13 @@ class ReportFlowControllerImpl
     }
   }
 
-  Future<({int catalogCount, List<CachedTemplate> compatibleTemplates})>
+  Future<
+    ({
+      int catalogCount,
+      List<CachedTemplate> compatibleTemplates,
+      List<TemplateDefaultHint> defaultTemplates,
+    })
+  >
   _synchronizeTemplateCatalog() async {
     final sync = request.templateSyncRequest;
     final summary = await _runtime.connection.diagnostics
@@ -438,9 +496,15 @@ class ReportFlowControllerImpl
       filter: sync.filter,
       extra: sync.extra,
     );
+    final defaults = await _runtime.bridgeClient.listTemplateDefaults(
+      systemCode: sync.systemCode.value,
+      filter: sync.filter,
+      extra: sync.extra,
+    );
     return (
       catalogCount: catalog.length,
       compatibleTemplates: _compatibleTemplates(catalog),
+      defaultTemplates: defaults,
     );
   }
 
@@ -613,28 +677,28 @@ class ReportFlowControllerImpl
     final draft = origin == TemplateSelectionOrigin.reportSettings
         ? (_value.settingsDraft ??
               ReportSettingsDraft(
-                templateId:
-                    _value.committedTemplateId ?? _value.selectedTemplateId,
+                templateCode:
+                    _value.committedTemplateCode ?? _value.selectedTemplateCode,
                 mode: _value.committedMode ?? _value.selectedMode,
               ))
         : _value.settingsDraft;
-    final draftTemplateId = switch (origin) {
-      TemplateSelectionOrigin.reportSettings => _validTemplateId(
+    final draftTemplateCode = switch (origin) {
+      TemplateSelectionOrigin.reportSettings => _validTemplateCode(
         _value.templates,
-        draft?.templateId,
+        draft?.templateCode,
       ),
-      TemplateSelectionOrigin.previewRecovery => _validTemplateId(
+      TemplateSelectionOrigin.previewRecovery => _validTemplateCode(
         _value.templates,
-        _value.committedTemplateId ?? _value.selectedTemplateId,
+        _value.committedTemplateCode ?? _value.selectedTemplateCode,
       ),
-      TemplateSelectionOrigin.initialSetup => _value.selectedTemplateId,
+      TemplateSelectionOrigin.initialSetup => _value.selectedTemplateCode,
     };
     _set(
       _value.copyWith(
         stage: ReportFlowStage.selectingTemplate,
         selectionOrigin: origin,
-        selectedTemplateId: draftTemplateId,
-        clearSelectedTemplate: draftTemplateId == null,
+        selectedTemplateCode: draftTemplateCode,
+        clearSelectedTemplate: draftTemplateCode == null,
         settingsDraft: draft,
         clearFailure: origin != TemplateSelectionOrigin.previewRecovery,
       ),
@@ -685,29 +749,29 @@ class ReportFlowControllerImpl
     }
     if (_value.selectionOrigin == TemplateSelectionOrigin.reportSettings) {
       final draft = _value.settingsDraft;
-      final draftTemplateId = _validTemplateId(
+      final draftTemplateCode = _validTemplateCode(
         _value.templates,
-        draft?.templateId,
+        draft?.templateCode,
       );
       _set(
         _value.copyWith(
           stage: ReportFlowStage.editingSettings,
-          selectedTemplateId: draftTemplateId,
-          clearSelectedTemplate: draftTemplateId == null,
+          selectedTemplateCode: draftTemplateCode,
+          clearSelectedTemplate: draftTemplateCode == null,
           selectedMode: draft?.mode ?? _value.selectedMode,
           clearFailure: true,
         ),
       );
     } else if (_value.selectionOrigin ==
         TemplateSelectionOrigin.previewRecovery) {
-      final committed = _validTemplateId(
+      final committed = _validTemplateCode(
         _value.templates,
-        _value.committedTemplateId,
+        _value.committedTemplateCode,
       );
       _set(
         _value.copyWith(
           stage: ReportFlowStage.failed,
-          selectedTemplateId: committed,
+          selectedTemplateCode: committed,
           clearSelectedTemplate: committed == null,
         ),
       );
@@ -717,25 +781,26 @@ class ReportFlowControllerImpl
   }
 
   @override
-  void selectTemplate(String templateId) {
+  void selectTemplate(String templateCode) {
     _ensureActive();
     if (_operationInProgress ||
         (_value.stage != ReportFlowStage.selectingTemplate &&
             _value.stage != ReportFlowStage.editingSettings) ||
-        _validTemplateId(_value.templates, templateId) == null) {
+        _validTemplateCode(_value.templates, templateCode) == null) {
       return;
     }
+    _autoBackendDefaultTemplateCode = null;
     final draft = _value.stage == ReportFlowStage.editingSettings
         ? (_value.settingsDraft ??
                   ReportSettingsDraft(
-                    templateId: _value.selectedTemplateId,
+                    templateCode: _value.selectedTemplateCode,
                     mode: _value.selectedMode,
                   ))
-              .copyWith(templateId: templateId)
+              .copyWith(templateCode: templateCode)
         : _value.settingsDraft;
     _set(
       _value.copyWith(
-        selectedTemplateId: templateId,
+        selectedTemplateCode: templateCode,
         settingsDraft: draft,
         clearFailure:
             _value.selectionOrigin != TemplateSelectionOrigin.previewRecovery,
@@ -758,10 +823,10 @@ class ReportFlowControllerImpl
         settingsDraft:
             (_value.settingsDraft ??
                     ReportSettingsDraft(
-                      templateId: _value.selectedTemplateId,
+                      templateCode: _value.selectedTemplateCode,
                       mode: _value.selectedMode,
                     ))
-                .copyWith(templateId: _value.selectedTemplateId),
+                .copyWith(templateCode: _value.selectedTemplateCode),
         clearFailure: true,
       ),
     );
@@ -782,7 +847,7 @@ class ReportFlowControllerImpl
     final draft = settingsContext
         ? (_value.settingsDraft ??
                   ReportSettingsDraft(
-                    templateId: _value.selectedTemplateId,
+                    templateCode: _value.selectedTemplateCode,
                     mode: _value.selectedMode,
                   ))
               .copyWith(mode: mode)
@@ -809,11 +874,12 @@ class ReportFlowControllerImpl
     _set(
       _value.copyWith(
         stage: ReportFlowStage.editingSettings,
-        committedTemplateId:
-            _value.committedTemplateId ?? _value.selectedTemplateId,
+        committedTemplateCode:
+            _value.committedTemplateCode ?? _value.selectedTemplateCode,
         committedMode: _value.committedMode ?? _value.selectedMode,
         settingsDraft: ReportSettingsDraft(
-          templateId: _value.committedTemplateId ?? _value.selectedTemplateId,
+          templateCode:
+              _value.committedTemplateCode ?? _value.selectedTemplateCode,
           mode: _value.committedMode ?? _value.selectedMode,
         ),
         clearFailure: true,
@@ -829,7 +895,7 @@ class ReportFlowControllerImpl
     if (draft != null) {
       _set(
         _value.copyWith(
-          selectedTemplateId: draft.templateId,
+          selectedTemplateCode: draft.templateCode,
           selectedMode: draft.mode,
         ),
       );
@@ -852,9 +918,9 @@ class ReportFlowControllerImpl
             !selectingFromSettings)) {
       return;
     }
-    final committedTemplate = _validTemplateId(
+    final committedTemplate = _validTemplateCode(
       _value.templates,
-      _value.committedTemplateId,
+      _value.committedTemplateCode,
     );
     final committedMode = _value.committedMode ?? _value.selectedMode;
     _set(
@@ -862,7 +928,7 @@ class ReportFlowControllerImpl
         stage: _value.presenterLaunch == null
             ? ReportFlowStage.selectingTemplate
             : ReportFlowStage.previewing,
-        selectedTemplateId: committedTemplate,
+        selectedTemplateCode: committedTemplate,
         clearSelectedTemplate: committedTemplate == null,
         selectedMode: committedMode,
         clearSettingsDraft: true,
@@ -1056,7 +1122,7 @@ class ReportFlowControllerImpl
         _value.copyWith(
           stage: ReportFlowStage.previewing,
           presenterLaunch: launch,
-          committedTemplateId: template.id,
+          committedTemplateCode: template.templateCode,
           committedMode: _value.selectedMode,
           clearSettingsDraft: true,
           previewLoad: ReportOperationStatus.running,
@@ -1717,50 +1783,93 @@ class ReportFlowControllerImpl
     );
   }
 
-  String? _validTemplateId(List<CachedTemplate> templates, String? candidate) {
-    final id = candidate?.trim();
-    if (id == null || id.isEmpty) return null;
+  String? _validTemplateCode(
+    List<CachedTemplate> templates,
+    String? candidate,
+  ) {
+    final code = candidate?.trim();
+    if (code == null || code.isEmpty) return null;
     for (final template in templates) {
-      if (template.id == id) return id;
+      if (template.templateCode == code) return code;
     }
     return null;
   }
 
-  String? _resolveTemplateAfterSync(List<CachedTemplate> templates) {
-    final current = _validTemplateId(templates, _value.selectedTemplateId);
-    if (current != null) return current;
+  String? _validBackendDefaultCode(
+    List<CachedTemplate> templates,
+    List<TemplateDefaultHint> defaults,
+    String reportType,
+  ) {
+    for (final hint in defaults) {
+      if (hint.reportType != reportType) continue;
+      return _validTemplateCode(templates, hint.templateCode);
+    }
+    return null;
+  }
 
-    final initial = _validTemplateId(templates, request.initialTemplateId);
-    if (initial != null) return initial;
+  String? _resolveTemplateAfterSync(
+    List<CachedTemplate> templates,
+    List<TemplateDefaultHint> defaults,
+  ) {
+    final current = _validTemplateCode(templates, _value.selectedTemplateCode);
+    if (current != null) {
+      if (_autoBackendDefaultTemplateCode != current) {
+        _autoBackendDefaultTemplateCode = null;
+      }
+      return current;
+    }
+
+    final initial = _validTemplateCode(templates, request.initialTemplateCode);
+    if (initial != null) {
+      _autoBackendDefaultTemplateCode = null;
+      return initial;
+    }
 
     final explicitInitialSupplied =
-        request.initialTemplateId != null &&
-        request.initialTemplateId!.trim().isNotEmpty;
+        request.initialTemplateCode != null &&
+        request.initialTemplateCode!.trim().isNotEmpty;
 
     if (!explicitInitialSupplied) {
-      final persisted = _validTemplateId(
+      final persisted = _validTemplateCode(
         templates,
-        _persistedPreferences?.templateId,
+        _persistedPreferences?.templateCode,
       );
-      if (persisted != null) return persisted;
+      if (persisted != null) {
+        _autoBackendDefaultTemplateCode = null;
+        return persisted;
+      }
     }
 
     if (_value.resourceOrigin != ResourcePreparationOrigin.initialSetup) {
-      return templates.length == 1 ? templates.single.id : null;
+      _autoBackendDefaultTemplateCode = null;
+      return templates.length == 1 ? templates.single.templateCode : null;
     }
 
     if (!explicitInitialSupplied) {
-      final savedId = _persistedPreferences?.templateId?.trim();
-      if (savedId != null && savedId.isNotEmpty) {
+      final savedCode = _persistedPreferences?.templateCode?.trim();
+      if (savedCode != null && savedCode.isNotEmpty) {
+        _autoBackendDefaultTemplateCode = null;
         return null;
       }
     }
 
-    if (request.entryPolicy == ReportEntryPolicy.alwaysSelectTemplate) {
-      return templates.length == 1 ? templates.single.id : null;
+    final backendDefault = _validBackendDefaultCode(
+      templates,
+      defaults,
+      request.reportType.value,
+    );
+    if (backendDefault != null) {
+      _autoBackendDefaultTemplateCode = backendDefault;
+      return backendDefault;
     }
 
-    return templates.isEmpty ? null : templates.first.id;
+    if (request.entryPolicy == ReportEntryPolicy.alwaysSelectTemplate) {
+      _autoBackendDefaultTemplateCode = null;
+      return templates.length == 1 ? templates.single.templateCode : null;
+    }
+
+    _autoBackendDefaultTemplateCode = null;
+    return templates.isEmpty ? null : templates.first.templateCode;
   }
 
   Future<void> _persistSelection() async {
@@ -1770,8 +1879,10 @@ class ReportFlowControllerImpl
         code: ReportFlowFailureCode.noCompatibleTemplates,
       );
     }
+    final isUntouchedBackendDefault =
+        _autoBackendDefaultTemplateCode == template.templateCode;
     final preferences = ReportFlowPreferences(
-      templateId: template.id,
+      templateCode: isUntouchedBackendDefault ? null : template.templateCode,
       mode: _value.selectedMode,
     );
     await _runtime.preferences.save(_scope, preferences);

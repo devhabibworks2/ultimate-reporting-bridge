@@ -64,7 +64,7 @@ void main() {
 
         await cache.putTemplate(
           CachedTemplate(
-            id: 'agent22f-template',
+            code: 'agent22f-template',
             type: 'invoice',
             document: document,
             minPresenterVersion: '1.0.0',
@@ -72,7 +72,7 @@ void main() {
           ),
         );
 
-        final restored = await cache.getTemplate('agent22f-template');
+        final restored = await cache.getTemplateByCode('agent22f-template');
         expect(restored, isNotNull);
         expect(jsonEncode(restored!.document), before);
         expect(

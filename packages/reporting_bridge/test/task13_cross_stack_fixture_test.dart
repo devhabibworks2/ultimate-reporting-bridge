@@ -20,7 +20,7 @@ void main() {
         cacheRoot: Directory('${root.path}/templates'),
       );
       final outbound = CachedTemplate(
-        id: 'task13-canonical-document-fixture',
+        code: 'task13-canonical-document-fixture',
         type: 'invoice',
         document: document,
         minPresenterVersion: '1.0.0',
@@ -33,7 +33,7 @@ void main() {
 
       await cache.putTemplate(transported);
 
-      final restored = await cache.getTemplate(
+      final restored = await cache.getTemplateByCode(
         'task13-canonical-document-fixture',
       );
       expect(restored, isNotNull);

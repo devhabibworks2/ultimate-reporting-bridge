@@ -1505,12 +1505,16 @@ class _SelectionPageState extends State<_SelectionPage> {
                   padding: const EdgeInsets.fromLTRB(16, 5, 16, 7),
                   child: _TemplateCard(
                     template: template,
-                    selected: widget.state.selectedTemplateId == template.id,
+                    selected:
+                        widget.state.selectedTemplateCode ==
+                        template.templateCode,
                     showMetadata: widget.features.showTemplateMetadata,
                     strings: widget.strings,
                     onTap: widget.state.busy
                         ? null
-                        : () => widget.controller.selectTemplate(template.id),
+                        : () => widget.controller.selectTemplate(
+                            template.templateCode,
+                          ),
                   ),
                 ),
           ],
@@ -2368,7 +2372,7 @@ class _TemplateCard extends StatelessWidget {
       label: label,
       child: ExcludeSemantics(
         child: Material(
-          key: ValueKey<String>('template-card-${template.id}'),
+          key: ValueKey<String>('template-card-${template.templateCode}'),
           color: selected ? selectedSurface : scheme.surface,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
@@ -2449,7 +2453,7 @@ class _TemplateCard extends StatelessWidget {
                       Padding(
                         padding: const EdgeInsets.only(top: 34),
                         child: _TemplateSelectionIndicator(
-                          templateId: template.id,
+                          templateCode: template.templateCode,
                           selected: selected,
                         ),
                       ),
@@ -2467,18 +2471,18 @@ class _TemplateCard extends StatelessWidget {
 
 class _TemplateSelectionIndicator extends StatelessWidget {
   const _TemplateSelectionIndicator({
-    required this.templateId,
+    required this.templateCode,
     required this.selected,
   });
 
-  final String templateId;
+  final String templateCode;
   final bool selected;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Container(
-      key: ValueKey<String>('template-selection-$templateId'),
+      key: ValueKey<String>('template-selection-$templateCode'),
       width: 28,
       height: 28,
       decoration: BoxDecoration(

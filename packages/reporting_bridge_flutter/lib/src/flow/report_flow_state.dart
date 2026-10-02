@@ -38,16 +38,16 @@ enum ReportEntryFallbackReason {
 }
 
 class ReportSettingsDraft {
-  const ReportSettingsDraft({required this.templateId, required this.mode});
+  const ReportSettingsDraft({required this.templateCode, required this.mode});
 
-  final String? templateId;
+  final String? templateCode;
   final PresenterModePreference mode;
 
   ReportSettingsDraft copyWith({
-    String? templateId,
+    String? templateCode,
     PresenterModePreference? mode,
   }) => ReportSettingsDraft(
-    templateId: templateId ?? this.templateId,
+    templateCode: templateCode ?? this.templateCode,
     mode: mode ?? this.mode,
   );
 }
@@ -66,8 +66,8 @@ class ReportFlowState {
     required this.selectedMode,
     this.templates = const <CachedTemplate>[],
     this.templateCatalogCount = 0,
-    this.selectedTemplateId,
-    this.committedTemplateId,
+    this.selectedTemplateCode,
+    this.committedTemplateCode,
     this.committedMode,
     this.presenterLaunch,
     this.templateSync = ReportOperationStatus.idle,
@@ -110,9 +110,9 @@ class ReportFlowState {
   /// current-report eligibility filtering is applied.
   final int templateCatalogCount;
 
-  final String? selectedTemplateId;
+  final String? selectedTemplateCode;
   final PresenterModePreference selectedMode;
-  final String? committedTemplateId;
+  final String? committedTemplateCode;
   final PresenterModePreference? committedMode;
   final PresenterSessionLaunch? presenterLaunch;
   final ReportOperationStatus templateSync;
@@ -191,19 +191,19 @@ class ReportFlowState {
       exportAction == null;
 
   CachedTemplate? get selectedTemplate {
-    final id = selectedTemplateId;
-    if (id == null) return null;
+    final code = selectedTemplateCode;
+    if (code == null) return null;
     for (final template in templates) {
-      if (template.id == id) return template;
+      if (template.templateCode == code) return template;
     }
     return null;
   }
 
   CachedTemplate? get committedTemplate {
-    final id = committedTemplateId;
-    if (id == null) return null;
+    final code = committedTemplateCode;
+    if (code == null) return null;
     for (final template in templates) {
-      if (template.id == id) return template;
+      if (template.templateCode == code) return template;
     }
     return null;
   }
@@ -212,9 +212,9 @@ class ReportFlowState {
     ReportFlowStage? stage,
     List<CachedTemplate>? templates,
     int? templateCatalogCount,
-    String? selectedTemplateId,
+    String? selectedTemplateCode,
     PresenterModePreference? selectedMode,
-    String? committedTemplateId,
+    String? committedTemplateCode,
     PresenterModePreference? committedMode,
     PresenterSessionLaunch? presenterLaunch,
     ReportOperationStatus? templateSync,
@@ -258,11 +258,11 @@ class ReportFlowState {
     stage: stage ?? this.stage,
     templates: templates ?? this.templates,
     templateCatalogCount: templateCatalogCount ?? this.templateCatalogCount,
-    selectedTemplateId: clearSelectedTemplate
+    selectedTemplateCode: clearSelectedTemplate
         ? null
-        : (selectedTemplateId ?? this.selectedTemplateId),
+        : (selectedTemplateCode ?? this.selectedTemplateCode),
     selectedMode: selectedMode ?? this.selectedMode,
-    committedTemplateId: committedTemplateId ?? this.committedTemplateId,
+    committedTemplateCode: committedTemplateCode ?? this.committedTemplateCode,
     committedMode: committedMode ?? this.committedMode,
     presenterLaunch: clearPresenterLaunch
         ? null

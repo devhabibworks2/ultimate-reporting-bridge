@@ -78,19 +78,23 @@ void main() {
 
       await controller.initialize();
 
-      expect(controller.value.templates.map((t) => t.id), <String>['valid']);
-      expect(controller.eligibleTemplates.map((t) => t.id), <String>['valid']);
+      expect(controller.value.templates.map((t) => t.templateCode), <String>[
+        'valid',
+      ]);
+      expect(controller.eligibleTemplates.map((t) => t.templateCode), <String>[
+        'valid',
+      ]);
       expect(controller.value.templates.length, 1);
-      expect(controller.value.selectedTemplateId, 'valid');
+      expect(controller.value.selectedTemplateCode, 'valid');
 
       controller.openTemplateSelection();
       expect(controller.value.stage, ReportFlowStage.selectingTemplate);
       expect(controller.value.templates.length, 1);
 
       controller.selectTemplate('wrong-lang');
-      expect(controller.value.selectedTemplateId, 'valid');
+      expect(controller.value.selectedTemplateCode, 'valid');
       controller.selectTemplate('valid');
-      expect(controller.value.selectedTemplateId, 'valid');
+      expect(controller.value.selectedTemplateCode, 'valid');
     },
   );
 
@@ -204,7 +208,7 @@ CachedTemplate _canonical({
   required double width,
   required double height,
 }) => CachedTemplate(
-  id: id,
+  code: id,
   type: 'sales_invoice',
   name: id,
   version: '1.0.0',
@@ -232,7 +236,7 @@ CachedTemplate _canonical({
 );
 
 CachedTemplate _malformed({required String id}) => CachedTemplate(
-  id: id,
+  code: id,
   type: 'sales_invoice',
   name: id,
   version: '1.0.0',

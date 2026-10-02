@@ -40,12 +40,15 @@ void main() {
       reportType: 'sales_invoice',
     );
 
-    await store.save(scope, ReportFlowPreferences(templateId: 'T', mode: mode));
+    await store.save(
+      scope,
+      ReportFlowPreferences(templateCode: 'T', mode: mode),
+    );
 
     await store.removeSelectedTemplate(scope);
     expect(
       prefs.getString(
-        'urb.reporting_bridge.selected_template.v5.${scope.selectedTemplateStorageToken}',
+        'urb.reporting_bridge.selected_template.v6.${scope.selectedTemplateStorageToken}',
       ),
       isNull,
     );
@@ -56,7 +59,7 @@ void main() {
       contains(mode.name),
     );
 
-    final bridge = _CatalogBridge(root, templateIds: <String>['alive']);
+    final bridge = _CatalogBridge(root, templateCodes: <String>['alive']);
     final controller = ReportFlowControllerImpl(
       request: buildTestOpenRequest(
         system: 'legacy_system_1',
@@ -74,16 +77,16 @@ void main() {
     await controller.initialize();
 
     expect(controller.value.selectedMode, mode);
-    expect(controller.value.selectedTemplateId, 'alive');
+    expect(controller.value.selectedTemplateCode, 'alive');
     expect(controller.value.stage, ReportFlowStage.preparingResources);
 
     final reloaded = await store.load(scope);
-    expect(reloaded?.templateId, isNull);
-    expect(reloaded?.templateId, isNot('T'));
+    expect(reloaded?.templateCode, isNull);
+    expect(reloaded?.templateCode, isNot('T'));
     expect(reloaded?.mode, mode);
   }
 
-  test('mode-only save clears an existing V5 selected-template key', () async {
+  test('mode-only save clears the current selected-template code', () async {
     final prefs = await SharedPreferences.getInstance();
     final store = SharedPreferencesReportFlowPreferenceStore(prefs);
     final scope = ReportPreferenceScope(
@@ -95,43 +98,43 @@ void main() {
     await store.save(
       scope,
       const ReportFlowPreferences(
-        templateId: 'stale-template',
+        templateCode: 'stale-template',
         mode: PresenterModePreference.online,
       ),
     );
     await store.save(
       scope,
       const ReportFlowPreferences(
-        templateId: null,
+        templateCode: null,
         mode: PresenterModePreference.offline,
       ),
     );
 
     expect(
       prefs.getString(
-        'urb.reporting_bridge.selected_template.v5.${scope.selectedTemplateStorageToken}',
+        'urb.reporting_bridge.selected_template.v6.${scope.selectedTemplateStorageToken}',
       ),
       isNull,
     );
     final reloaded = await store.load(scope);
-    expect(reloaded?.templateId, isNull);
+    expect(reloaded?.templateCode, isNull);
     expect(reloaded?.mode, PresenterModePreference.offline);
   });
 
   test('mode-only preferences round-trip and copyWith can clear template', () {
     const selected = ReportFlowPreferences(
-      templateId: 'T',
+      templateCode: 'T',
       mode: PresenterModePreference.online,
     );
     final modeOnly = selected.copyWith(
-      clearTemplateId: true,
+      clearTemplateCode: true,
       mode: PresenterModePreference.offline,
     );
 
-    expect(modeOnly.templateId, isNull);
+    expect(modeOnly.templateCode, isNull);
     expect(modeOnly.mode, PresenterModePreference.offline);
     final decoded = ReportFlowPreferences.fromJson(modeOnly.toJson());
-    expect(decoded?.templateId, isNull);
+    expect(decoded?.templateCode, isNull);
     expect(decoded?.mode, PresenterModePreference.offline);
   });
 
@@ -145,9 +148,9 @@ void main() {
 }
 
 final class _CatalogBridge extends ReportingBridgeClient {
-  _CatalogBridge(Directory root, {required List<String> templateIds})
+  _CatalogBridge(Directory root, {required List<String> templateCodes})
     : templates = <CachedTemplate>[
-        for (final id in templateIds) _pagesTemplate(id),
+        for (final code in templateCodes) _pagesTemplate(code),
       ],
       super(
         apiBaseUrl: Uri.parse(
@@ -196,7 +199,7 @@ final class _CatalogBridge extends ReportingBridgeClient {
 }
 
 CachedTemplate _pagesTemplate(String id) => CachedTemplate(
-  id: id,
+  code: id,
   type: 'sales_invoice',
   systemId: 1,
   name: id,

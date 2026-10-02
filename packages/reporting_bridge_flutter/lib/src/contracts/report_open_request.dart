@@ -33,8 +33,8 @@ final class ReportOpenRequest {
     this.compatibility = const TemplateCompatibilityConstraints(),
     String? reportName,
     String? requestId,
-    String? initialTemplateId,
-    this.presenterMode,
+    String? initialTemplateCode,
+    this.presenterMode = PresenterModePreference.offline,
     this.entryPolicy = ReportEntryPolicy.smart,
     String? localeOverride,
     this.featuresOverride,
@@ -44,7 +44,7 @@ final class ReportOpenRequest {
   }) : seedData = snapshotJsonObject(seedData),
        reportName = _trimmedOrNull(reportName),
        requestId = _trimmedOrNull(requestId),
-       initialTemplateId = _trimmedOrNull(initialTemplateId),
+       initialTemplateCode = _trimmedOrNull(initialTemplateCode),
        localeOverride = _normalizedLocale(localeOverride) {
     final selectionIdentity = selectedTemplateCriteria.identity;
     final syncIdentity = templateSyncRequest.identity;
@@ -66,7 +66,7 @@ final class ReportOpenRequest {
 
   final String? reportName;
   final String? requestId;
-  final String? initialTemplateId;
+  final String? initialTemplateCode;
   final PresenterModePreference? presenterMode;
   final ReportEntryPolicy entryPolicy;
   final String? localeOverride;
@@ -88,7 +88,7 @@ final class ReportOpenRequest {
     compatibility: compatibility,
     reportName: reportName,
     requestId: requestId,
-    initialTemplateId: initialTemplateId,
+    initialTemplateCode: initialTemplateCode,
     presenterMode: presenterMode,
     entryPolicy: entryPolicy ?? this.entryPolicy,
     localeOverride: localeOverride ?? this.localeOverride,

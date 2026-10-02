@@ -51,7 +51,7 @@ void main() {
     });
   });
 
-  group('legacy migration via final ReportOpenRequest flow', () {
+  group('legacy mode migration ignores template ID selection', () {
     late Directory root;
     late ReportServerConnection connection;
 
@@ -70,16 +70,16 @@ void main() {
       if (root.existsSync()) root.deleteSync(recursive: true);
     });
 
-    Future<void> expectMigrates({
+    Future<void> expectLegacyModeRestore({
       required Map<String, Object> seeded,
-      required String templateId,
+      required String templateCode,
       required PresenterModePreference mode,
       String system = 'legacy_system_7',
     }) async {
       SharedPreferences.setMockInitialValues(seeded);
       final prefs = await SharedPreferences.getInstance();
       final store = SharedPreferencesReportFlowPreferenceStore(prefs);
-      final bridge = _CatalogBridge(root, templateId: templateId);
+      final bridge = _CatalogBridge(root, templateCode: templateCode);
       final controller = _openController(
         connection: connection,
         bridge: bridge,
@@ -88,13 +88,12 @@ void main() {
       );
       addTearDown(controller.dispose);
       await controller.initialize();
-      expect(controller.value.selectedTemplateId, templateId);
       expect(controller.value.selectedMode, mode);
     }
 
-    test('V1 migrates when systemCode is legacy_system_<id>', () async {
+    test('V1 restores mode but ignores templateId', () async {
       final source = connection.endpoints.apiBaseUrl.origin;
-      await expectMigrates(
+      await expectLegacyModeRestore(
         seeded: <String, Object>{
           'erp_host.report_defaults.v1': jsonEncode(<String, dynamic>{
             '${Uri.encodeComponent(source)}|7|sales_invoice': <String, dynamic>{
@@ -103,14 +102,14 @@ void main() {
             },
           }),
         },
-        templateId: 'v1-template',
+        templateCode: 'v1-template',
         mode: PresenterModePreference.offline,
       );
     });
 
-    test('V2 migrates when systemCode is legacy_system_<id>', () async {
+    test('V2 restores mode but ignores templateId', () async {
       final source = connection.endpoints.apiBaseUrl.origin;
-      await expectMigrates(
+      await expectLegacyModeRestore(
         seeded: <String, Object>{
           'erp_host.report_defaults.v2': jsonEncode(<String, dynamic>{
             '${Uri.encodeComponent(source)}|7|sales_invoice': <String, dynamic>{
@@ -119,18 +118,18 @@ void main() {
             },
           }),
         },
-        templateId: 'v2-template',
+        templateCode: 'v2-template',
         mode: PresenterModePreference.online,
       );
     });
 
-    test('V3 migrates when systemCode is legacy_system_<id>', () async {
+    test('V3 restores mode but ignores templateId', () async {
       final scope = ReportPreferenceScope(
         connectionKey: connection.preferenceSourceKey,
         system: 'legacy_system_7',
         reportType: 'sales_invoice',
       );
-      await expectMigrates(
+      await expectLegacyModeRestore(
         seeded: <String, Object>{
           'urb.reporting_bridge.default.v3.${scope.legacyV3StorageToken}':
               jsonEncode(<String, dynamic>{
@@ -138,24 +137,24 @@ void main() {
                 'mode': 'offline',
               }),
         },
-        templateId: 'v3-template',
+        templateCode: 'v3-template',
         mode: PresenterModePreference.offline,
       );
     });
 
-    test('V4 migrates through final Host flow', () async {
+    test('V4 restores mode but ignores templateId', () async {
       final scope = ReportPreferenceScope(
         connectionKey: connection.preferenceSourceKey,
         system: 'legacy_system_7',
         reportType: 'sales_invoice',
       );
-      await expectMigrates(
+      await expectLegacyModeRestore(
         seeded: <String, Object>{
           'urb.reporting_bridge.default.v4.${scope.storageToken}': jsonEncode(
             <String, dynamic>{'templateId': 'v4-template', 'mode': 'offline'},
           ),
         },
-        templateId: 'v4-template',
+        templateCode: 'v4-template',
         mode: PresenterModePreference.offline,
       );
     });
@@ -179,15 +178,15 @@ void main() {
         final store = SharedPreferencesReportFlowPreferenceStore(prefs);
         final bridge = _CatalogBridge(
           root,
-          templateId: 'foreign-template',
-          extraTemplateIds: const <String>['other-a', 'other-b'],
+          templateCode: 'foreign-template',
+          extraTemplateCodes: const <String>['other-a', 'other-b'],
         );
         final controller = _openController(
           connection: connection,
           bridge: bridge,
           preferences: store,
           system: UrbSystem.motakamelTransactions.value,
-          // Keep migration isolation independent of first-compatible entry.
+          // Keep legacy-mode isolation independent of first-compatible entry.
           entryPolicy: ReportEntryPolicy.alwaysSelectTemplate,
         );
         addTearDown(controller.dispose);
@@ -271,7 +270,7 @@ void main() {
         ),
       );
 
-      final bridge = _CatalogBridge(root, templateId: 'alive');
+      final bridge = _CatalogBridge(root, templateCode: 'alive');
       final controller = _openController(
         connection: connection,
         bridge: bridge,
@@ -281,7 +280,7 @@ void main() {
       addTearDown(controller.dispose);
       await controller.initialize();
 
-      expect(controller.value.selectedTemplateId, isNull);
+      expect(controller.value.selectedTemplateCode, isNull);
       expect(controller.value.selectedMode, PresenterModePreference.offline);
       expect(
         prefs.getString(
@@ -326,11 +325,11 @@ ReportFlowControllerImpl _openController({
 final class _CatalogBridge extends ReportingBridgeClient {
   _CatalogBridge(
     Directory root, {
-    required String templateId,
-    List<String> extraTemplateIds = const <String>[],
+    required String templateCode,
+    List<String> extraTemplateCodes = const <String>[],
   }) : templates = <CachedTemplate>[
-         _pagesTemplate(templateId),
-         for (final id in extraTemplateIds) _pagesTemplate(id),
+         _pagesTemplate(templateCode),
+         for (final code in extraTemplateCodes) _pagesTemplate(code),
        ],
        super(
          apiBaseUrl: Uri.parse(
@@ -378,18 +377,17 @@ final class _CatalogBridge extends ReportingBridgeClient {
   Future<void> clearIdentityContext() async {}
 }
 
-CachedTemplate _pagesTemplate(String id) => CachedTemplate(
-  id: id,
+CachedTemplate _pagesTemplate(String code) => CachedTemplate(
   type: 'sales_invoice',
   systemId: 7,
-  code: 'CODE-$id',
-  name: id,
+  code: code,
+  name: code,
   document: <String, dynamic>{
     'schemaVersion': '1.0.0',
     'meta': <String, dynamic>{
       'name': 'Invoice',
       'family': 'sales_invoice',
-      'code': 'CODE-$id',
+      'code': code,
     },
     'page': const <String, dynamic>{
       'layout': 'Pages',

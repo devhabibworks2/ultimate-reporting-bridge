@@ -434,7 +434,7 @@ void main() {
       expect(
         () => ReportTemplateMetadata.fromTemplate(
           CachedTemplate(
-            id: 'custom-alias',
+            code: 'custom-alias',
             type: 'report',
             document: <String, dynamic>{
               'schemaVersion': '1.0.0',
@@ -583,7 +583,7 @@ void main() {
           layout: ReportLayout.thermal,
           size: ReportPageSize.thermal80,
         ),
-      ).map((template) => template.id),
+      ).map((template) => template.templateCode),
       <String>['thermal-en'],
     );
   });
@@ -623,7 +623,7 @@ CachedTemplate _canonical({
     if (customType != null) 'customType': customType,
   };
   return CachedTemplate(
-    id: id,
+    code: id,
     type: family ?? 'unknown',
     document: <String, dynamic>{
       'schemaVersion': '1.0.0',

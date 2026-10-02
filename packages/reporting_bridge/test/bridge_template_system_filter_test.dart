@@ -13,7 +13,7 @@ void main() {
     final cache = TemplateCacheService(cacheRoot: temp);
     await cache.putTemplate(
       const CachedTemplate(
-        id: 'erp-invoice',
+        code: 'erp-invoice',
         type: 'invoice',
         systemId: 1,
         document: <String, dynamic>{
@@ -23,7 +23,7 @@ void main() {
     );
     await cache.putTemplate(
       const CachedTemplate(
-        id: 'pos-invoice',
+        code: 'pos-invoice',
         type: 'invoice',
         systemId: 2,
         document: <String, dynamic>{
@@ -38,7 +38,7 @@ void main() {
     );
 
     expect(erpTemplates, hasLength(1));
-    expect(erpTemplates.single.id, 'erp-invoice');
+    expect(erpTemplates.single.templateCode, 'erp-invoice');
     expect(erpTemplates.single.systemId, 1);
   });
 
@@ -59,7 +59,7 @@ void main() {
       },
     });
 
-    expect(template.id, '34');
+    expect(template.templateCode, 'invoice_standard');
     expect(template.type, 'invoice');
     expect(template.systemId, 7);
     expect(template.templateCode, 'invoice_standard');

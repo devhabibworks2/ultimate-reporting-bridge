@@ -161,6 +161,11 @@ void main() {
   });
 
   group('Host external print reserved extra', () {
+    test('TemplateCode is reserved and legacy templateId is not', () {
+      expect(reservedHostExternalPrintExtraKeys, contains('templateCode'));
+      expect(reservedHostExternalPrintExtraKeys, isNot(contains('templateId')));
+    });
+
     for (final key in reservedHostExternalPrintExtraKeys) {
       test('rejects reserved key $key', () {
         expect(

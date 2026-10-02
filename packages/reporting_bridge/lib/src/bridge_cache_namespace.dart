@@ -187,7 +187,7 @@ Future<void> migrateLegacyBridgeTemplateCacheForApi({
   );
   final oldApiCache = TemplateCacheService(cacheRoot: oldApiRoot);
   for (final template in await oldApiCache.listTemplates()) {
-    migrated[template.id] = template;
+    migrated[template.templateCode] = template;
   }
 
   final oldestRoot = Directory('${bridgeRoot.path}/templates');
@@ -206,7 +206,7 @@ Future<void> migrateLegacyBridgeTemplateCacheForApi({
   if (oldestSourceMatches) {
     final oldestCache = TemplateCacheService(cacheRoot: oldestRoot);
     for (final template in await oldestCache.listTemplates()) {
-      migrated.putIfAbsent(template.id, () => template);
+      migrated.putIfAbsent(template.templateCode, () => template);
     }
   }
 
