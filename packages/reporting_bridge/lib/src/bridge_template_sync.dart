@@ -6,6 +6,7 @@ import 'bridge_cache_namespace.dart';
 import 'bridge_http_fetch.dart';
 import 'bridge_runtime_error.dart';
 import 'bridge_template_cache.dart';
+import 'bridge_template_default.dart';
 import 'bridge_template_query.dart';
 
 const List<String> kPresenterBridgeApprovedHeaderNames = <String>[
@@ -83,6 +84,8 @@ class PresenterTemplateSyncService {
           systemName: metadata?.systemName,
           systemDescription: metadata?.systemDescription,
           appliedFilter: metadata?.appliedFilter,
+          defaultTemplates:
+              metadata?.defaultTemplates ?? const <TemplateDefaultHint>[],
         );
       }
       throw BridgeRuntimeException(
@@ -106,6 +109,7 @@ class PresenterTemplateSyncService {
         extraFingerprint: request.extraFingerprint,
         systemId: parsed.systemId,
         appliedFilter: parsed.appliedFilter,
+        defaultTemplates: parsed.defaultTemplates,
       ),
     );
 
@@ -119,6 +123,7 @@ class PresenterTemplateSyncService {
       systemName: parsed.systemName,
       systemDescription: parsed.systemDescription,
       appliedFilter: parsed.appliedFilter,
+      defaultTemplates: parsed.defaultTemplates,
     );
   }
 
@@ -361,6 +366,64 @@ class PresenterTemplateSyncService {
       templates.add(template);
     }
 
+    final rawDefaults = data['defaultTemplates'];
+    final List<dynamic> defaultItems;
+    if (rawDefaults == null) {
+      defaultItems = const <dynamic>[];
+    } else if (rawDefaults is! List) {
+      throw const BridgeRuntimeException(
+        BridgeTemplateSyncErrorCodes.templateCatalogInvalid,
+        'Template query defaultTemplates must be a list when present.',
+      );
+    } else {
+      defaultItems = rawDefaults;
+    }
+
+    final templatesByCode = <String, CachedTemplate>{
+      for (final template in templates) template.templateCode: template,
+    };
+    final defaults = <TemplateDefaultHint>[];
+    final defaultReportTypes = <String>{};
+    for (var index = 0; index < defaultItems.length; index++) {
+      final raw = defaultItems[index];
+      if (raw is! Map) {
+        throw BridgeRuntimeException(
+          BridgeTemplateSyncErrorCodes.templateCatalogInvalid,
+          'Template query defaultTemplates item $index is not an object.',
+        );
+      }
+      final hint = TemplateDefaultHint.tryFromMap(raw);
+      if (hint == null) {
+        throw BridgeRuntimeException(
+          BridgeTemplateSyncErrorCodes.templateCatalogInvalid,
+          'Template query defaultTemplates item $index is invalid.',
+        );
+      }
+      if (!defaultReportTypes.add(hint.reportType)) {
+        throw BridgeRuntimeException(
+          BridgeTemplateSyncErrorCodes.templateCatalogInvalid,
+          'Template query defaultTemplates contains duplicate reportType '
+          '${hint.reportType}.',
+        );
+      }
+      final referenced = templatesByCode[hint.templateCode];
+      if (referenced == null) {
+        throw BridgeRuntimeException(
+          BridgeTemplateSyncErrorCodes.templateCatalogInvalid,
+          'Template query defaultTemplates item $index references missing '
+          'TemplateCode ${hint.templateCode}.',
+        );
+      }
+      if (referenced.type != hint.reportType) {
+        throw BridgeRuntimeException(
+          BridgeTemplateSyncErrorCodes.templateCatalogInvalid,
+          'Template query defaultTemplates item $index reportType '
+          '${hint.reportType} does not match template ${hint.templateCode}.',
+        );
+      }
+      defaults.add(hint);
+    }
+
     return _ParsedTemplateCatalog(
       catalogRevision: revision,
       systemId: responseSystemId,
@@ -370,6 +433,7 @@ class PresenterTemplateSyncService {
         Map<String, dynamic>.from(appliedFilter),
       ),
       templates: List<CachedTemplate>.unmodifiable(templates),
+      defaultTemplates: List<TemplateDefaultHint>.unmodifiable(defaults),
     );
   }
 
@@ -443,6 +507,7 @@ class TemplateSyncSummary {
     this.systemName,
     this.systemDescription,
     this.appliedFilter,
+    this.defaultTemplates = const <TemplateDefaultHint>[],
   });
 
   final int syncedCount;
@@ -456,6 +521,7 @@ class TemplateSyncSummary {
   final String? systemName;
   final String? systemDescription;
   final Map<String, dynamic>? appliedFilter;
+  final List<TemplateDefaultHint> defaultTemplates;
 
   Map<String, dynamic> toMap() => <String, dynamic>{
     'syncedCount': syncedCount,
@@ -469,6 +535,9 @@ class TemplateSyncSummary {
     if (systemName != null) 'systemName': systemName,
     if (systemDescription != null) 'systemDescription': systemDescription,
     if (appliedFilter != null) 'appliedFilter': appliedFilter,
+    'defaultTemplates': defaultTemplates
+        .map((value) => value.toMap())
+        .toList(growable: false),
   };
 }
 
@@ -480,6 +549,7 @@ final class _ParsedTemplateCatalog {
     required this.systemDescription,
     required this.appliedFilter,
     required this.templates,
+    required this.defaultTemplates,
   });
 
   final String catalogRevision;
@@ -488,6 +558,7 @@ final class _ParsedTemplateCatalog {
   final String? systemDescription;
   final Map<String, dynamic> appliedFilter;
   final List<CachedTemplate> templates;
+  final List<TemplateDefaultHint> defaultTemplates;
 }
 
 final class _TemplateTransportException implements Exception {

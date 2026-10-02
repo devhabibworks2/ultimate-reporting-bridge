@@ -445,12 +445,325 @@ void main() {
       ),
     );
   });
+
+  test('parses and caches valid defaultTemplates', () async {
+    final root = await Directory.systemTemp.createTemp('bridge-query-defaults-');
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async {
+      await server.close(force: true);
+      if (await root.exists()) await root.delete(recursive: true);
+    });
+
+    server.listen((request) async {
+      await utf8.decoder.bind(request).join();
+      await _writeJson(
+        request,
+        _queryEnvelope(
+          <Map<String, dynamic>>[
+            _queryTemplate('invoice-a4', 7, 'sales_invoice'),
+            _queryTemplate('voucher-80', 7, 'payment_voucher'),
+          ],
+          defaultTemplates: <Map<String, dynamic>>[
+            <String, dynamic>{
+              'reportType': 'payment_voucher',
+              'templateCode': 'voucher-80-code',
+              'selectionReason': 'SYSTEM_DEFAULT',
+            },
+            <String, dynamic>{
+              'reportType': 'sales_invoice',
+              'templateCode': 'invoice-a4-code',
+              'selectionReason': 'BRANCH_DEFAULT',
+            },
+          ],
+        ),
+      );
+    });
+
+    final gateway = PresenterServerGateway(
+      apiBaseUrl: _api(server),
+      bridgeRoot: root,
+    );
+    final query = TemplateQueryRequest(systemCode: 'motakamel_transactions');
+    final summary = await gateway.syncTemplates(query: query);
+    expect(summary.defaultTemplates.length, 2);
+    expect(summary.defaultTemplates[0].reportType, 'payment_voucher');
+    expect(summary.defaultTemplates[0].templateCode, 'voucher-80-code');
+    expect(summary.defaultTemplates[0].selectionReason, 'SYSTEM_DEFAULT');
+    expect(summary.defaultTemplates[1].reportType, 'sales_invoice');
+    expect(summary.defaultTemplates[1].templateCode, 'invoice-a4-code');
+    expect(summary.defaultTemplates[1].selectionReason, 'BRANCH_DEFAULT');
+
+    final metadata = await TemplateCacheService(
+      cacheRoot: bridgeTemplateCacheDirectoryForScope(
+        bridgeRoot: root,
+        scope: BridgeTemplateCacheScope(
+          apiBaseUrl: _api(server),
+          systemCode: query.systemCode,
+          identity: query.identity,
+          filter: query.filter,
+          extra: query.extra,
+        ),
+      ),
+    ).readCatalogMetadata();
+    expect(metadata?.defaultTemplates.length, 2);
+    expect(metadata?.defaultTemplates[0].templateCode, 'voucher-80-code');
+    expect(metadata?.defaultTemplates[1].templateCode, 'invoice-a4-code');
+  });
+
+  test('missing defaultTemplates remains compatible with old backends', () async {
+    final root = await Directory.systemTemp.createTemp('bridge-query-old-defaults-');
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async {
+      await server.close(force: true);
+      if (await root.exists()) await root.delete(recursive: true);
+    });
+
+    server.listen((request) async {
+      await utf8.decoder.bind(request).join();
+      final envelope = _queryEnvelope(<Map<String, dynamic>>[
+        _queryTemplate('invoice-a4', 7, 'sales_invoice'),
+      ]);
+      (envelope['data'] as Map<String, dynamic>).remove('defaultTemplates');
+      await _writeJson(request, envelope);
+    });
+
+    final gateway = PresenterServerGateway(
+      apiBaseUrl: _api(server),
+      bridgeRoot: root,
+    );
+    final summary = await gateway.syncTemplates(
+      query: TemplateQueryRequest(systemCode: 'motakamel_transactions'),
+    );
+    expect(summary.defaultTemplates, isEmpty);
+  });
+
+  test('duplicate default reportType is rejected', () async {
+    await _expectInvalidDefaults(
+      defaultTemplates: <Map<String, dynamic>>[
+        <String, dynamic>{
+          'reportType': 'sales_invoice',
+          'templateCode': 'invoice-a4-code',
+          'selectionReason': 'SYSTEM_DEFAULT',
+        },
+        <String, dynamic>{
+          'reportType': 'sales_invoice',
+          'templateCode': 'invoice-a4-code',
+          'selectionReason': 'BRANCH_DEFAULT',
+        },
+      ],
+    );
+  });
+
+  test('defaultTemplates missing templateCode is rejected', () async {
+    await _expectInvalidDefaults(
+      defaultTemplates: <Map<String, dynamic>>[
+        <String, dynamic>{
+          'reportType': 'sales_invoice',
+          'templateCode': 'missing-code',
+          'selectionReason': 'SYSTEM_DEFAULT',
+        },
+      ],
+    );
+  });
+
+  test('defaultTemplates reportType mismatch is rejected', () async {
+    await _expectInvalidDefaults(
+      defaultTemplates: <Map<String, dynamic>>[
+        <String, dynamic>{
+          'reportType': 'payment_voucher',
+          'templateCode': 'invoice-a4-code',
+          'selectionReason': 'SYSTEM_DEFAULT',
+        },
+      ],
+    );
+  });
+
+  test(
+    'invalid defaultTemplates snapshot preserves prior templates and defaults',
+    () async {
+      final root = await Directory.systemTemp.createTemp(
+        'bridge-query-defaults-atomic-',
+      );
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() async {
+        await server.close(force: true);
+        if (await root.exists()) await root.delete(recursive: true);
+      });
+
+      var invalid = false;
+      server.listen((request) async {
+        await utf8.decoder.bind(request).join();
+        if (!invalid) {
+          await _writeJson(
+            request,
+            _queryEnvelope(
+              <Map<String, dynamic>>[
+                _queryTemplate('existing', 7, 'sales_invoice'),
+              ],
+              defaultTemplates: <Map<String, dynamic>>[
+                <String, dynamic>{
+                  'reportType': 'sales_invoice',
+                  'templateCode': 'existing-code',
+                  'selectionReason': 'SYSTEM_DEFAULT',
+                },
+              ],
+            ),
+          );
+          return;
+        }
+        await _writeJson(
+          request,
+          _queryEnvelope(
+            <Map<String, dynamic>>[
+              _queryTemplate('replacement', 7, 'sales_invoice'),
+            ],
+            defaultTemplates: <Map<String, dynamic>>[
+              <String, dynamic>{
+                'reportType': 'sales_invoice',
+                'templateCode': 'missing-code',
+                'selectionReason': 'SYSTEM_DEFAULT',
+              },
+            ],
+          ),
+        );
+      });
+
+      final gateway = PresenterServerGateway(
+        apiBaseUrl: _api(server),
+        bridgeRoot: root,
+      );
+      final query = TemplateQueryRequest(systemCode: 'motakamel_transactions');
+      await gateway.syncTemplates(query: query);
+      invalid = true;
+
+      await expectLater(
+        gateway.syncTemplates(query: query),
+        throwsA(
+          isA<BridgeRuntimeException>().having(
+            (error) => error.code,
+            'code',
+            BridgeTemplateSyncErrorCodes.templateCatalogInvalid,
+          ),
+        ),
+      );
+      expect(
+        (await gateway.listTemplates(query: query)).single.templateCode,
+        'existing-code',
+      );
+      final metadata = await TemplateCacheService(
+        cacheRoot: bridgeTemplateCacheDirectoryForScope(
+          bridgeRoot: root,
+          scope: BridgeTemplateCacheScope(
+            apiBaseUrl: _api(server),
+            systemCode: query.systemCode,
+            identity: query.identity,
+            filter: query.filter,
+            extra: query.extra,
+          ),
+        ),
+      ).readCatalogMetadata();
+      expect(metadata?.defaultTemplates.single.templateCode, 'existing-code');
+    },
+  );
+
+  test('offline fallback returns cached defaultTemplates', () async {
+    final root = await Directory.systemTemp.createTemp(
+      'bridge-query-defaults-offline-',
+    );
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async {
+      await server.close(force: true);
+      if (await root.exists()) await root.delete(recursive: true);
+    });
+
+    var accept = true;
+    server.listen((request) async {
+      await utf8.decoder.bind(request).join();
+      if (!accept) {
+        request.response.statusCode = HttpStatus.serviceUnavailable;
+        await request.response.close();
+        return;
+      }
+      await _writeJson(
+        request,
+        _queryEnvelope(
+          <Map<String, dynamic>>[
+            _queryTemplate('invoice-a4', 7, 'sales_invoice'),
+          ],
+          defaultTemplates: <Map<String, dynamic>>[
+            <String, dynamic>{
+              'reportType': 'sales_invoice',
+              'templateCode': 'invoice-a4-code',
+              'selectionReason': 'SYSTEM_DEFAULT',
+            },
+          ],
+        ),
+      );
+    });
+
+    final gateway = PresenterServerGateway(
+      apiBaseUrl: _api(server),
+      bridgeRoot: root,
+    );
+    final query = TemplateQueryRequest(systemCode: 'motakamel_transactions');
+    await gateway.syncTemplates(query: query);
+    accept = false;
+    await server.close(force: true);
+
+    final summary = await gateway.syncTemplates(query: query);
+    expect(summary.fromCache, isTrue);
+    expect(summary.defaultTemplates.single.templateCode, 'invoice-a4-code');
+  });
+}
+
+Future<void> _expectInvalidDefaults({
+  required List<Map<String, dynamic>> defaultTemplates,
+}) async {
+  final root = await Directory.systemTemp.createTemp('bridge-query-bad-defaults-');
+  final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+  addTearDown(() async {
+    await server.close(force: true);
+    if (await root.exists()) await root.delete(recursive: true);
+  });
+
+  server.listen((request) async {
+    await utf8.decoder.bind(request).join();
+    await _writeJson(
+      request,
+      _queryEnvelope(
+        <Map<String, dynamic>>[
+          _queryTemplate('invoice-a4', 7, 'sales_invoice'),
+        ],
+        defaultTemplates: defaultTemplates,
+      ),
+    );
+  });
+
+  final gateway = PresenterServerGateway(
+    apiBaseUrl: _api(server),
+    bridgeRoot: root,
+  );
+  await expectLater(
+    gateway.syncTemplates(
+      query: TemplateQueryRequest(systemCode: 'motakamel_transactions'),
+    ),
+    throwsA(
+      isA<BridgeRuntimeException>().having(
+        (error) => error.code,
+        'code',
+        BridgeTemplateSyncErrorCodes.templateCatalogInvalid,
+      ),
+    ),
+  );
 }
 
 Uri _api(HttpServer server) =>
     Uri.parse('http://${server.address.host}:${server.port}/');
 
-Map<String, dynamic> _queryEnvelope(List<Map<String, dynamic>> items) {
+Map<String, dynamic> _queryEnvelope(
+  List<Map<String, dynamic>> items, {
+  List<Map<String, dynamic>> defaultTemplates = const <Map<String, dynamic>>[],
+}) {
   return <String, dynamic>{
     'success': true,
     'message': 'OK',
@@ -472,6 +785,7 @@ Map<String, dynamic> _queryEnvelope(List<Map<String, dynamic>> items) {
       },
       'count': items.length,
       'items': items,
+      'defaultTemplates': defaultTemplates,
     },
   };
 }
