@@ -32,6 +32,7 @@ export 'src/platform/bridge_platform_adapters.dart';
 export 'src/platform/ios_print_configuration.dart';
 export 'src/platform/platform_printing.dart';
 export 'src/platform/presenter_surface_binding.dart';
+export 'src/presenter/presenter_warmup.dart';
 export 'src/ui/bridge_pdf_preview_config.dart';
 export 'src/ui/bridge_pdf_view.dart';
 export 'src/ui/bridge_presenter_view.dart';

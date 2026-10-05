@@ -7,6 +7,8 @@ import 'package:reporting_bridge_flutter/src/printing/thermal_printer_native_cli
 import 'package:reporting_bridge_flutter/src/printing/thermal_report_print_platform.dart';
 import '../test_open_request.dart';
 
+const bool _loadingUiOnlyTestFlag = bool.fromEnvironment('URB_LOADING_UI_ONLY');
+
 void main() {
   testWidgets('close button cleans up, pops once, and returns the result', (
     WidgetTester tester,
@@ -937,6 +939,357 @@ void main() {
     },
   );
 
+  testWidgets(
+    'debug loading-ui-only define pins the loading shell',
+    (WidgetTester tester) async {
+      final controller = _FakeController(
+        _selectionState(),
+        featuresOverride: const BridgeUiFeatures(showPrint: true),
+      );
+      await _pumpFlow(tester, controller);
+
+      expect(
+        find.byKey(const ValueKey<String>('bridge-report-skeleton')),
+        findsOneWidget,
+      );
+      expect(find.text('Preparing report'), findsOneWidget);
+      expect(find.byType(PresenterActionDock), findsOneWidget);
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+      expect(find.textContaining('%'), findsNothing);
+      for (final key in <String>[
+        'bridge-save-pdf',
+        'bridge-share-pdf',
+        'bridge-print-pdf',
+        'bridge-report-settings',
+      ]) {
+        expect(_inkWellByKey(tester, key).onTap, isNull);
+      }
+    },
+    skip: !_loadingUiOnlyTestFlag,
+  );
+
+  testWidgets(
+    'initializing uses minimal loading shell with no Close and disabled dock',
+    (WidgetTester tester) async {
+      final controller = _FakeController(
+        ReportFlowState.initial(PresenterModePreference.online),
+        featuresOverride: const BridgeUiFeatures(showPrint: true),
+      );
+      await _pumpFlow(tester, controller);
+
+      expect(find.byType(AppBar), findsNothing);
+      expect(
+        find.byKey(const ValueKey<String>('bridge-report-close')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('bridge-report-skeleton')),
+        findsOneWidget,
+      );
+      expect(find.text('Preparing data'), findsOneWidget);
+      expect(find.byType(PresenterActionDock), findsOneWidget);
+      for (final key in <String>[
+        'bridge-save-pdf',
+        'bridge-share-pdf',
+        'bridge-print-pdf',
+        'bridge-report-settings',
+      ]) {
+        expect(_inkWellByKey(tester, key).onTap, isNull);
+      }
+    },
+  );
+
+  testWidgets('preparingPreview uses the same stable loading shell', (
+    WidgetTester tester,
+  ) async {
+    final controller = _FakeController(
+      _selectionState().copyWith(stage: ReportFlowStage.preparingPreview),
+      featuresOverride: const BridgeUiFeatures(showPrint: true),
+    );
+    await _pumpFlow(tester, controller);
+
+    expect(
+      find.byKey(const ValueKey<String>('bridge-report-skeleton')),
+      findsOneWidget,
+    );
+    expect(find.text('Preparing data'), findsOneWidget);
+    expect(find.byType(PresenterActionDock), findsOneWidget);
+    expect(_inkWellByKey(tester, 'bridge-report-settings').onTap, isNull);
+  });
+
+  testWidgets(
+    'opening-to-report-setup keeps the shimmer at the same screen center',
+    (WidgetTester tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(360, 800);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+      InAppWebViewPlatform.instance = _TestInAppWebViewPlatform();
+
+      final controller = _FakeController(
+        ReportFlowState.initial(PresenterModePreference.online),
+        featuresOverride: const BridgeUiFeatures(showPrint: true),
+      );
+      await _pumpFlow(
+        tester,
+        controller,
+        mediaPadding: const EdgeInsets.only(top: 24),
+      );
+
+      final preparingDataRect = tester.getRect(
+        find.byKey(const ValueKey<String>('bridge-report-skeleton')),
+      );
+      expect(preparingDataRect.center.dx, closeTo(180, 0.5));
+      expect(preparingDataRect.center.dy, closeTo(400, 0.5));
+
+      controller.setState(
+        _previewState().copyWith(
+          renderStatus: PresenterRenderStatus.loading,
+          pdfStatus: PresenterPdfStatus.idle,
+          webViewLoadProgress: 0.2,
+        ),
+      );
+      await tester.pump();
+
+      final preparingReportRect = tester.getRect(
+        find.byKey(const ValueKey<String>('bridge-report-skeleton')),
+      );
+      expect(preparingReportRect.left, closeTo(preparingDataRect.left, 0.5));
+      expect(preparingReportRect.top, closeTo(preparingDataRect.top, 0.5));
+      expect(preparingReportRect.width, closeTo(preparingDataRect.width, 0.5));
+      expect(
+        preparingReportRect.height,
+        closeTo(preparingDataRect.height, 0.5),
+      );
+      expect(preparingReportRect.center.dy, closeTo(400, 0.5));
+    },
+  );
+
+  testWidgets('preview render uses stage 2 without duplicate top progress', (
+    WidgetTester tester,
+  ) async {
+    InAppWebViewPlatform.instance = _TestInAppWebViewPlatform();
+    final controller = _FakeController(
+      _previewState().copyWith(
+        renderStatus: PresenterRenderStatus.loading,
+        pdfStatus: PresenterPdfStatus.idle,
+        webViewLoadProgress: 0.5,
+      ),
+      featuresOverride: const BridgeUiFeatures(showPrint: true),
+    );
+    await _pumpFlow(tester, controller);
+
+    expect(find.text('Preparing report'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('bridge-report-skeleton')),
+      findsOneWidget,
+    );
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+    expect(find.textContaining('%'), findsNothing);
+    final presenter = tester.widget<BridgePresenterView>(
+      find.byType(BridgePresenterView),
+    );
+    expect(presenter.showInternalLoadingIndicator, isFalse);
+    for (final key in <String>[
+      'bridge-save-pdf',
+      'bridge-share-pdf',
+      'bridge-print-pdf',
+      'bridge-report-settings',
+    ]) {
+      expect(_inkWellByKey(tester, key).onTap, isNull);
+    }
+  });
+
+  testWidgets(
+    'web view progress changes do not show progress UI or move the skeleton',
+    (WidgetTester tester) async {
+      InAppWebViewPlatform.instance = _TestInAppWebViewPlatform();
+      final controller = _FakeController(
+        _previewState().copyWith(
+          renderStatus: PresenterRenderStatus.loading,
+          pdfStatus: PresenterPdfStatus.idle,
+          webViewLoadProgress: 0.2,
+        ),
+        featuresOverride: const BridgeUiFeatures(showPrint: true),
+      );
+      await _pumpFlow(tester, controller);
+
+      final before = tester.getRect(
+        find.byKey(const ValueKey<String>('bridge-report-skeleton')),
+      );
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+      expect(find.textContaining('%'), findsNothing);
+
+      controller.setState(controller.value.copyWith(webViewLoadProgress: 0.9));
+      await tester.pump();
+
+      final after = tester.getRect(
+        find.byKey(const ValueKey<String>('bridge-report-skeleton')),
+      );
+      expect(after, before);
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+      expect(find.textContaining('%'), findsNothing);
+    },
+  );
+
+  testWidgets('preview waits at Opening preview until first PDF frame', (
+    WidgetTester tester,
+  ) async {
+    InAppWebViewPlatform.instance = _TestInAppWebViewPlatform();
+    final controller = _FakeController(
+      _previewState().copyWith(pdfStatus: PresenterPdfStatus.ready),
+      featuresOverride: const BridgeUiFeatures(showPrint: true),
+    );
+    await _pumpFlow(tester, controller);
+
+    expect(find.text('Opening preview'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('bridge-report-skeleton')),
+      findsOneWidget,
+    );
+    final loadingSwitcher = tester.widget<AnimatedSwitcher>(
+      find.ancestor(
+        of: find.byKey(const ValueKey<String>('bridge-preview-loading-layer')),
+        matching: find.byType(AnimatedSwitcher),
+      ),
+    );
+    expect(loadingSwitcher.duration, const Duration(milliseconds: 180));
+
+    final presenter = tester.widget<BridgePresenterView>(
+      find.byType(BridgePresenterView),
+    );
+    expect(presenter.onViewerFirstFrame, isNotNull);
+    presenter.onViewerFirstFrame!.call();
+    await tester.pump();
+
+    // While the 180ms loading-shell exit is still visible, the dock must stay
+    // visually and interactively disabled. UAT caught enabled actions under
+    // the outgoing 90% skeleton.
+    expect(
+      find.byKey(const ValueKey<String>('bridge-report-skeleton')),
+      findsOneWidget,
+    );
+    for (final key in <String>[
+      'bridge-save-pdf',
+      'bridge-share-pdf',
+      'bridge-print-pdf',
+      'bridge-report-settings',
+    ]) {
+      expect(_inkWellByKey(tester, key).onTap, isNull);
+    }
+
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(
+      find.byKey(const ValueKey<String>('bridge-report-skeleton')),
+      findsNothing,
+    );
+    expect(_inkWellByKey(tester, 'bridge-save-pdf').onTap, isNotNull);
+    expect(_inkWellByKey(tester, 'bridge-share-pdf').onTap, isNotNull);
+    expect(_inkWellByKey(tester, 'bridge-print-pdf').onTap, isNotNull);
+    expect(_inkWellByKey(tester, 'bridge-report-settings').onTap, isNotNull);
+  });
+
+  testWidgets(
+    'viewer terminal error removes skeleton and restores allowed actions',
+    (WidgetTester tester) async {
+      InAppWebViewPlatform.instance = _TestInAppWebViewPlatform();
+      final controller = _FakeController(
+        _previewState().copyWith(pdfStatus: PresenterPdfStatus.ready),
+        featuresOverride: const BridgeUiFeatures(showPrint: true),
+      );
+      await _pumpFlow(tester, controller);
+
+      final presenter = tester.widget<BridgePresenterView>(
+        find.byType(BridgePresenterView),
+      );
+      expect(presenter.onPreviewError, isNotNull);
+      presenter.onPreviewError!.call(Exception('viewer failed'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(
+        find.byKey(const ValueKey<String>('bridge-report-skeleton')),
+        findsNothing,
+      );
+      expect(_inkWellByKey(tester, 'bridge-save-pdf').onTap, isNotNull);
+      expect(_inkWellByKey(tester, 'bridge-share-pdf').onTap, isNotNull);
+      expect(_inkWellByKey(tester, 'bridge-print-pdf').onTap, isNotNull);
+      expect(_inkWellByKey(tester, 'bridge-report-settings').onTap, isNotNull);
+    },
+  );
+
+  testWidgets('initial loading state exposes no Close control', (
+    WidgetTester tester,
+  ) async {
+    final controller = _FakeController(
+      ReportFlowState.initial(PresenterModePreference.online),
+      featuresOverride: const BridgeUiFeatures(showPrint: true),
+    );
+    await _pumpFlow(tester, controller);
+
+    expect(
+      find.byKey(const ValueKey<String>('bridge-report-close')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('bridge-report-skeleton')),
+      findsOneWidget,
+    );
+    expect(controller.closeCalls, 0);
+  });
+
+  testWidgets('preview loading has no Close before first frame', (
+    WidgetTester tester,
+  ) async {
+    InAppWebViewPlatform.instance = _TestInAppWebViewPlatform();
+    final controller = _FakeController(
+      _previewState().copyWith(
+        renderStatus: PresenterRenderStatus.loading,
+        pdfStatus: PresenterPdfStatus.idle,
+      ),
+    );
+    await _pumpFlow(tester, controller);
+
+    expect(
+      find.byKey(const ValueKey<String>('bridge-report-close')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('bridge-report-skeleton')),
+      findsOneWidget,
+    );
+    expect(controller.closeCalls, 0);
+  });
+
+  testWidgets('Close after first frame uses normal controller close contract', (
+    WidgetTester tester,
+  ) async {
+    InAppWebViewPlatform.instance = _TestInAppWebViewPlatform();
+    final controller = _FakeController(
+      _previewState().copyWith(pdfStatus: PresenterPdfStatus.ready),
+    );
+    await _pumpFlow(tester, controller);
+
+    tester
+        .widget<BridgePresenterView>(find.byType(BridgePresenterView))
+        .onViewerFirstFrame!
+        .call();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final closeRect = tester.getRect(
+      find.byKey(const ValueKey<String>('bridge-report-close')),
+    );
+    expect(closeRect.left, closeTo(22, 0.5));
+
+    await tester.tap(find.byKey(const ValueKey<String>('bridge-report-close')));
+    await tester.pumpAndSettle();
+
+    expect(controller.closeCalls, 1);
+    expect(find.text('Open'), findsOneWidget);
+  });
+
   testWidgets('thermal print progress replaces the preview Print label', (
     WidgetTester tester,
   ) async {
@@ -1338,7 +1691,7 @@ void main() {
         );
         expect(outerClose, findsOneWidget);
         expect(failureCard, findsOneWidget);
-        expect(tester.getCenter(outerClose).dx, greaterThan(180));
+        expect(tester.getCenter(outerClose).dx, lessThan(180));
         expect(
           tester.getCenter(failureCard).dy,
           closeTo(tester.view.physicalSize.height / 2, 90),
@@ -1761,6 +2114,14 @@ void main() {
   );
 }
 
+InkWell _inkWellByKey(WidgetTester tester, String key) =>
+    tester.widget<InkWell>(
+      find.descendant(
+        of: find.byKey(ValueKey<String>(key)),
+        matching: find.byType(InkWell),
+      ),
+    );
+
 Finder _filledButtonLabeled(String label) => find.ancestor(
   of: find.text(label),
   matching: find.bySubtype<FilledButton>(),
@@ -1793,6 +2154,7 @@ Future<void> _pumpFlow(
   _FakeController controller, {
   double textScale = 1,
   BridgeUiConfig ui = const BridgeUiConfig.inheritHost(),
+  EdgeInsets? mediaPadding,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -1801,9 +2163,10 @@ Future<void> _pumpFlow(
           onPressed: () => Navigator.of(context).push<ReportResult>(
             MaterialPageRoute<ReportResult>(
               builder: (routeContext) => MediaQuery(
-                data: MediaQuery.of(
-                  routeContext,
-                ).copyWith(textScaler: TextScaler.linear(textScale)),
+                data: MediaQuery.of(routeContext).copyWith(
+                  textScaler: TextScaler.linear(textScale),
+                  padding: mediaPadding,
+                ),
                 child: ReportFlowScreen(controller: controller, ui: ui),
               ),
             ),
@@ -2043,6 +2406,7 @@ class _FakeController extends ChangeNotifier implements ReportFlowController {
   final BridgeUiFeatures? featuresOverride;
   final TemplateSyncFilter? filterOverride;
   int closeCalls = 0;
+  int disposeCalls = 0;
   int continueCalls = 0;
   int backCalls = 0;
   int syncTemplatesCalls = 0;
@@ -2153,6 +2517,7 @@ class _FakeController extends ChangeNotifier implements ReportFlowController {
 
   @override
   Future<void> dispose() async {
+    disposeCalls += 1;
     _surface.dispose();
     await _events.close();
     super.dispose();
@@ -2313,12 +2678,30 @@ class _TestInAppWebViewPlatform extends InAppWebViewPlatform {
   int createCount = 0;
 
   @override
+  PlatformHeadlessInAppWebView createPlatformHeadlessInAppWebView(
+    PlatformHeadlessInAppWebViewCreationParams params,
+  ) => _TestPlatformHeadlessInAppWebView(params);
+
+  @override
   PlatformInAppWebViewWidget createPlatformInAppWebViewWidget(
     PlatformInAppWebViewWidgetCreationParams params,
   ) {
     createCount += 1;
     return _TestPlatformInAppWebViewWidget(params);
   }
+}
+
+class _TestPlatformHeadlessInAppWebView extends PlatformHeadlessInAppWebView {
+  _TestPlatformHeadlessInAppWebView(super.params) : super.implementation();
+
+  @override
+  Future<void> run() async {}
+
+  @override
+  bool isRunning() => true;
+
+  @override
+  Future<void> dispose() async {}
 }
 
 class _TestPlatformInAppWebViewWidget extends PlatformInAppWebViewWidget {

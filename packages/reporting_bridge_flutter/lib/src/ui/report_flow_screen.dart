@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:reporting_bridge/reporting_bridge.dart';
 
@@ -17,8 +18,12 @@ import 'bridge_presenter_view.dart';
 import 'bridge_ui_config.dart';
 import 'bridge_ui_features.dart';
 import 'presenter_action_dock.dart';
+import 'report_preview_loading_overlay.dart';
 import 'template_presentation.dart';
 import 'thermal_printer_settings_screen.dart';
+
+const bool _loadingUiOnly =
+    kDebugMode && bool.fromEnvironment('URB_LOADING_UI_ONLY');
 
 TextDirection _contentTextDirection(String value, TextDirection fallback) {
   final arabic = RegExp(
@@ -173,6 +178,41 @@ class _ReportFlowScreenState extends State<ReportFlowScreen> {
     final features =
         widget.controller.request.featuresOverride ?? widget.ui.features;
     final pdfPreview = widget.ui.pdfPreview;
+
+    if (_loadingUiOnly) {
+      return Theme(
+        data: theme,
+        child: Directionality(
+          textDirection: strings.arabic ? TextDirection.rtl : TextDirection.ltr,
+          child: Scaffold(
+            body: ReportPreviewLoadingOverlay(
+              stage: ReportPreviewLoadingStage.preparingReport,
+              strings: strings,
+              previewConfig: pdfPreview,
+              onClose: null,
+            ),
+            bottomNavigationBar: PresenterActionDock(
+              saveLabel: strings.savePdf,
+              shareLabel: strings.share,
+              printLabel: strings.print,
+              settingsLabel: strings.settings,
+              showSavePdf: features.showSavePdf,
+              showSharePdf: features.showSharePdf,
+              showPrint: features.showPrint,
+              showSettings: features.showSettings,
+              settingsEnabled: false,
+              outputEnabled: false,
+              busyAction: null,
+              onSave: _noop,
+              onShare: _noop,
+              onPrint: _noop,
+              onSettings: _noop,
+            ),
+          ),
+        ),
+      );
+    }
+
     return Theme(
       data: theme,
       child: Directionality(
@@ -202,10 +242,14 @@ class _ReportFlowScreenState extends State<ReportFlowScreen> {
                   pdfPreview: pdfPreview,
                   searchController: _searchController,
                   onClose: _close,
+                  onCancelOpening: _cancelOpeningImmediately,
                 )
               : switch (state.stage) {
-                  ReportFlowStage.initializing => _BootstrapPage(
-                    message: strings.loading,
+                  ReportFlowStage.initializing => _OpeningPreviewPage(
+                    strings: strings,
+                    features: features,
+                    pdfPreview: pdfPreview,
+                    onClose: _cancelOpeningImmediately,
                   ),
                   ReportFlowStage.preparingResources => _PreparationPage(
                     state: state,
@@ -227,8 +271,11 @@ class _ReportFlowScreenState extends State<ReportFlowScreen> {
                     strings: strings,
                     features: features,
                   ),
-                  ReportFlowStage.preparingPreview => _ProgressPage(
-                    message: strings.preparingPreview,
+                  ReportFlowStage.preparingPreview => _OpeningPreviewPage(
+                    strings: strings,
+                    features: features,
+                    pdfPreview: pdfPreview,
+                    onClose: _cancelOpeningImmediately,
                   ),
                   ReportFlowStage.previewing => _PreviewPage(
                     state: state,
@@ -237,6 +284,7 @@ class _ReportFlowScreenState extends State<ReportFlowScreen> {
                     features: features,
                     pdfPreview: pdfPreview,
                     onClose: _close,
+                    onCancelOpening: _cancelOpeningImmediately,
                   ),
                   ReportFlowStage.failed => _FailurePage(
                     strings: strings,
@@ -265,6 +313,17 @@ class _ReportFlowScreenState extends State<ReportFlowScreen> {
             state.resourceOrigin == ResourcePreparationOrigin.previewRecovery,
       _ => false,
     };
+  }
+
+  void _cancelOpeningImmediately() {
+    if (_closing || !mounted) return;
+    _closing = true;
+    setState(() => _allowRoutePop = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        Navigator.of(context).pop<ReportResult>(const ReportCancelled());
+      }
+    });
   }
 
   Future<void> _close() async {
@@ -320,6 +379,7 @@ class _PersistentPreviewFlow extends StatelessWidget {
     required this.pdfPreview,
     required this.searchController,
     required this.onClose,
+    required this.onCancelOpening,
   });
 
   final ReportFlowState state;
@@ -329,6 +389,7 @@ class _PersistentPreviewFlow extends StatelessWidget {
   final BridgePdfPreviewConfig pdfPreview;
   final TextEditingController searchController;
   final Future<void> Function() onClose;
+  final VoidCallback onCancelOpening;
 
   @override
   Widget build(BuildContext context) {
@@ -373,6 +434,7 @@ class _PersistentPreviewFlow extends StatelessWidget {
       features: features,
       pdfPreview: pdfPreview,
       onClose: onClose,
+      onCancelOpening: onCancelOpening,
     );
     final overlayActive = overlay != null;
 
@@ -393,54 +455,48 @@ class _PersistentPreviewFlow extends StatelessWidget {
   }
 }
 
-class _BootstrapPage extends StatelessWidget {
-  const _BootstrapPage({required this.message});
+class _OpeningPreviewPage extends StatelessWidget {
+  const _OpeningPreviewPage({
+    required this.strings,
+    required this.features,
+    required this.pdfPreview,
+    required this.onClose,
+  });
 
-  final String message;
+  final ReportFlowStrings strings;
+  final BridgeUiFeatures features;
+  final BridgePdfPreviewConfig pdfPreview;
+  final VoidCallback onClose;
 
   @override
-  Widget build(BuildContext context) {
-    final placeholder = Theme.of(context).colorScheme.surfaceContainerHighest;
-    return Scaffold(
-      appBar: AppBar(title: Text(message)),
-      body: SafeArea(
-        child: Semantics(
-          label: message,
-          liveRegion: true,
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 620),
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                children: <Widget>[
-                  Container(
-                    height: 28,
-                    width: 180,
-                    decoration: BoxDecoration(
-                      color: placeholder,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  for (var index = 0; index < 2; index++) ...<Widget>[
-                    Container(
-                      height: 132,
-                      decoration: BoxDecoration(
-                        color: placeholder,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Scaffold(
+    body: ReportPreviewLoadingOverlay(
+      stage: ReportPreviewLoadingStage.preparingData,
+      strings: strings,
+      previewConfig: pdfPreview,
+      onClose: onClose,
+    ),
+    bottomNavigationBar: PresenterActionDock(
+      saveLabel: strings.savePdf,
+      shareLabel: strings.share,
+      printLabel: strings.print,
+      settingsLabel: strings.settings,
+      showSavePdf: features.showSavePdf,
+      showSharePdf: features.showSharePdf,
+      showPrint: features.showPrint,
+      showSettings: features.showSettings,
+      settingsEnabled: false,
+      outputEnabled: false,
+      busyAction: null,
+      onSave: _noop,
+      onShare: _noop,
+      onPrint: _noop,
+      onSettings: _noop,
+    ),
+  );
 }
+
+void _noop() {}
 
 class _ProgressPage extends StatelessWidget {
   const _ProgressPage({required this.message});
@@ -2526,7 +2582,9 @@ class _MetadataChip extends StatelessWidget {
   }
 }
 
-class _PreviewPage extends StatelessWidget {
+enum _PreviewViewerState { waiting, ready, failed }
+
+class _PreviewPage extends StatefulWidget {
   const _PreviewPage({
     required this.state,
     required this.controller,
@@ -2534,6 +2592,7 @@ class _PreviewPage extends StatelessWidget {
     required this.features,
     required this.pdfPreview,
     required this.onClose,
+    required this.onCancelOpening,
   });
 
   final ReportFlowState state;
@@ -2542,10 +2601,76 @@ class _PreviewPage extends StatelessWidget {
   final BridgeUiFeatures features;
   final BridgePdfPreviewConfig pdfPreview;
   final Future<void> Function() onClose;
+  final VoidCallback onCancelOpening;
+
+  @override
+  State<_PreviewPage> createState() => _PreviewPageState();
+}
+
+class _PreviewPageState extends State<_PreviewPage> {
+  static const _loadingExitDuration = Duration(milliseconds: 180);
+
+  _PreviewViewerState _viewerState = _PreviewViewerState.waiting;
+  bool _loadingExitComplete = false;
+  Timer? _loadingExitTimer;
+
+  @override
+  void didUpdateWidget(covariant _PreviewPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final oldSessionId = oldWidget.state.presenterLaunch?.sessionId;
+    final newSessionId = widget.state.presenterLaunch?.sessionId;
+    if (oldSessionId != newSessionId) {
+      _loadingExitTimer?.cancel();
+      _viewerState = _PreviewViewerState.waiting;
+      _loadingExitComplete = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _loadingExitTimer?.cancel();
+    super.dispose();
+  }
+
+  bool get _viewerTerminal => _viewerState != _PreviewViewerState.waiting;
+
+  void _scheduleLoadingExit() {
+    _loadingExitTimer?.cancel();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _loadingExitComplete = true;
+      return;
+    }
+    _loadingExitComplete = false;
+    _loadingExitTimer = Timer(_loadingExitDuration, () {
+      if (!mounted || _loadingExitComplete) return;
+      setState(() => _loadingExitComplete = true);
+    });
+  }
+
+  void _markViewerReady() {
+    if (!mounted || _viewerState == _PreviewViewerState.ready) return;
+    setState(() {
+      _viewerState = _PreviewViewerState.ready;
+      _scheduleLoadingExit();
+    });
+  }
+
+  void _markViewerFailed(Object _) {
+    if (!mounted || _viewerState == _PreviewViewerState.failed) return;
+    setState(() {
+      _viewerState = _PreviewViewerState.failed;
+      _scheduleLoadingExit();
+    });
+  }
+
+  ReportPreviewLoadingStage get _loadingStage =>
+      widget.state.renderStatus == PresenterRenderStatus.loading
+      ? ReportPreviewLoadingStage.preparingReport
+      : ReportPreviewLoadingStage.openingPreview;
 
   Future<void> _print(BuildContext context) async {
     try {
-      await controller.printPdf();
+      await widget.controller.printPdf();
     } catch (error) {
       if (!context.mounted) return;
       final failure = error is ReportFlowFailure
@@ -2554,14 +2679,14 @@ class _PreviewPage extends StatelessWidget {
               code: ReportFlowFailureCode.printFailed,
               diagnostic: error.toString(),
             );
-      final printerSettings = controller.thermalPrinterSettings;
+      final printerSettings = widget.controller.thermalPrinterSettings;
       if (failure.code == ReportFlowFailureCode.printSetupRequired &&
           printerSettings != null) {
         await Navigator.of(context).push<void>(
           MaterialPageRoute<void>(
             builder: (_) => ThermalPrinterSettingsScreen(
               controller: printerSettings,
-              localeOverride: controller.request.localeOverride,
+              localeOverride: widget.controller.request.localeOverride,
             ),
           ),
         );
@@ -2576,15 +2701,16 @@ class _PreviewPage extends StatelessWidget {
           ..hideCurrentSnackBar()
           ..showSnackBar(
             SnackBar(
-              content: Text(strings.failure(failure)),
+              content: Text(widget.strings.failure(failure)),
               action: SnackBarAction(
-                label: strings.settings,
+                label: widget.strings.settings,
                 onPressed: () {
                   Navigator.of(context).push<void>(
                     MaterialPageRoute<void>(
                       builder: (_) => ThermalPrinterSettingsScreen(
                         controller: printerSettings,
-                        localeOverride: controller.request.localeOverride,
+                        localeOverride:
+                            widget.controller.request.localeOverride,
                       ),
                     ),
                   );
@@ -2596,42 +2722,26 @@ class _PreviewPage extends StatelessWidget {
       }
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(strings.failure(failure))));
+        ..showSnackBar(
+          SnackBar(content: Text(widget.strings.failure(failure))),
+        );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final closeFab = Positioned(
-      right: 12,
-      top: 12,
-      child: SafeArea(
-        bottom: false,
-        child: Semantics(
-          button: true,
-          label: strings.close,
-          child: ExcludeSemantics(
-            child: IconButton(
-              key: const ValueKey<String>('bridge-report-close'),
-              tooltip: strings.close,
-              onPressed: state.exportAction == null ? onClose : null,
-              style: IconButton.styleFrom(
-                backgroundColor: scheme.surface.withValues(alpha: 0.92),
-                foregroundColor: scheme.onSurfaceVariant,
-                side: BorderSide(color: scheme.outlineVariant),
-                minimumSize: const Size.square(44),
-              ),
-              icon: const Icon(Icons.close, size: 22),
-            ),
-          ),
-        ),
-      ),
-    );
-
+    final state = widget.state;
     final failed = state.stage == ReportFlowStage.failed;
     final launch = state.presenterLaunch!;
     final template = state.committedTemplate ?? state.selectedTemplate!;
+    final loading = !failed && !_viewerTerminal;
+    final reducedMotion = MediaQuery.disableAnimationsOf(context);
+    final closeAction = state.exportAction != null
+        ? null
+        : loading
+        ? widget.onCancelOpening
+        : widget.onClose;
+
     return Scaffold(
       body: Stack(
         children: <Widget>[
@@ -2639,23 +2749,43 @@ class _PreviewPage extends StatelessWidget {
             child: BridgePresenterView(
               launch: launch,
               templateName: template.templateName,
-              controller: controller,
-              surfaceBinding: controller.presenterSurface,
-              pdfPreview: pdfPreview,
+              controller: widget.controller,
+              surfaceBinding: widget.controller.presenterSurface,
+              pdfPreview: widget.pdfPreview,
+              showInternalLoadingIndicator: false,
+              onViewerFirstFrame: _markViewerReady,
+              onPreviewError: _markViewerFailed,
             ),
           ),
-          if (!failed && state.renderStatus == PresenterRenderStatus.loading)
-            PositionedDirectional(
-              start: 0,
-              end: 0,
-              top: 0,
-              child: SafeArea(
-                bottom: false,
-                child: LinearProgressIndicator(
-                  value: state.webViewLoadProgress < 1
-                      ? state.webViewLoadProgress
-                      : null,
-                  minHeight: 3,
+          if (!failed)
+            Positioned.fill(
+              child: IgnorePointer(
+                ignoring: !loading,
+                child: ExcludeSemantics(
+                  excluding: !loading,
+                  child: AnimatedSwitcher(
+                    duration: reducedMotion
+                        ? Duration.zero
+                        : _loadingExitDuration,
+                    child: loading
+                        ? ReportPreviewLoadingOverlay(
+                            key: const ValueKey<String>(
+                              'bridge-preview-loading-layer',
+                            ),
+                            stage: _loadingStage,
+                            strings: widget.strings,
+                            previewConfig: widget.pdfPreview,
+                            onClose: closeAction == null
+                                ? null
+                                : () =>
+                                      unawaited(Future<void>.sync(closeAction)),
+                          )
+                        : const SizedBox.shrink(
+                            key: ValueKey<String>(
+                              'bridge-preview-loading-complete',
+                            ),
+                          ),
+                  ),
                 ),
               ),
             ),
@@ -2663,37 +2793,60 @@ class _PreviewPage extends StatelessWidget {
             Positioned.fill(
               child: _RenderFailureOverlay(
                 state: state,
-                controller: controller,
-                strings: strings,
+                controller: widget.controller,
+                strings: widget.strings,
               ),
             ),
-          closeFab,
+          if (!loading)
+            Positioned.fill(
+              child: SafeArea(
+                bottom: false,
+                child: Align(
+                  alignment: Alignment.topLeft,
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 22, top: 10),
+                    child: ReportPreviewCloseButton(
+                      strings: widget.strings,
+                      onPressed: closeAction == null
+                          ? null
+                          : () => unawaited(Future<void>.sync(closeAction)),
+                    ),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
       bottomNavigationBar: failed
           ? null
           : PresenterActionDock(
-              saveLabel: strings.savePdf,
-              shareLabel: strings.share,
+              saveLabel: widget.strings.savePdf,
+              shareLabel: widget.strings.share,
               printLabel: switch (state.printProgress?.phase) {
-                ThermalPrintPhase.preparing => strings.preparingPrint,
-                ThermalPrintPhase.connecting => strings.connectingPrinter,
-                ThermalPrintPhase.rasterizing => strings.preparingPrint,
-                ThermalPrintPhase.transmitting => strings.sendingToPrinter,
-                ThermalPrintPhase.printing => strings.sendingToPrinter,
-                null => strings.print,
+                ThermalPrintPhase.preparing => widget.strings.preparingPrint,
+                ThermalPrintPhase.connecting =>
+                  widget.strings.connectingPrinter,
+                ThermalPrintPhase.rasterizing => widget.strings.preparingPrint,
+                ThermalPrintPhase.transmitting =>
+                  widget.strings.sendingToPrinter,
+                ThermalPrintPhase.printing => widget.strings.sendingToPrinter,
+                null => widget.strings.print,
               },
-              settingsLabel: strings.settings,
-              showSavePdf: features.showSavePdf,
-              showSharePdf: features.showSharePdf,
-              showPrint: features.showPrint,
-              showSettings: features.showSettings,
-              outputEnabled: controller.outputReady,
+              settingsLabel: widget.strings.settings,
+              showSavePdf: widget.features.showSavePdf,
+              showSharePdf: widget.features.showSharePdf,
+              showPrint: widget.features.showPrint,
+              showSettings: widget.features.showSettings,
+              settingsEnabled: _viewerTerminal && _loadingExitComplete,
+              outputEnabled:
+                  _viewerTerminal &&
+                  _loadingExitComplete &&
+                  widget.controller.outputReady,
               busyAction: state.exportAction,
-              onSave: () => unawaited(controller.savePdf()),
-              onShare: () => unawaited(controller.sharePdf()),
+              onSave: () => unawaited(widget.controller.savePdf()),
+              onShare: () => unawaited(widget.controller.sharePdf()),
               onPrint: () => unawaited(_print(context)),
-              onSettings: controller.editSettings,
+              onSettings: widget.controller.editSettings,
             ),
     );
   }

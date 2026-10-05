@@ -8,6 +8,7 @@ import '../contracts/template_sync_request.dart';
 import '../logging/bridge_diagnostics.dart';
 import '../persistence/report_flow_preference_store.dart';
 import '../platform/bridge_platform_adapters.dart';
+import '../presenter/report_resource_preparation_service.dart';
 import '../printing/thermal_printer_controller.dart';
 import '../printing/thermal_printer_models.dart';
 import '../printing/thermal_report_print_platform.dart';
@@ -55,6 +56,9 @@ class ReportFlowControllerImpl extends base.ReportFlowControllerImpl
     final scopedRuntime = ReportFlowRuntime(
       connection: runtime.connection,
       bridgeClient: flowBridgeClient,
+      resourcePreparation: runtime.hasCustomResourcePreparation
+          ? runtime.resourcePreparation
+          : ReportResourcePreparationService(bridgeClient: flowBridgeClient),
       preferences: scopedPreferences,
       filePlatform: runtime.filePlatform,
       surfaceBinding: runtime.surfaceBinding,

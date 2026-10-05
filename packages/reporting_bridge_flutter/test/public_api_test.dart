@@ -1,10 +1,18 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reporting_bridge_flutter/reporting_bridge_flutter.dart';
 
 void main() {
+  test('ReportOpenRequest omits obsolete directPrintAfterSave API', () {
+    final source = File(
+      'lib/src/contracts/report_open_request.dart',
+    ).readAsStringSync();
+    expect(source, isNot(contains('directPrintAfterSave')));
+  });
+
   test('public API exports Android and iOS print modes', () {
     expect(AndroidPrintMode.values.first, AndroidPrintMode.escPos);
     expect(IosPrintMode.values, <IosPrintMode>[IosPrintMode.airPrint]);
@@ -84,7 +92,6 @@ void main() {
     );
 
     expect(request.reportType, UrbReportType.salesInvoice);
-    expect(request.directPrintAfterSave, isFalse);
     expect(
       request.selectedTemplateCriteria.reportType,
       UrbReportType.salesInvoice,
@@ -192,5 +199,23 @@ void main() {
 
     expect(printHeadless, isA<Function>());
     expect(warmUp, isA<Function>());
+
+    Future<Uint8List> Function(ReportOpenRequest request) generate(
+      ReportingBridgeFlutterClient client,
+    ) => client.generateReportPdfHeadless;
+    Future<PresenterWarmupResult> Function(
+      ReportOpenRequest request, {
+      bool refreshResources,
+      bool warmHeadlessSurface,
+    })
+    prepare(ReportingBridgeFlutterClient client) => client.warmUpPresenter;
+    expect(generate, isA<Function>());
+    expect(prepare, isA<Function>());
+    const result = PresenterWarmupResult(
+      surfaceStatus: PresenterWarmupSurfaceStatus.skipped,
+      resourceStatus: PresenterWarmupResourceStatus.refreshed,
+      presenterMode: PresenterModePreference.offline,
+    );
+    expect(result.resourceStatus, PresenterWarmupResourceStatus.refreshed);
   });
 }

@@ -35,7 +35,6 @@ void main() {
     Duration renderTimeout = const Duration(seconds: 30),
     BridgeUiFeatures features = const BridgeUiFeatures(),
     ReportEntryPolicy entryPolicy = ReportEntryPolicy.alwaysPrepare,
-    bool directPrintAfterSave = false,
     int systemId = 1,
     String? initialTemplateCode,
     TemplateCompatibilityConstraints compatibility =
@@ -52,7 +51,7 @@ void main() {
         entryPolicy: entryPolicy,
         initialTemplateCode: initialTemplateCode,
         compatibility: compatibility,
-      ).copyWith(directPrintAfterSave: directPrintAfterSave),
+      ),
       runtime: ReportFlowRuntime(
         connection: ReportServerConnection(
           endpoints: ReportServerEndpoints.deployed(
@@ -191,30 +190,6 @@ void main() {
     expect(bridge.presenterSyncCalls, 0);
     expect(controller.value.stage, ReportFlowStage.previewing);
   });
-
-  test(
-    'directPrintAfterSave remains inert and does not bypass Preview',
-    () async {
-      preferences.valuesBySystem['legacy_system_1'] =
-          const ReportFlowPreferences(
-            templateCode: 't1',
-            mode: PresenterModePreference.online,
-          );
-      final printer = _CountingPrintPlatform();
-      final controller = createController(
-        entryPolicy: ReportEntryPolicy.smart,
-        directPrintAfterSave: true,
-        printPlatform: printer,
-      );
-      addTearDown(controller.dispose);
-
-      await controller.initialize();
-
-      expect(controller.value.stage, ReportFlowStage.previewing);
-      expect(controller.value.presenterLaunch, isNotNull);
-      expect(printer.calls, 0);
-    },
-  );
 
   test(
     'smart entry opens Preview for a valid offline default and ready bundle',
@@ -2213,16 +2188,6 @@ CachedTemplate _sizedTemplate(String code, String size) {
       'elements': const <dynamic>[],
     },
   );
-}
-
-class _CountingPrintPlatform implements ReportPrintPlatform {
-  int calls = 0;
-
-  @override
-  Future<ReportPrintResult> printPdf(ReportPrintRequest request) async {
-    calls += 1;
-    return const ReportPrintResult.submitted();
-  }
 }
 
 class _FakeBridgeClient extends ReportingBridgeClient {

@@ -21,6 +21,9 @@ class BridgePresenterView extends StatefulWidget {
     required this.controller,
     required this.surfaceBinding,
     this.pdfPreview = const BridgePdfPreviewConfig(),
+    this.showInternalLoadingIndicator = true,
+    this.onViewerFirstFrame,
+    this.onPreviewError,
     @visibleForTesting this.headlessSurfaceFactory,
     @visibleForTesting this.pdfViewBuilder,
   });
@@ -30,6 +33,9 @@ class BridgePresenterView extends StatefulWidget {
   final ReportFlowController controller;
   final PresenterSurfaceBinding surfaceBinding;
   final BridgePdfPreviewConfig pdfPreview;
+  final bool showInternalLoadingIndicator;
+  final VoidCallback? onViewerFirstFrame;
+  final ValueChanged<Object>? onPreviewError;
 
   @visibleForTesting
   final HeadlessPresenterSurfaceFactory? headlessSurfaceFactory;
@@ -99,6 +105,7 @@ class _BridgePresenterViewState extends State<BridgePresenterView> {
       });
     } catch (error) {
       if (!mounted || generation != _surfaceGeneration) return;
+      widget.onPreviewError?.call(error);
       setState(() {
         _surfaceError = error;
       });
@@ -122,6 +129,9 @@ class _BridgePresenterViewState extends State<BridgePresenterView> {
 
     final cachedPdf = widget.surfaceBinding.cachedPdf;
     if (cachedPdf == null) {
+      if (!widget.showInternalLoadingIndicator) {
+        return const SizedBox.expand(key: Key('bridge-pdf-loading'));
+      }
       return const Center(
         key: Key('bridge-pdf-loading'),
         child: CircularProgressIndicator(),
@@ -137,7 +147,11 @@ class _BridgePresenterViewState extends State<BridgePresenterView> {
       previewConfig: widget.pdfPreview,
       onDocumentOpenStarted: widget.surfaceBinding.markViewerOpenStarted,
       onDocumentLoaded: widget.surfaceBinding.markViewerDocumentLoaded,
-      onFirstFrameAfterDocument: widget.surfaceBinding.markViewerFirstFrame,
+      onViewerError: widget.onPreviewError,
+      onFirstFrameAfterDocument: () {
+        widget.surfaceBinding.markViewerFirstFrame();
+        widget.onViewerFirstFrame?.call();
+      },
     );
   }
 

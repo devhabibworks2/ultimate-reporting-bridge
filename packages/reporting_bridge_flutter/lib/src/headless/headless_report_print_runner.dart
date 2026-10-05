@@ -1,14 +1,10 @@
-import 'dart:async';
-
-import 'package:reporting_bridge/reporting_bridge.dart';
-
 import '../flow/report_flow_controller.dart';
-import '../flow/report_flow_failure.dart';
 import '../flow/report_flow_state.dart';
 import '../platform/bridge_platform_adapters.dart';
 import '../printing/thermal_printer_models.dart';
 import 'headless_presenter_surface.dart';
 import 'headless_report_print_progress.dart';
+import 'headless_report_render_runner.dart';
 
 final class HeadlessReportPrintRunner {
   HeadlessReportPrintRunner({
@@ -26,6 +22,8 @@ final class HeadlessReportPrintRunner {
   }) async {
     final totalWatch = Stopwatch()..start();
     var stageWatch = Stopwatch()..start();
+    var printStarted = false;
+
     void timing(HeadlessReportPrintTimingStage stage) {
       _emitTiming(
         HeadlessReportPrintTiming(
@@ -45,131 +43,56 @@ final class HeadlessReportPrintRunner {
       onProgress,
     );
 
-    final controller = _createController();
-    HeadlessPresenterSurface? surface;
-    var printStarted = false;
-
-    void listener() {
-      _handleControllerChange(
-        controller: controller,
-        onProgress: onProgress,
-        printStarted: printStarted,
-      );
-    }
-
-    controller.addListener(listener);
-    try {
-      await controller.initialize();
-      timing(HeadlessReportPrintTimingStage.preparingTemplate);
-      if (controller.value.failure != null) {
-        throw controller.value.failure!;
-      }
-      final launch = _requireLaunch(controller);
-      final template =
-          controller.value.committedTemplate ??
-          controller.value.selectedTemplate!;
-      timing(HeadlessReportPrintTimingStage.preparingSession);
-
-      _emit(
-        HeadlessReportPrintProgress(
-          phase: HeadlessReportPrintPhase.loadingPresenter,
-          fraction: controller.value.webViewLoadProgress,
-        ),
-        onProgress,
-      );
-
-      surface = _surfaceFactory();
-      await surface.start(
-        launch: launch,
-        templateName: template.templateName,
-        controller: controller,
-        surfaceBinding: controller.presenterSurface,
-      );
-      timing(HeadlessReportPrintTimingStage.startingWebView);
-
-      await _waitForOutputReady(controller);
-      timing(HeadlessReportPrintTimingStage.rendering);
-
-      printStarted = true;
-      _emit(
-        const HeadlessReportPrintProgress(
-          phase: HeadlessReportPrintPhase.generatingPdf,
-        ),
-        onProgress,
-      );
-      final result = await controller.printPdf();
-      timing(HeadlessReportPrintTimingStage.generatingPdf);
-      _emit(
-        const HeadlessReportPrintProgress(
-          phase: HeadlessReportPrintPhase.completed,
-        ),
-        onProgress,
-      );
-      timing(HeadlessReportPrintTimingStage.completed);
-      return result;
-    } finally {
-      controller.removeListener(listener);
-      await surface?.dispose();
-      await controller.dispose();
-    }
-  }
-
-  PresenterSessionLaunch _requireLaunch(ReportFlowController controller) {
-    final state = controller.value;
-    final launch = state.presenterLaunch;
-    final template = state.committedTemplate ?? state.selectedTemplate;
-    if (launch != null && template != null) {
-      return launch;
-    }
-    if (state.templates.isEmpty) {
-      throw const ReportFlowFailure(
-        code: ReportFlowFailureCode.noCompatibleTemplates,
-      );
-    }
-    if (state.entryFallbackReason == ReportEntryFallbackReason.noSavedDefault ||
-        state.entryFallbackReason ==
-            ReportEntryFallbackReason.invalidSavedTemplate ||
-        state.stage == ReportFlowStage.selectingTemplate ||
-        launch == null ||
-        template == null) {
-      throw const ReportFlowFailure(
-        code: ReportFlowFailureCode.templateSelectionRequired,
-      );
-    }
-    throw const ReportFlowFailure(
-      code: ReportFlowFailureCode.previewPreparationFailed,
+    return HeadlessReportRenderRunner(
+      createController: _createController,
+      surfaceFactory: _surfaceFactory,
+    ).run<ReportPrintResult>(
+      onControllerChange: (controller) {
+        _handleControllerChange(
+          controller: controller,
+          onProgress: onProgress,
+          printStarted: printStarted,
+        );
+      },
+      onStage: (stage, controller) {
+        switch (stage) {
+          case HeadlessReportRenderStage.initialized:
+            timing(HeadlessReportPrintTimingStage.preparingTemplate);
+          case HeadlessReportRenderStage.sessionReady:
+            timing(HeadlessReportPrintTimingStage.preparingSession);
+            _emit(
+              HeadlessReportPrintProgress(
+                phase: HeadlessReportPrintPhase.loadingPresenter,
+                fraction: controller.value.webViewLoadProgress,
+              ),
+              onProgress,
+            );
+          case HeadlessReportRenderStage.surfaceStarted:
+            timing(HeadlessReportPrintTimingStage.startingWebView);
+          case HeadlessReportRenderStage.outputReady:
+            timing(HeadlessReportPrintTimingStage.rendering);
+        }
+      },
+      consume: (controller) async {
+        printStarted = true;
+        _emit(
+          const HeadlessReportPrintProgress(
+            phase: HeadlessReportPrintPhase.generatingPdf,
+          ),
+          onProgress,
+        );
+        final result = await controller.printPdf();
+        timing(HeadlessReportPrintTimingStage.generatingPdf);
+        _emit(
+          const HeadlessReportPrintProgress(
+            phase: HeadlessReportPrintPhase.completed,
+          ),
+          onProgress,
+        );
+        timing(HeadlessReportPrintTimingStage.completed);
+        return result;
+      },
     );
-  }
-
-  Future<void> _waitForOutputReady(ReportFlowController controller) {
-    if (controller.value.failure != null) {
-      return Future<void>.error(controller.value.failure!);
-    }
-    if (controller.outputReady) {
-      return Future<void>.value();
-    }
-
-    final ready = Completer<void>();
-    void listener() {
-      final failure = controller.value.failure;
-      if (failure != null) {
-        controller.removeListener(listener);
-        if (!ready.isCompleted) {
-          ready.completeError(failure);
-        }
-        return;
-      }
-      if (controller.outputReady) {
-        controller.removeListener(listener);
-        if (!ready.isCompleted) {
-          ready.complete();
-        }
-      }
-    }
-
-    controller.addListener(listener);
-    listener();
-    return ready.future;
   }
 
   void _handleControllerChange({

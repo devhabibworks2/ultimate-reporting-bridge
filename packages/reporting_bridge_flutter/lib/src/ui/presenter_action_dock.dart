@@ -13,6 +13,7 @@ class PresenterActionDock extends StatelessWidget {
     required this.showSharePdf,
     required this.showPrint,
     required this.showSettings,
+    this.settingsEnabled = true,
     required this.outputEnabled,
     required this.busyAction,
     required this.onSave,
@@ -29,6 +30,7 @@ class PresenterActionDock extends StatelessWidget {
   final bool showSharePdf;
   final bool showPrint;
   final bool showSettings;
+  final bool settingsEnabled;
   final bool outputEnabled;
   final ReportExportAction? busyAction;
   final VoidCallback onSave;
@@ -95,7 +97,9 @@ class PresenterActionDock extends StatelessWidget {
             icon: Icons.settings_outlined,
             emphasis: _DockEmphasis.secondary,
             busy: false,
-            onPressed: busyAction == null ? onSettings : null,
+            onPressed: settingsEnabled && busyAction == null
+                ? onSettings
+                : null,
           ),
         ),
       );
@@ -206,6 +210,16 @@ class _DockAction extends StatelessWidget {
       ),
     };
     final enabled = onPressed != null;
+    final neutralDisabled = !enabled && !busy;
+    final background = neutralDisabled
+        ? scheme.surfaceContainerLow
+        : colors.background;
+    final foreground = neutralDisabled
+        ? scheme.onSurfaceVariant.withValues(alpha: 0.55)
+        : colors.foreground;
+    final border = neutralDisabled
+        ? scheme.outlineVariant.withValues(alpha: 0.38)
+        : colors.border;
 
     return Semantics(
       button: true,
@@ -213,20 +227,18 @@ class _DockAction extends StatelessWidget {
       label: label,
       child: ExcludeSemantics(
         child: Material(
-          color: enabled
-              ? colors.background
-              : colors.background.withValues(alpha: 0.52),
+          color: background,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
-            side: BorderSide(color: colors.border),
+            side: BorderSide(color: border),
           ),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: onPressed,
             child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 58),
+              constraints: const BoxConstraints(minHeight: 68),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 7),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 9),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -236,21 +248,21 @@ class _DockAction extends StatelessWidget {
                         dimension: 20,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: colors.foreground,
+                          color: foreground,
                         ),
                       )
                     else
-                      Icon(icon, size: 21, color: colors.foreground),
-                    const SizedBox(height: 3),
+                      Icon(icon, size: 24, color: foreground),
+                    const SizedBox(height: 5),
                     Text(
                       label,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: enabled
-                            ? colors.foreground
-                            : colors.foreground.withValues(alpha: 0.55),
+                        color: enabled || busy
+                            ? foreground
+                            : scheme.onSurfaceVariant.withValues(alpha: 0.55),
                         fontWeight: FontWeight.w800,
                         height: 1.15,
                       ),

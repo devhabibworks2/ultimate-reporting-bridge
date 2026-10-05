@@ -9,11 +9,13 @@ void main() {
 
     expect(strings.print, 'Print');
     expect(strings.documentSettings, 'Document settings');
+    expect(strings.preparingReportLoading, 'Preparing report…');
+    expect(strings.preparingDataStage, 'Preparing data');
+    expect(strings.preparingReportStage, 'Preparing report');
+    expect(strings.openingPreviewStage, 'Opening preview');
     expect(strings.printSubmitted, 'Report submitted for printing.');
     expect(
-      strings.failure(
-        const ReportFlowFailure(code: ReportFlowFailureCode.actionDenied),
-      ),
+      strings.failure(const ReportFlowFailure(code: ReportFlowFailureCode.actionDenied)),
       'This action is denied by the report policy.',
     );
   });
@@ -23,11 +25,13 @@ void main() {
 
     expect(strings.print, 'طباعة');
     expect(strings.documentSettings, 'إعدادات المستند');
+    expect(strings.preparingReportLoading, 'تجهيز التقرير…');
+    expect(strings.preparingDataStage, 'تجهيز البيانات');
+    expect(strings.preparingReportStage, 'إعداد التقرير');
+    expect(strings.openingPreviewStage, 'عرض التقرير');
     expect(strings.printSubmitted, 'تم إرسال التقرير للطباعة.');
     expect(
-      strings.failure(
-        const ReportFlowFailure(code: ReportFlowFailureCode.actionDenied),
-      ),
+      strings.failure(const ReportFlowFailure(code: ReportFlowFailureCode.actionDenied)),
       'هذه العملية غير مسموح بها وفق سياسة التقرير.',
     );
   });

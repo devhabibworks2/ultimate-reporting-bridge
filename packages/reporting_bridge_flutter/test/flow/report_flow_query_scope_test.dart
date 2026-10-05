@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:reporting_bridge_flutter/reporting_bridge_flutter.dart';
 import 'package:reporting_bridge_flutter/src/flow/report_flow_controller_impl.dart';
 import 'package:reporting_bridge_flutter/src/flow/report_flow_runtime.dart';
+import 'package:reporting_bridge_flutter/src/presenter/report_resource_preparation_service.dart';
 
 void main() {
   test('V2 sync and list use the exact TemplateSyncRequest scope', () async {
@@ -15,6 +16,9 @@ void main() {
 
     final bridge = _RecordingScopedBridgeClient(root);
     addTearDown(bridge.dispose);
+    final preparation = _RecordingResourcePreparation(
+      ReportResourcePreparationService(bridgeClient: bridge),
+    );
 
     final filter = TemplateSyncFilter(
       reportTypes: <String>[UrbReportType.salesInvoice.value],
@@ -58,6 +62,7 @@ void main() {
           cacheRoot: root,
         ),
         bridgeClient: bridge,
+        resourcePreparation: preparation,
         preferences: _MemoryPreferences(),
         filePlatform: const _NoopFilePlatform(),
         surfaceBinding: PresenterSurfaceBinding(),
@@ -68,6 +73,7 @@ void main() {
     await controller.initialize();
     await controller.syncTemplates();
 
+    expect(preparation.templateSyncCalls, greaterThan(0));
     expect(bridge.identityUpdates, isNotEmpty);
     expect(bridge.identityUpdates.last.userId, '42');
     expect(bridge.identityUpdates.last.branchId, '01');
@@ -163,6 +169,29 @@ void main() {
     await flowB.dispose();
     expect(bridge.identityContext.isEmpty, isTrue);
   });
+}
+
+final class _RecordingResourcePreparation
+    implements ReportResourcePreparationOperations {
+  _RecordingResourcePreparation(this.delegate);
+
+  final ReportResourcePreparationOperations delegate;
+  int templateSyncCalls = 0;
+  int presenterSyncCalls = 0;
+
+  @override
+  Future<TemplateSyncSummary> syncTemplates(TemplateSyncRequest request) {
+    templateSyncCalls += 1;
+    return delegate.syncTemplates(request);
+  }
+
+  @override
+  Future<PresenterCacheManifest> syncPresenter({
+    void Function(double progress)? onProgress,
+  }) {
+    presenterSyncCalls += 1;
+    return delegate.syncPresenter(onProgress: onProgress);
+  }
 }
 
 final class _ScopeCall {

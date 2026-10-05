@@ -7,17 +7,17 @@ void main() {
     const defaults = BridgePdfPreviewConfig();
     expect(defaults.minScale, 0.6);
     expect(defaults.maxScale, 8.0);
-    expect(defaults.initialScale, 0.8);
+    expect(defaults.initialScale, 0.97);
 
     const partial = BridgePdfPreviewConfig(maxScale: 4.0);
     expect(partial.minScale, 0.6);
     expect(partial.maxScale, 4.0);
-    expect(partial.initialScale, 0.8);
+    expect(partial.initialScale, 0.97);
 
     const ui = BridgeUiConfig.inheritHost(pdfPreview: partial);
     expect(ui.pdfPreview.minScale, 0.6);
     expect(ui.pdfPreview.maxScale, 4.0);
-    expect(ui.pdfPreview.initialScale, 0.8);
+    expect(ui.pdfPreview.initialScale, 0.97);
 
     const brand = BridgeUiConfig.brand(
       seedColor: Color(0xFF29AD5F),

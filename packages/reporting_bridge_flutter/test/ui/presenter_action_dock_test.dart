@@ -8,6 +8,7 @@ void main() {
     bool showSharePdf = true,
     bool showPrint = true,
     bool showSettings = true,
+    bool settingsEnabled = true,
     bool outputEnabled = true,
     ReportExportAction? busyAction,
     VoidCallback? onSave,
@@ -26,6 +27,7 @@ void main() {
           showSharePdf: showSharePdf,
           showPrint: showPrint,
           showSettings: showSettings,
+          settingsEnabled: settingsEnabled,
           outputEnabled: outputEnabled,
           busyAction: busyAction,
           onSave: onSave ?? () {},
@@ -92,6 +94,55 @@ void main() {
       );
     },
   );
+
+  testWidgets('loading-disabled actions all use one neutral visual treatment', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      buildDock(outputEnabled: false, settingsEnabled: false),
+    );
+
+    final scheme = Theme.of(
+      tester.element(find.byType(PresenterActionDock)),
+    ).colorScheme;
+
+    Color actionMaterialColor(String key) => tester
+        .widget<Material>(
+          find.descendant(
+            of: find.byKey(ValueKey<String>(key)),
+            matching: find.byType(Material),
+          ),
+        )
+        .color!;
+
+    for (final key in <String>[
+      'bridge-save-pdf',
+      'bridge-share-pdf',
+      'bridge-print-pdf',
+      'bridge-report-settings',
+    ]) {
+      expect(actionMaterialColor(key), scheme.surfaceContainerLow);
+      final icon = tester.widget<Icon>(
+        find.descendant(
+          of: find.byKey(ValueKey<String>(key)),
+          matching: find.byType(Icon),
+        ),
+      );
+      expect(icon.color?.a, lessThanOrEqualTo(0.60));
+    }
+  });
+
+  testWidgets('settings can remain visible while explicitly disabled', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(buildDock(settingsEnabled: false));
+
+    expect(
+      find.byKey(const ValueKey<String>('bridge-report-settings')),
+      findsOneWidget,
+    );
+    expect(inkWellOf(tester, 'bridge-report-settings').onTap, isNull);
+  });
 
   testWidgets(
     'export waits for render readiness while settings stays available',
@@ -360,8 +411,19 @@ void main() {
     final printTop = tester.getTopLeft(
       find.byKey(const ValueKey<String>('bridge-print-pdf')),
     );
-    // Same row: allow tiny paint/layout jitter, not a second grid row (~58+).
+    // Same row: allow tiny paint/layout jitter, not a second grid row.
     expect((printTop.dy - saveTop.dy).abs(), lessThan(8));
+    final saveSize = tester.getSize(
+      find.byKey(const ValueKey<String>('bridge-save-pdf')),
+    );
+    expect(saveSize.height, greaterThanOrEqualTo(68));
+    final saveIcon = tester.widget<Icon>(
+      find.descendant(
+        of: find.byKey(const ValueKey<String>('bridge-save-pdf')),
+        matching: find.byIcon(Icons.download_outlined),
+      ),
+    );
+    expect(saveIcon.size, 24);
     expect(tester.takeException(), isNull);
   });
 

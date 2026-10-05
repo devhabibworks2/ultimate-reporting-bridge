@@ -42,3 +42,60 @@ Authorization/header values, URI user-info, fragments, or query values. Query
 parameter names are retained while their values are rendered as `<redacted>`.
 For production telemetry, provide `BridgeDiagnostics(sink: ...)` and apply any
 additional Host-specific redaction required by the application.
+
+
+## Headless PDF, printing, and optional warm-up
+
+The public client exposes separate operations for resource preparation, raw PDF
+generation, and printing. Warm-up is optional; call it only when the Host wants
+to prepare resources before the real report operation.
+
+```dart
+await bridge.warmUpPresenter(
+  request,
+  refreshResources: true,
+  warmHeadlessSurface: false,
+);
+
+final pdfBytes = await bridge.generateReportPdfHeadless(request);
+
+final printResult = await bridge.printReportHeadless(request);
+```
+
+`generateReportPdfHeadless()` renders through the same Presenter lifecycle and
+returns PDF bytes without opening Bridge UI and without invoking Print, Save, or
+Share. `printReportHeadless()` remains the print operation: it renders the
+report, generates the PDF, and then invokes the configured print platform.
+
+For a Host that specifically wants to prepare the reusable Headless Presenter
+surface as well as refresh resources:
+
+```dart
+await bridge.warmUpPresenter(
+  request,
+  refreshResources: true,
+  warmHeadlessSurface: true,
+);
+```
+
+### Warm-up migration
+
+`warmUpHeadlessPrinting()` remains available for source compatibility but is
+deprecated. Existing code:
+
+```dart
+await bridge.warmUpHeadlessPrinting(
+  request,
+  refreshResources: x,
+);
+```
+
+should migrate to:
+
+```dart
+await bridge.warmUpPresenter(
+  request,
+  refreshResources: x,
+  warmHeadlessSurface: true,
+);
+```

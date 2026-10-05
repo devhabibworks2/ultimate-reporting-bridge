@@ -24,6 +24,46 @@ void main() {
     },
   );
 
+  testWidgets('keeps internal loading spinner by default and can suppress it', (
+    tester,
+  ) async {
+    Future<void> pump({required bool suppress}) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: BridgePresenterView(
+            launch: _launch('loading'),
+            templateName: 'Template',
+            controller: _FakeController(),
+            surfaceBinding: PresenterSurfaceBinding(),
+            showInternalLoadingIndicator: !suppress,
+            headlessSurfaceFactory: _FakeHeadlessSurface.new,
+          ),
+        ),
+      );
+      await tester.pump();
+    }
+
+    await pump(suppress: false);
+    expect(find.byKey(const Key('bridge-pdf-loading')), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+    await pump(suppress: true);
+    expect(find.byKey(const Key('bridge-pdf-loading')), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
+
+  test(
+    'BridgePresenterView forwards viewer terminal callbacks in default PDF path',
+    () {
+      final source = File(
+        'lib/src/ui/bridge_presenter_view.dart',
+      ).readAsStringSync();
+      expect(source, contains('widget.surfaceBinding.markViewerFirstFrame();'));
+      expect(source, contains('widget.onViewerFirstFrame?.call();'));
+      expect(source, contains('onViewerError: widget.onPreviewError'));
+    },
+  );
+
   testWidgets('starts headless runtime and renders exact cached PDF bytes', (
     tester,
   ) async {

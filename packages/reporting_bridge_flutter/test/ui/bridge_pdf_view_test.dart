@@ -24,8 +24,8 @@ void main() {
     final view = tester.widget<PdfViewPinch>(
       find.byKey(const Key('bridge-pdf-view')),
     );
-    expect(view.controller.value.row0[0], closeTo(0.8, 0.001));
-    expect(view.controller.value.row1[1], closeTo(0.8, 0.001));
+    expect(view.controller.value.row0[0], closeTo(0.97, 0.001));
+    expect(view.controller.value.row1[1], closeTo(0.97, 0.001));
   });
 
   testWidgets('PDF preview centers the first page when it fits', (
@@ -52,7 +52,7 @@ void main() {
       find.byKey(const Key('bridge-pdf-view')),
     );
 
-    expect(view.controller.zoomRatio, closeTo(0.8, 0.001));
+    expect(view.controller.zoomRatio, closeTo(0.97, 0.001));
     expect(view.controller.value.row0[3], greaterThan(0));
     expect(view.controller.value.row1[3], greaterThan(100));
   });
@@ -63,7 +63,7 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(400, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
-    // Tall enough that after pdfx page insets and default initialScale 0.8
+    // Tall enough that after pdfx page insets and default initialScale 0.97
     // the first page still exceeds the viewport and stays top-aligned.
     final document = _FakePdfDocument(width: 400, height: 1200);
 
@@ -83,8 +83,35 @@ void main() {
       find.byKey(const Key('bridge-pdf-view')),
     );
 
-    expect(view.controller.zoomRatio, closeTo(0.8, 0.001));
+    expect(view.controller.zoomRatio, closeTo(0.97, 0.001));
     expect(view.controller.value.row1[3], closeTo(0, 0.001));
+  });
+
+  testWidgets('first-frame callback fires after document load post-frame', (
+    tester,
+  ) async {
+    var firstFrames = 0;
+    final document = _FakePdfDocument(width: 400, height: 500);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: BridgePdfView(
+          bytes: Uint8List.fromList(<int>[1, 2, 3, 4]),
+          documentFactory: (_) async => document,
+          onFirstFrameAfterDocument: () => firstFrames += 1,
+        ),
+      ),
+    );
+
+    expect(firstFrames, 0);
+    await tester.pump();
+    expect(firstFrames, 0);
+    await tester.pump();
+    await tester.pump();
+    expect(firstFrames, 1);
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
   });
 
   testWidgets('PDF preview allows zooming out below fit-width', (tester) async {

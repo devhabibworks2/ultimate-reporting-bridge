@@ -479,11 +479,7 @@ class ReportFlowControllerImpl
             'filterFingerprint': sync.filter.fingerprint,
             'hasExtra': sync.extra.isNotEmpty,
           },
-          action: () => _runtime.bridgeClient.syncTemplates(
-            systemCode: sync.systemCode.value,
-            filter: sync.filter,
-            extra: sync.extra,
-          ),
+          action: () => _runtime.resourcePreparation.syncTemplates(sync),
         );
     if (summary.errors.isNotEmpty) {
       throw ReportFlowFailure(
@@ -547,7 +543,7 @@ class ReportFlowControllerImpl
             method: 'GET',
             uri: manifestUri,
             details: <String, Object?>{'includesBundleDownload': true},
-            action: () => _runtime.bridgeClient.syncPresenter(
+            action: () => _runtime.resourcePreparation.syncPresenter(
               onProgress: (progress) {
                 if (_disposed) return;
                 _set(_value.copyWith(presenterDownloadProgress: progress));
