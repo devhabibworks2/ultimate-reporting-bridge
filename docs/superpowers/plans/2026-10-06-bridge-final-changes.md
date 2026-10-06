@@ -12,12 +12,15 @@
 
 **Mandatory Clean-Code Contract:** `/Users/abdualhabib/Desktop/Ultimate Report Builder/docs/superpowers/plans/2026-10-06-clean-code-reviewability-contract.md`
 
+**Hard-Task Safety TODOs:** `/Users/abdualhabib/Desktop/Ultimate Report Builder/docs/superpowers/plans/2026-10-06-hard-task-agent-safety-todos.md` — Bridge Task 2 must complete H1; Bridge Task 4 must complete H2.
+
 ## Executor Contract
 
 - Work only in:
   /Users/abdualhabib/Desktop/ultimate-reporting-bridge/.worktrees/feat-presenter-loading-ui-20261003
-- Expected branch at plan creation: feat/presenter-loading-ui-20261003
-- Expected HEAD at plan creation: 8f09c66068fe413aa5647cda3f385c07b99ba241
+- Expected branch: feat/presenter-loading-ui-20261003
+- Baseline design/plan checkpoint: a63f898556c7a573545629342f89e5ceca216678.
+- Do not demand literal HEAD equality because safety-plan hardening commits may follow this checkpoint. Before Task 1, verify `git merge-base --is-ancestor a63f898556c7a573545629342f89e5ceca216678 HEAD` and inspect paths changed since the checkpoint; only docs/plan hardening is allowed before product implementation begins.
 - Do not reset, clean, checkout, restore, rebase, merge, tag, push, or delete unrelated files.
 - Preserve pre-existing untracked files under example/*/pubspec.lock and packages/reporting_bridge_flutter/.vscode/.
 - No dependency additions are needed.
@@ -195,6 +198,8 @@ Do not commit.
 
 ### Task 2: Make one managed Presenter surface reusable by openReport and headless flows
 
+**Mandatory agent safety gate:** Complete H1 — Shared Presenter Surface Ownership in `2026-10-06-hard-task-agent-safety-todos.md`. This task cannot be marked PASS until `SURFACE_OWNERSHIP_REVIEW=PASS` is recorded in durable state.
+
 **Files:**
 - Modify: packages/reporting_bridge_flutter/lib/src/client/reporting_bridge_flutter_client.dart
 - Modify: packages/reporting_bridge_flutter/lib/src/ui/report_flow_screen.dart
@@ -359,6 +364,8 @@ Do not commit.
 ---
 
 ### Task 4: Remove duplicate ReportActionPolicy authorization
+
+**Mandatory agent safety gate:** Complete H2 — Remove ReportActionPolicy Without Replacing It in `2026-10-06-hard-task-agent-safety-todos.md`. This task cannot be marked PASS until `POLICY_REMOVAL_REVIEW=PASS` is recorded in durable state.
 
 **Files:**
 - Delete: packages/reporting_bridge_flutter/lib/src/flow/report_action_policy.dart
