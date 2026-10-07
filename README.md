@@ -40,7 +40,7 @@ Ultimate Report Builder consumes this repo as a git submodule at `ultimate-repor
 | Current verified Flutter | `3.44.6` |
 | Latest stable | CI `channel: stable` (authoritative tip-of-tree) |
 | `file_picker` | `>=11.0.1 <14.0.0` |
-| `share_plus` | Host-owned; **no** Bridge direct dependency |
+| `share_plus` | `>=11.1.0 <14.0.0`; Bridge default support sharing + Host-compatible resolution |
 
 The Host and Bridge resolve one compatible package version. Older Hosts can stay on the lower compatible release inside each range; newer Hosts can take newer releases that still satisfy the Bridge constraints.
 

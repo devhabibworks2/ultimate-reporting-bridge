@@ -12,7 +12,6 @@ export 'src/contracts/report_open_request.dart';
 export 'src/contracts/selected_template_criteria.dart';
 export 'src/contracts/template_compatibility_constraints.dart';
 export 'src/contracts/template_sync_request.dart';
-export 'src/flow/report_action_policy.dart';
 export 'src/flow/report_flow_controller.dart';
 export 'src/flow/report_flow_event.dart';
 export 'src/flow/report_flow_failure.dart';

@@ -32,7 +32,6 @@ void main() {
         entryPolicy: ReportEntryPolicy.alwaysSelectTemplate,
         localeOverride: 'ar',
         featuresOverride: const BridgeUiFeatures(showPrint: true),
-        actionPolicy: const ReportActionPolicy(canSharePdf: false),
         externalPrint: HostExternalPrintRequest(
           documentTitle: 'Invoice',
           extra: <String, Object?>{'channel': 'shop'},
@@ -53,7 +52,6 @@ void main() {
       ]);
       expect(request.compatibility.layout, ReportLayout.pages);
       expect(request.featuresOverride?.showPrint, isTrue);
-      expect(request.actionPolicy.canSharePdf, isFalse);
       expect(request.externalPrint?.documentTitle, 'Invoice');
     },
   );

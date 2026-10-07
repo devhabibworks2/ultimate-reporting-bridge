@@ -47,14 +47,14 @@ additional Host-specific redaction required by the application.
 ## Headless PDF, printing, and optional warm-up
 
 The public client exposes separate operations for resource preparation, raw PDF
-generation, and printing. Warm-up is optional; call it only when the Host wants
-to prepare resources before the real report operation.
+generation, and printing. Warm-up is an optional optimization a Host can use
+before an interactive or headless final report operation.
 
 ```dart
 await bridge.warmUpPresenter(
   request,
   refreshResources: true,
-  warmHeadlessSurface: false,
+  warmPresenterSurface: false,
 );
 
 final pdfBytes = await bridge.generateReportPdfHeadless(request);
@@ -67,14 +67,13 @@ returns PDF bytes without opening Bridge UI and without invoking Print, Save, or
 Share. `printReportHeadless()` remains the print operation: it renders the
 report, generates the PDF, and then invokes the configured print platform.
 
-For a Host that specifically wants to prepare the reusable Headless Presenter
-surface as well as refresh resources:
+To prepare the reusable Presenter surface as well as refresh resources:
 
 ```dart
 await bridge.warmUpPresenter(
   request,
   refreshResources: true,
-  warmHeadlessSurface: true,
+  warmPresenterSurface: true,
 );
 ```
 
@@ -96,6 +95,9 @@ should migrate to:
 await bridge.warmUpPresenter(
   request,
   refreshResources: x,
-  warmHeadlessSurface: true,
+  warmPresenterSurface: true,
 );
 ```
+
+The deprecated `warmHeadlessSurface` parameter remains accepted for source
+compatibility; new code should use `warmPresenterSurface`.

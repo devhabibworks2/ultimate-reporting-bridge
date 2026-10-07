@@ -387,10 +387,6 @@ class ReportFlowStrings {
         arabic ? 'تعذر إنشاء ملف PDF.' : 'PDF generation failed.',
       ReportFlowFailureCode.persistenceFailed =>
         arabic ? 'تعذر حفظ إعدادات التقرير.' : 'The report settings could not be saved.',
-      ReportFlowFailureCode.actionDenied =>
-        arabic
-            ? 'هذه العملية غير مسموح بها وفق سياسة التقرير.'
-            : 'This action is denied by the report policy.',
       ReportFlowFailureCode.exportUnavailable =>
         arabic
             ? 'التصدير غير متاح حتى يكتمل عرض التقرير.'

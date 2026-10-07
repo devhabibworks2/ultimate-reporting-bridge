@@ -18,6 +18,7 @@ dependencies:
   file_picker: ">=11.0.1 <14.0.0"
   path_provider: ">=2.1.5 <3.0.0"
   printing: ">=5.14.2 <6.0.0"
+  share_plus: ">=11.1.0 <14.0.0"
   shared_preferences: ">=2.3.0 <3.0.0"
   pdfx: ">=2.11.0 <3.0.0"
 
@@ -26,6 +27,7 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^5.0.0
   pigeon: 26.3.4
+  share_plus_platform_interface: ">=6.1.0 <8.0.0"
 
 flutter:
   uses-material-design: true

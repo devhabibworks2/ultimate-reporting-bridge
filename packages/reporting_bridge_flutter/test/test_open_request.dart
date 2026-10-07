@@ -11,7 +11,6 @@ ReportOpenRequest buildTestOpenRequest({
   ReportEntryPolicy entryPolicy = ReportEntryPolicy.smart,
   String? localeOverride,
   BridgeUiFeatures? featuresOverride,
-  ReportActionPolicy actionPolicy = const ReportActionPolicy(),
   String? userId,
   String? branchId,
   String? systemUnit,
@@ -48,7 +47,6 @@ ReportOpenRequest buildTestOpenRequest({
     entryPolicy: entryPolicy,
     localeOverride: localeOverride,
     featuresOverride: featuresOverride,
-    actionPolicy: actionPolicy,
     externalPrint: externalPrint,
   );
 }

@@ -24,7 +24,8 @@ class BridgePresenterView extends StatefulWidget {
     this.showInternalLoadingIndicator = true,
     this.onViewerFirstFrame,
     this.onPreviewError,
-    @visibleForTesting this.headlessSurfaceFactory,
+    this.presenterSurface,
+    this.headlessSurfaceFactory,
     @visibleForTesting this.pdfViewBuilder,
   });
 
@@ -36,8 +37,8 @@ class BridgePresenterView extends StatefulWidget {
   final bool showInternalLoadingIndicator;
   final VoidCallback? onViewerFirstFrame;
   final ValueChanged<Object>? onPreviewError;
+  final HeadlessPresenterSurface? presenterSurface;
 
-  @visibleForTesting
   final HeadlessPresenterSurfaceFactory? headlessSurfaceFactory;
 
   @visibleForTesting
@@ -49,6 +50,7 @@ class BridgePresenterView extends StatefulWidget {
 
 class _BridgePresenterViewState extends State<BridgePresenterView> {
   late HeadlessPresenterSurface _surface;
+  late bool _ownsSurface;
   int _surfaceGeneration = 0;
   Object? _surfaceError;
 
@@ -56,6 +58,7 @@ class _BridgePresenterViewState extends State<BridgePresenterView> {
   void initState() {
     super.initState();
     _surface = _createSurface();
+    _ownsSurface = widget.presenterSurface == null;
     widget.surfaceBinding.beginPreviewTiming(widget.launch.sessionId);
     unawaited(_startSurface(_surface, ++_surfaceGeneration));
   }
@@ -82,7 +85,9 @@ class _BridgePresenterViewState extends State<BridgePresenterView> {
   }
 
   HeadlessPresenterSurface _createSurface() =>
-      widget.headlessSurfaceFactory?.call() ?? InAppHeadlessPresenterSurface();
+      widget.presenterSurface ??
+      widget.headlessSurfaceFactory?.call() ??
+      InAppHeadlessPresenterSurface();
 
   Future<void> _startSurface(
     HeadlessPresenterSurface surface,
@@ -113,8 +118,10 @@ class _BridgePresenterViewState extends State<BridgePresenterView> {
   }
 
   Future<void> _shutdownSurface(HeadlessPresenterSurface surface) =>
-      surface is WarmableHeadlessPresenterSurface
-      ? surface.shutdown()
+      _ownsSurface
+      ? surface is WarmableHeadlessPresenterSurface
+            ? surface.shutdown()
+            : surface.dispose()
       : surface.dispose();
 
   @override

@@ -10,7 +10,6 @@ import '../platform/bridge_platform_adapters.dart';
 import '../platform/presenter_surface_binding.dart';
 import '../printing/thermal_printer_controller.dart';
 import '../ui/bridge_ui_features.dart';
-import 'report_action_policy.dart';
 import 'report_flow_event.dart';
 import 'report_flow_failure.dart';
 import 'report_flow_state.dart';
@@ -121,7 +120,6 @@ extension ReportFlowStructuredFailureDispatch on ReportFlowController {
 }
 
 abstract interface class ReportFlowActionController {
-  ReportActionPolicy get actionPolicy;
   BridgeUiFeatures get effectiveFeatures;
   TemplateCompatibilityConstraints get compatibilityConstraints;
   List<CachedTemplate> get eligibleTemplates;
@@ -140,13 +138,10 @@ extension ReportFlowControllerActions on ReportFlowController {
       ? this as ReportFlowActionController
       : null;
 
-  ReportActionPolicy get actionPolicy =>
-      _actions?.actionPolicy ?? request.actionPolicy;
-
   BridgeUiFeatures get effectiveFeatures =>
       _actions?.effectiveFeatures ??
-      request.featuresOverride?.restrictTo(actionPolicy) ??
-      const BridgeUiFeatures().restrictTo(actionPolicy);
+      request.featuresOverride ??
+      const BridgeUiFeatures();
 
   TemplateCompatibilityConstraints get compatibilityConstraints =>
       _actions?.compatibilityConstraints ??

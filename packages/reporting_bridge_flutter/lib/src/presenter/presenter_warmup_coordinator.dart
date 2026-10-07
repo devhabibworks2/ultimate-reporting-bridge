@@ -36,11 +36,11 @@ final class PresenterWarmupCoordinator {
   Future<PresenterWarmupResult> warmUp(
     ReportOpenRequest request, {
     bool refreshResources = false,
-    bool warmHeadlessSurface = false,
+    bool warmPresenterSurface = false,
   }) async {
     if (_disposed) {
       return PresenterWarmupResult(
-        surfaceStatus: warmHeadlessSurface
+        surfaceStatus: warmPresenterSurface
             ? PresenterWarmupSurfaceStatus.failed
             : PresenterWarmupSurfaceStatus.skipped,
         resourceStatus: refreshResources
@@ -51,7 +51,7 @@ final class PresenterWarmupCoordinator {
       );
     }
 
-    final surfaceFuture = warmHeadlessSurface ? _ensureSurfaceWarm() : null;
+    final surfaceFuture = warmPresenterSurface ? _ensureSurfaceWarm() : null;
     final resourceFuture = refreshResources ? _prepareResources(request) : null;
 
     final outcomes = await Future.wait<Object?>(<Future<Object?>>[
@@ -101,7 +101,7 @@ final class PresenterWarmupCoordinator {
               ready
                   ? PresenterWarmupSurfaceStatus.ready
                   : PresenterWarmupSurfaceStatus.failed,
-              ready ? null : 'headlessSurfaceUnavailable',
+              ready ? null : 'presenterSurfaceUnavailable',
             );
           } catch (error) {
             return _SurfaceOutcome(

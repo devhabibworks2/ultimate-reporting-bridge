@@ -11,7 +11,6 @@ enum ReportFlowFailureCode {
   renderFailed,
   pdfGenerationFailed,
   persistenceFailed,
-  actionDenied,
   exportUnavailable,
   exportInProgress,
   operationInProgress,

@@ -31,12 +31,16 @@ void main() {
     if (root.existsSync()) root.deleteSync(recursive: true);
   });
 
-  test('direct controller calls cannot bypass read-only policy', () async {
+  test('hidden controls do not block direct output actions', () async {
     final fixture = _createController(
       connection: connection,
       bridge: bridge,
       preferences: preferences,
-      policy: const ReportActionPolicy.readOnly(),
+      features: const BridgeUiFeatures(
+        showPrint: false,
+        showSavePdf: false,
+        showSharePdf: false,
+      ),
     );
     addTearDown(fixture.controller.dispose);
     await _ready(fixture);
@@ -46,19 +50,58 @@ void main() {
       isFalse,
     );
     expect(fixture.controller.value.stage, ReportFlowStage.previewing);
-    expect(
-      fixture.controller.savePdf,
-      throwsA(_failure(ReportFlowFailureCode.actionDenied)),
-    );
-    expect(
-      fixture.controller.sharePdf,
-      throwsA(_failure(ReportFlowFailureCode.actionDenied)),
-    );
-    expect(
-      fixture.controller.printPdf,
-      throwsA(_failure(ReportFlowFailureCode.actionDenied)),
-    );
+    await fixture.controller.savePdf();
+    await fixture.controller.sharePdf();
+    await fixture.controller.printPdf();
   });
+
+  test(
+    'hidden Print control does not authorize or deny direct printing',
+    () async {
+      final fixture = _createController(
+        connection: connection,
+        bridge: bridge,
+        preferences: preferences,
+        features: const BridgeUiFeatures(showPrint: false),
+      );
+      addTearDown(fixture.controller.dispose);
+      await _ready(fixture);
+
+      await expectLater(fixture.controller.printPdf(), completes);
+    },
+  );
+
+  test(
+    'hidden Save control does not authorize or deny direct saving',
+    () async {
+      final fixture = _createController(
+        connection: connection,
+        bridge: bridge,
+        preferences: preferences,
+        features: const BridgeUiFeatures(showSavePdf: false),
+      );
+      addTearDown(fixture.controller.dispose);
+      await _ready(fixture);
+
+      await expectLater(fixture.controller.savePdf(), completes);
+    },
+  );
+
+  test(
+    'hidden Share control does not authorize or deny direct sharing',
+    () async {
+      final fixture = _createController(
+        connection: connection,
+        bridge: bridge,
+        preferences: preferences,
+        features: const BridgeUiFeatures(showSharePdf: false),
+      );
+      addTearDown(fixture.controller.dispose);
+      await _ready(fixture);
+
+      await expectLater(fixture.controller.sharePdf(), completes);
+    },
+  );
 
   test('print uses selected-template metadata and injected gateway', () async {
     final printPlatform = _FakePrintPlatform();
@@ -67,7 +110,6 @@ void main() {
       bridge: bridge,
       preferences: preferences,
       printPlatform: printPlatform,
-      policy: const ReportActionPolicy(canPrintPdf: true),
     );
     addTearDown(fixture.controller.dispose);
     await _ready(fixture);
@@ -100,7 +142,6 @@ void main() {
       bridge: bridge,
       preferences: preferences,
       printPlatform: printPlatform,
-      policy: const ReportActionPolicy(),
     );
     addTearDown(fixture.controller.dispose);
     await _ready(fixture);
@@ -209,7 +250,11 @@ _ControllerFixture _createController({
   required ReportServerConnection connection,
   required _FakeBridgeClient bridge,
   required MemoryReportFlowPreferenceStore preferences,
-  ReportActionPolicy policy = const ReportActionPolicy(),
+  BridgeUiFeatures features = const BridgeUiFeatures(
+    showPrint: true,
+    showSavePdf: true,
+    showSharePdf: true,
+  ),
   ReportPrintPlatform? printPlatform,
   String? userId,
   ReportEntryPolicy entryPolicy = ReportEntryPolicy.alwaysPrepare,
@@ -229,19 +274,10 @@ _ControllerFixture _createController({
       localeOverride: 'ar',
       userId: userId,
       entryPolicy: entryPolicy,
-      actionPolicy: policy,
       compatibility: compatibility,
-      featuresOverride: const BridgeUiFeatures(
-        showPrint: true,
-        showSavePdf: true,
-        showSharePdf: true,
-      ),
+      featuresOverride: features,
     ),
-    features: const BridgeUiFeatures(
-      showPrint: true,
-      showSavePdf: true,
-      showSharePdf: true,
-    ),
+    features: features,
     runtime: ReportFlowRuntime(
       connection: connection,
       bridgeClient: bridge,

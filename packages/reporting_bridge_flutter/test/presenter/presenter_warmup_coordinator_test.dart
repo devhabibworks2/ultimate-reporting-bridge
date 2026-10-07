@@ -5,7 +5,7 @@ import 'package:reporting_bridge_flutter/reporting_bridge_flutter.dart';
 import 'package:reporting_bridge_flutter/src/presenter/presenter_warmup_coordinator.dart';
 
 void main() {
-  test('resource-only warm-up never warms the headless surface', () async {
+  test('resource-only warm-up never warms the Presenter surface', () async {
     var surfaceCalls = 0;
     var resourceCalls = 0;
     final coordinator = PresenterWarmupCoordinator(
@@ -20,7 +20,11 @@ void main() {
       },
     );
 
-    final result = await coordinator.warmUp(_request(), refreshResources: true);
+    final result = await coordinator.warmUp(
+      _request(),
+      refreshResources: true,
+      warmPresenterSurface: false,
+    );
 
     expect(surfaceCalls, 0);
     expect(resourceCalls, 1);
@@ -28,7 +32,7 @@ void main() {
     expect(result.resourceStatus, PresenterWarmupResourceStatus.refreshed);
   });
 
-  test('surface-only warm-up never refreshes resources', () async {
+  test('Presenter surface-only warm-up never refreshes resources', () async {
     var surfaceCalls = 0;
     var resourceCalls = 0;
     final coordinator = PresenterWarmupCoordinator(
@@ -44,7 +48,7 @@ void main() {
 
     final result = await coordinator.warmUp(
       _request(),
-      warmHeadlessSurface: true,
+      warmPresenterSurface: true,
     );
 
     expect(surfaceCalls, 1);
@@ -52,6 +56,32 @@ void main() {
     expect(result.surfaceStatus, PresenterWarmupSurfaceStatus.ready);
     expect(result.resourceStatus, PresenterWarmupResourceStatus.skipped);
   });
+
+  test(
+    'failed Presenter surface warm-up reports generic diagnostic and retries',
+    () async {
+      var surfaceCalls = 0;
+      final coordinator = PresenterWarmupCoordinator(
+        warmSurface: () async => ++surfaceCalls > 1,
+        resolveMode: (request) async => PresenterModePreference.online,
+        refreshResources: (request, mode) async {},
+      );
+
+      final failed = await coordinator.warmUp(
+        _request(),
+        warmPresenterSurface: true,
+      );
+      final retried = await coordinator.warmUp(
+        _request(),
+        warmPresenterSurface: true,
+      );
+
+      expect(failed.surfaceStatus, PresenterWarmupSurfaceStatus.failed);
+      expect(failed.diagnostic, 'presenterSurfaceUnavailable');
+      expect(retried.surfaceStatus, PresenterWarmupSurfaceStatus.ready);
+      expect(surfaceCalls, 2);
+    },
+  );
 
   test('equivalent resource warm-ups deduplicate while in flight', () async {
     var resourceCalls = 0;

@@ -13,7 +13,6 @@ import '../printing/thermal_printer_controller.dart';
 import '../printing/thermal_printer_models.dart';
 import '../printing/thermal_report_print_platform.dart';
 import '../ui/bridge_ui_features.dart';
-import 'report_action_policy.dart';
 import 'report_flow_controller.dart';
 import 'report_flow_controller_base.dart' as base;
 import 'report_flow_event.dart';
@@ -38,7 +37,7 @@ class ReportFlowControllerImpl extends base.ReportFlowControllerImpl
     Duration renderTimeout = const Duration(seconds: 30),
     VoidCallback? onDisposed,
   }) {
-    final effectiveFeatures = features.restrictTo(request.actionPolicy);
+    final effectiveFeatures = features;
     final effectiveRequest = request.copyWith(
       featuresOverride: effectiveFeatures,
     );
@@ -142,9 +141,6 @@ class ReportFlowControllerImpl extends base.ReportFlowControllerImpl
   }
 
   @override
-  ReportActionPolicy get actionPolicy => request.actionPolicy;
-
-  @override
   BridgeUiFeatures get effectiveFeatures => _effectiveFeatures;
 
   @override
@@ -192,25 +188,7 @@ class ReportFlowControllerImpl extends base.ReportFlowControllerImpl
   }
 
   @override
-  Future<void> savePdf() {
-    _ensureActionAllowed(ReportAction.savePdf);
-    return super.savePdf();
-  }
-
-  @override
-  Future<void> sharePdf() {
-    _ensureActionAllowed(ReportAction.sharePdf);
-    return super.sharePdf();
-  }
-
-  @override
   Future<ReportPrintResult> printPdf() {
-    try {
-      _ensureActionAllowed(ReportAction.printPdf);
-    } catch (error, stackTrace) {
-      _logPrintRejected(error, stackTrace: stackTrace);
-      rethrow;
-    }
     if (value.exportAction != null || _printFuture != null) {
       const failure = ReportFlowFailure(
         code: ReportFlowFailureCode.exportInProgress,
@@ -464,15 +442,6 @@ class ReportFlowControllerImpl extends base.ReportFlowControllerImpl
       if (template.templateCode == code) return template;
     }
     return null;
-  }
-
-  void _ensureActionAllowed(ReportAction action) {
-    if (!actionPolicy.allows(action)) {
-      throw ReportFlowFailure(
-        code: ReportFlowFailureCode.actionDenied,
-        diagnostic: action.name,
-      );
-    }
   }
 }
 

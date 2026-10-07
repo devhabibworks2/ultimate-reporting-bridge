@@ -8,18 +8,6 @@ void main() {
     expect(UrbReportType.salesReturn.value, 'sales_return');
   });
 
-  test('enforces independent action policy values', () {
-    const policy = ReportActionPolicy(
-      canPrintPdf: false,
-      canSavePdf: true,
-      canSharePdf: false,
-    );
-
-    expect(policy.allows(ReportAction.printPdf), isFalse);
-    expect(policy.allows(ReportAction.savePdf), isTrue);
-    expect(policy.allows(ReportAction.sharePdf), isFalse);
-  });
-
   test('keeps Print hidden by default for compatibility', () {
     const features = BridgeUiFeatures();
     expect(features.showPrint, isFalse);
@@ -28,15 +16,11 @@ void main() {
     expect(features.showDevelopmentSupport, isTrue);
   });
 
-  test(
-    'development support can be explicitly disabled and survives policy restriction',
-    () {
-      const features = BridgeUiFeatures(showDevelopmentSupport: false);
-      final restricted = features.restrictTo(const ReportActionPolicy());
+  test('development support can be explicitly disabled', () {
+    const features = BridgeUiFeatures(showDevelopmentSupport: false);
 
-      expect(restricted.showDevelopmentSupport, isFalse);
-    },
-  );
+    expect(features.showDevelopmentSupport, isFalse);
+  });
 
   test('supports current and future Android print modes', () {
     const current = AndroidPrintConfiguration.systemPrintManager();

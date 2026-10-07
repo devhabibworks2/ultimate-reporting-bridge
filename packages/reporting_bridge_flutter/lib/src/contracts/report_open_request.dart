@@ -1,7 +1,6 @@
 import 'package:reporting_bridge/reporting_bridge.dart';
 
 import '../flow/json_object_snapshot.dart';
-import '../flow/report_action_policy.dart';
 import '../flow/urb_identifiers.dart';
 import '../ui/bridge_ui_features.dart';
 import 'external_printer_contract.dart';
@@ -38,7 +37,6 @@ final class ReportOpenRequest {
     this.entryPolicy = ReportEntryPolicy.smart,
     String? localeOverride,
     this.featuresOverride,
-    this.actionPolicy = const ReportActionPolicy(),
     this.externalPrint,
   }) : seedData = snapshotJsonObject(seedData),
        reportName = _trimmedOrNull(reportName),
@@ -70,12 +68,10 @@ final class ReportOpenRequest {
   final ReportEntryPolicy entryPolicy;
   final String? localeOverride;
   final BridgeUiFeatures? featuresOverride;
-  final ReportActionPolicy actionPolicy;
   final HostExternalPrintRequest? externalPrint;
 
   ReportOpenRequest copyWith({
     BridgeUiFeatures? featuresOverride,
-    ReportActionPolicy? actionPolicy,
     ReportEntryPolicy? entryPolicy,
     String? localeOverride,
   }) => ReportOpenRequest(
@@ -90,7 +86,6 @@ final class ReportOpenRequest {
     entryPolicy: entryPolicy ?? this.entryPolicy,
     localeOverride: localeOverride ?? this.localeOverride,
     featuresOverride: featuresOverride ?? this.featuresOverride,
-    actionPolicy: actionPolicy ?? this.actionPolicy,
     externalPrint: externalPrint,
   );
 }

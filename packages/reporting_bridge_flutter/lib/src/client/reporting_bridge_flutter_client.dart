@@ -62,6 +62,8 @@ abstract interface class ReportingBridgeFlutterClient {
   Future<PresenterWarmupResult> warmUpPresenter(
     ReportOpenRequest request, {
     bool refreshResources = false,
+    bool warmPresenterSurface = false,
+    @Deprecated('Use warmPresenterSurface instead.')
     bool warmHeadlessSurface = false,
   });
 
@@ -107,11 +109,11 @@ class DefaultReportingBridgeFlutterClient
         (headlessPresenterSurfaceFactory == null
             ? InAppHeadlessPresenterSurface()
             : null);
-    _managedHeadlessSurface = managedSurface;
+    _managedPresenterSurface = managedSurface;
     _headlessPresenterSurfaceFactory =
         headlessPresenterSurfaceFactory ?? (() => managedSurface!);
     _warmupCoordinator = PresenterWarmupCoordinator(
-      warmSurface: _ensureSurfaceWarm,
+      warmSurface: _warmManagedPresenterSurfaceForWarmup,
       resolveMode: _resolveWarmupMode,
       refreshResources: _refreshWarmupResources,
     );
@@ -126,7 +128,7 @@ class DefaultReportingBridgeFlutterClient
   final void Function()? _managedPrintDispose;
   final ReportSupportSharePlatform _supportSharePlatform;
   late final HeadlessPresenterSurfaceFactory _headlessPresenterSurfaceFactory;
-  late final WarmableHeadlessPresenterSurface? _managedHeadlessSurface;
+  late final WarmableHeadlessPresenterSurface? _managedPresenterSurface;
   late final PresenterWarmupCoordinator _warmupCoordinator;
 
   @override
@@ -204,7 +206,14 @@ class DefaultReportingBridgeFlutterClient
     try {
       return await Navigator.of(context).push<ReportResult>(
         _buildReportFlowRoute<ReportResult>(
-          builder: (_) => ReportFlowScreen(controller: controller, ui: ui),
+          builder: (_) => ReportFlowScreen(
+            controller: controller,
+            ui: ui,
+            presenterSurface: _managedPresenterSurface,
+            presenterSurfaceFactory: _managedPresenterSurface == null
+                ? _headlessPresenterSurfaceFactory
+                : null,
+          ),
         ),
       );
     } finally {
@@ -219,7 +228,7 @@ class DefaultReportingBridgeFlutterClient
     HeadlessReportPrintTimingCallback? onTiming,
   }) async {
     _ensureHeadlessFlowAvailable();
-    await _ensureSurfaceWarm();
+    await _ensureManagedPresenterSurfaceWarm();
     return HeadlessReportPrintRunner(
       createController: () => createController(request),
       surfaceFactory: _headlessPresenterSurfaceFactory,
@@ -229,7 +238,7 @@ class DefaultReportingBridgeFlutterClient
   @override
   Future<Uint8List> generateReportPdfHeadless(ReportOpenRequest request) async {
     _ensureHeadlessFlowAvailable();
-    await _ensureSurfaceWarm();
+    await _ensureManagedPresenterSurfaceWarm();
     return HeadlessReportRenderRunner(
       createController: () => createController(request),
       surfaceFactory: _headlessPresenterSurfaceFactory,
@@ -245,17 +254,19 @@ class DefaultReportingBridgeFlutterClient
   Future<PresenterWarmupResult> warmUpPresenter(
     ReportOpenRequest request, {
     bool refreshResources = false,
+    bool warmPresenterSurface = false,
+    @Deprecated('Use warmPresenterSurface instead.')
     bool warmHeadlessSurface = false,
   }) {
     return _warmupCoordinator.warmUp(
       request,
       refreshResources: refreshResources,
-      warmHeadlessSurface: warmHeadlessSurface,
+      warmPresenterSurface: warmPresenterSurface || warmHeadlessSurface,
     );
   }
 
   @override
-  @Deprecated('Use warmUpPresenter(..., warmHeadlessSurface: true).')
+  @Deprecated('Use warmUpPresenter(..., warmPresenterSurface: true).')
   Future<HeadlessPrintWarmupResult> warmUpHeadlessPrinting(
     ReportOpenRequest request, {
     bool refreshResources = false,
@@ -263,7 +274,7 @@ class DefaultReportingBridgeFlutterClient
     final result = await warmUpPresenter(
       request,
       refreshResources: refreshResources,
-      warmHeadlessSurface: true,
+      warmPresenterSurface: true,
     );
     return HeadlessPrintWarmupResult(
       webViewReady: result.surfaceStatus == PresenterWarmupSurfaceStatus.ready,
@@ -285,15 +296,24 @@ class DefaultReportingBridgeFlutterClient
     }
   }
 
-  Future<bool> _ensureSurfaceWarm() {
+  Future<bool> _warmManagedPresenterSurfaceForWarmup() {
+    if (_activeController != null) {
+      throw const ReportFlowFailure(
+        code: ReportFlowFailureCode.flowAlreadyActive,
+      );
+    }
+    return _ensureManagedPresenterSurfaceWarm();
+  }
+
+  Future<bool> _ensureManagedPresenterSurfaceWarm() {
     if (_surfaceReady) return Future<bool>.value(true);
     final ready = _surfaceWarmupFuture;
     if (ready != null) return ready;
     late final Future<bool> future;
     future =
         () async {
-          await _managedHeadlessSurface?.warmUp();
-          _surfaceReady = _managedHeadlessSurface != null;
+          await _managedPresenterSurface?.warmUp();
+          _surfaceReady = _managedPresenterSurface != null;
           return _surfaceReady;
         }().whenComplete(() {
           if (identical(_surfaceWarmupFuture, future)) {
@@ -359,7 +379,7 @@ class DefaultReportingBridgeFlutterClient
     await _activeController?.dispose();
     _activeController = null;
     _warmupCoordinator.dispose();
-    await _managedHeadlessSurface?.shutdown();
+    await _managedPresenterSurface?.shutdown();
     _surfaceReady = false;
     await _bridgeClient.dispose();
     _thermalPrinterSettings?.dispose();

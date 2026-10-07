@@ -294,7 +294,6 @@ final class _RecordingController extends ChangeNotifier
     seedData: const <String, dynamic>{'id': 1},
     reportName: 'Invoice',
     entryPolicy: ReportEntryPolicy.smart,
-    actionPolicy: const ReportActionPolicy(),
     selectedTemplateCriteria: SelectedTemplateCriteria(
       reportType: UrbReportType.salesInvoice,
     ),

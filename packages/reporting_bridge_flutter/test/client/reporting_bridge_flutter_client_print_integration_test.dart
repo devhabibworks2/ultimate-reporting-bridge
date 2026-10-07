@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reporting_bridge_flutter/reporting_bridge_flutter.dart';
 
@@ -133,6 +134,68 @@ void main() {
     expect(surface.shutdownCalls, 1);
   });
 
+  testWidgets(
+    'report flow screen borrows client surface until client disposal',
+    (tester) async {
+      final surface = _RecordingWarmableSurface();
+      final preferences = MemoryReportFlowPreferenceStore();
+      final fixture = _createClient(
+        root: root,
+        bridge: bridge,
+        filePlatform: filePlatform,
+        printPlatform: _FakePrintPlatform(),
+        preferences: preferences,
+        headlessPresenterSurface: surface,
+      );
+      await _seedSavedTemplate(fixture.connection, preferences);
+      await fixture.client.warmUpPresenter(
+        _request(entryPolicy: ReportEntryPolicy.smart),
+        warmPresenterSurface: true,
+      );
+      final initialPrint = await tester.runAsync(
+        () => fixture.client.printReportHeadless(
+          _request(entryPolicy: ReportEntryPolicy.smart),
+        ),
+      );
+      expect(initialPrint!.status, ReportPrintStatus.submitted);
+      final disposeCallsBeforeInteractive = surface.disposeCalls;
+      final controller = fixture.client.createController(
+        _request(entryPolicy: ReportEntryPolicy.smart),
+      );
+      await tester.runAsync(() => _ready(controller));
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ReportFlowScreen(
+            controller: controller,
+            ui: fixture.client.ui,
+            presenterSurface: surface,
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(surface.startCalls, 2);
+      expect(identical(surface.lastStartedSurface, surface), isTrue);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.runAsync(() async {});
+      expect(surface.disposeCalls, disposeCallsBeforeInteractive + 1);
+      expect(surface.shutdownCalls, 0);
+
+      final nextPrint = await tester.runAsync(
+        () => fixture.client.printReportHeadless(
+          _request(entryPolicy: ReportEntryPolicy.smart),
+        ),
+      );
+      expect(nextPrint!.status, ReportPrintStatus.submitted);
+      expect(surface.startCalls, 3);
+      expect(identical(surface.lastStartedSurface, surface), isTrue);
+
+      await fixture.client.dispose();
+      expect(surface.shutdownCalls, 1);
+    },
+  );
+
   test(
     'background refresh uses a separate Bridge client and reports the result',
     () async {
@@ -217,7 +280,6 @@ void main() {
           seedData: const <String, dynamic>{'id': 1},
           reportName: 'Invoice',
           entryPolicy: ReportEntryPolicy.alwaysPrepare,
-          actionPolicy: const ReportActionPolicy(),
           featuresOverride: const BridgeUiFeatures(
             showPrint: true,
             showSavePdf: true,
@@ -270,7 +332,6 @@ void main() {
           seedData: const <String, dynamic>{'id': 1},
           reportName: 'Invoice',
           entryPolicy: ReportEntryPolicy.alwaysPrepare,
-          actionPolicy: const ReportActionPolicy(),
           featuresOverride: const BridgeUiFeatures(
             showPrint: true,
             showSavePdf: true,
@@ -333,44 +394,38 @@ void main() {
     expect(filePlatform.shareCalls, 0);
   });
 
-  test('Print, Save, and Share remain independently enforced', () async {
-    final printPlatform = _FakePrintPlatform();
-    final fixture = _createClient(
-      root: root,
-      bridge: bridge,
-      filePlatform: filePlatform,
-      printPlatform: printPlatform,
-    );
-    addTearDown(fixture.client.dispose);
-    final controller = fixture.client.createController(
-      _request(
-        actionPolicy: const ReportActionPolicy(
-          canPrintPdf: false,
-          canSavePdf: true,
-          canSharePdf: true,
+  test(
+    'hidden output controls do not authorize programmatic actions',
+    () async {
+      final printPlatform = _FakePrintPlatform();
+      final fixture = _createClient(
+        root: root,
+        bridge: bridge,
+        filePlatform: filePlatform,
+        printPlatform: printPlatform,
+      );
+      addTearDown(fixture.client.dispose);
+      final controller = fixture.client.createController(
+        _request(
+          featuresOverride: const BridgeUiFeatures(
+            showPrint: false,
+            showSavePdf: false,
+            showSharePdf: false,
+          ),
         ),
-      ),
-    );
-    addTearDown(controller.dispose);
-    await _ready(controller);
+      );
+      addTearDown(controller.dispose);
+      await _ready(controller);
 
-    expect(
-      controller.printPdf,
-      throwsA(
-        isA<ReportFlowFailure>().having(
-          (failure) => failure.code,
-          'code',
-          ReportFlowFailureCode.actionDenied,
-        ),
-      ),
-    );
-    await controller.savePdf();
-    await controller.sharePdf();
+      await controller.printPdf();
+      await controller.savePdf();
+      await controller.sharePdf();
 
-    expect(printPlatform.calls, 0);
-    expect(filePlatform.saveCalls, 1);
-    expect(filePlatform.shareCalls, 1);
-  });
+      expect(printPlatform.calls, 1);
+      expect(filePlatform.saveCalls, 1);
+      expect(filePlatform.shareCalls, 1);
+    },
+  );
 
   test(
     'headless PDF generation returns exported bytes without print save or share',
@@ -389,14 +444,7 @@ void main() {
       await _seedSavedTemplate(fixture.connection, preferences);
 
       final bytes = await fixture.client.generateReportPdfHeadless(
-        _request(
-          entryPolicy: ReportEntryPolicy.smart,
-          actionPolicy: const ReportActionPolicy(
-            canPrintPdf: false,
-            canSavePdf: false,
-            canSharePdf: false,
-          ),
-        ),
+        _request(entryPolicy: ReportEntryPolicy.smart),
       );
 
       expect(bytes, Uint8List.fromList(<int>[1, 2, 3]));
@@ -580,13 +628,145 @@ void main() {
 
     final result = await fixture.client.warmUpPresenter(
       _request(),
-      warmHeadlessSurface: true,
+      warmPresenterSurface: true,
     );
 
     expect(surface.warmUpCalls, 1);
     expect(result.surfaceStatus, PresenterWarmupSurfaceStatus.ready);
     expect(result.resourceStatus, PresenterWarmupResourceStatus.skipped);
     expect(bridge.syncTemplatesCalls, 0);
+  });
+
+  test(
+    'explicit Presenter warm-up does not touch a surface during a flow',
+    () async {
+      final surface = _RecordingWarmableSurface();
+      final fixture = _createClient(
+        root: root,
+        bridge: bridge,
+        filePlatform: filePlatform,
+        printPlatform: _FakePrintPlatform(),
+        headlessPresenterSurface: surface,
+      );
+      addTearDown(fixture.client.dispose);
+      final controller = fixture.client.createController(_request());
+      addTearDown(controller.dispose);
+
+      final result = await fixture.client.warmUpPresenter(
+        _request(),
+        warmPresenterSurface: true,
+      );
+
+      expect(result.surfaceStatus, PresenterWarmupSurfaceStatus.failed);
+      expect(result.diagnostic, contains('flowAlreadyActive'));
+      expect(surface.warmUpCalls, 0);
+    },
+  );
+
+  test('surface warm-up failure leaves resource refresh independent', () async {
+    final surface = _RecordingWarmableSurface();
+    final fixture = _createClient(
+      root: root,
+      bridge: bridge,
+      filePlatform: filePlatform,
+      printPlatform: _FakePrintPlatform(),
+      headlessPresenterSurface: surface,
+      httpClientFactory: HttpClient.new,
+    );
+    addTearDown(fixture.client.dispose);
+    final controller = fixture.client.createController(_request());
+    addTearDown(controller.dispose);
+
+    final result = await fixture.client.warmUpPresenter(
+      _request(),
+      refreshResources: true,
+      warmPresenterSurface: true,
+    );
+
+    expect(result.surfaceStatus, PresenterWarmupSurfaceStatus.failed);
+    expect(result.diagnostic, contains('flowAlreadyActive'));
+    expect(result.resourceStatus, isNot(PresenterWarmupResourceStatus.skipped));
+    expect(surface.warmUpCalls, 0);
+  });
+
+  test(
+    'factory-only warm-up reports unavailable but final print still works',
+    () async {
+      final createdSurfaces = <_RecordingWarmableSurface>[];
+      final preferences = MemoryReportFlowPreferenceStore();
+      final printPlatform = _FakePrintPlatform();
+      final fixture = _createClient(
+        root: root,
+        bridge: bridge,
+        filePlatform: filePlatform,
+        printPlatform: printPlatform,
+        preferences: preferences,
+        headlessPresenterSurfaceFactory: () {
+          final surface = _RecordingWarmableSurface();
+          createdSurfaces.add(surface);
+          return surface;
+        },
+      );
+      addTearDown(fixture.client.dispose);
+      await _seedSavedTemplate(fixture.connection, preferences);
+
+      final warmup = await fixture.client.warmUpPresenter(
+        _request(entryPolicy: ReportEntryPolicy.smart),
+        warmPresenterSurface: true,
+      );
+      expect(warmup.surfaceStatus, PresenterWarmupSurfaceStatus.failed);
+      expect(warmup.diagnostic, contains('presenterSurfaceUnavailable'));
+      expect(createdSurfaces, isEmpty);
+
+      final result = await fixture.client.printReportHeadless(
+        _request(entryPolicy: ReportEntryPolicy.smart),
+      );
+
+      expect(result.status, ReportPrintStatus.submitted);
+      expect(printPlatform.calls, 1);
+      expect(createdSurfaces, hasLength(1));
+      expect(createdSurfaces.single.startCalls, 1);
+    },
+  );
+
+  test('warmUpPresenter accepts generic and legacy surface options', () async {
+    Future<void> verifyWarmup({
+      bool warmPresenterSurface = false,
+      bool warmHeadlessSurface = false,
+      required bool shouldWarm,
+    }) async {
+      final surface = _RecordingWarmableSurface();
+      final fixture = _createClient(
+        root: root,
+        bridge: bridge,
+        filePlatform: filePlatform,
+        printPlatform: _FakePrintPlatform(),
+        headlessPresenterSurface: surface,
+      );
+
+      final result = await fixture.client.warmUpPresenter(
+        _request(),
+        warmPresenterSurface: warmPresenterSurface,
+        warmHeadlessSurface: warmHeadlessSurface,
+      );
+
+      expect(surface.warmUpCalls, shouldWarm ? 1 : 0);
+      expect(
+        result.surfaceStatus,
+        shouldWarm
+            ? PresenterWarmupSurfaceStatus.ready
+            : PresenterWarmupSurfaceStatus.skipped,
+      );
+      await fixture.client.dispose();
+    }
+
+    await verifyWarmup(warmPresenterSurface: true, shouldWarm: true);
+    await verifyWarmup(warmHeadlessSurface: true, shouldWarm: true);
+    await verifyWarmup(
+      warmPresenterSurface: true,
+      warmHeadlessSurface: true,
+      shouldWarm: true,
+    );
   });
 }
 
@@ -597,6 +777,7 @@ _ClientFixture _createClient({
   ReportPrintPlatform? printPlatform,
   ReportFlowPreferenceStore? preferences,
   WarmableHeadlessPresenterSurface? headlessPresenterSurface,
+  HeadlessPresenterSurface Function()? headlessPresenterSurfaceFactory,
   HttpClient Function()? httpClientFactory,
 }) {
   final connection = ReportServerConnection(
@@ -622,6 +803,7 @@ _ClientFixture _createClient({
           filePlatform: filePlatform,
           ui: ui,
           headlessPresenterSurface: headlessPresenterSurface,
+          headlessPresenterSurfaceFactory: headlessPresenterSurfaceFactory,
         )
       : DefaultReportingBridgeFlutterClient(
           connection: connection,
@@ -631,23 +813,25 @@ _ClientFixture _createClient({
           printPlatform: printPlatform,
           ui: ui,
           headlessPresenterSurface: headlessPresenterSurface,
+          headlessPresenterSurfaceFactory: headlessPresenterSurfaceFactory,
         );
   return _ClientFixture(client, connection);
 }
 
 ReportOpenRequest _request({
-  ReportActionPolicy actionPolicy = const ReportActionPolicy(),
   ReportEntryPolicy entryPolicy = ReportEntryPolicy.alwaysPrepare,
+  BridgeUiFeatures? featuresOverride,
 }) => ReportOpenRequest(
   seedData: const <String, dynamic>{'id': 1},
   reportName: 'Invoice',
   entryPolicy: entryPolicy,
-  actionPolicy: actionPolicy,
-  featuresOverride: const BridgeUiFeatures(
-    showPrint: true,
-    showSavePdf: true,
-    showSharePdf: true,
-  ),
+  featuresOverride:
+      featuresOverride ??
+      const BridgeUiFeatures(
+        showPrint: true,
+        showSavePdf: true,
+        showSharePdf: true,
+      ),
   selectedTemplateCriteria: SelectedTemplateCriteria(
     reportType: UrbReportType.salesInvoice,
   ),
@@ -755,6 +939,7 @@ final class _RecordingWarmableSurface
     required ReportFlowController controller,
     required PresenterSurfaceBinding surfaceBinding,
   }) async {
+    await Future<void>.value();
     startCalls += 1;
     lastStartedSurface = this;
     if (startEntered != null && !startEntered!.isCompleted) {

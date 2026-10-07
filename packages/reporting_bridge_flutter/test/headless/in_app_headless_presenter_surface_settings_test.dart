@@ -26,9 +26,28 @@ void main() {
       await surface.shutdown();
     },
   );
+
+  test('failed headless WebView run is cleared so warm-up can retry', () async {
+    final platform = _CapturingHeadlessWebViewPlatform(failFirstRun: true);
+    InAppWebViewPlatform.instance = platform;
+    final surface = InAppHeadlessPresenterSurface();
+
+    await expectLater(surface.warmUp(), throwsStateError);
+    expect(platform.createCount, 1);
+    expect(platform.disposeCount, 1);
+
+    await surface.warmUp();
+    expect(platform.createCount, 2);
+    await surface.shutdown();
+  });
 }
 
 class _CapturingHeadlessWebViewPlatform extends InAppWebViewPlatform {
+  _CapturingHeadlessWebViewPlatform({this.failFirstRun = false});
+
+  final bool failFirstRun;
+  int createCount = 0;
+  int disposeCount = 0;
   PlatformHeadlessInAppWebViewCreationParams? lastHeadlessParams;
 
   @override
@@ -36,7 +55,12 @@ class _CapturingHeadlessWebViewPlatform extends InAppWebViewPlatform {
     PlatformHeadlessInAppWebViewCreationParams params,
   ) {
     lastHeadlessParams = params;
-    return _FakePlatformHeadlessInAppWebView(params);
+    createCount += 1;
+    return _FakePlatformHeadlessInAppWebView(
+      params,
+      failRun: failFirstRun && createCount == 1,
+      onDispose: () => disposeCount += 1,
+    );
   }
 
   @override
@@ -48,7 +72,14 @@ class _CapturingHeadlessWebViewPlatform extends InAppWebViewPlatform {
 }
 
 class _FakePlatformHeadlessInAppWebView extends PlatformHeadlessInAppWebView {
-  _FakePlatformHeadlessInAppWebView(super.params) : super.implementation();
+  _FakePlatformHeadlessInAppWebView(
+    super.params, {
+    this.failRun = false,
+    this.onDispose,
+  }) : super.implementation();
+
+  final bool failRun;
+  final VoidCallback? onDispose;
 
   @override
   String get id => 'headless-test';
@@ -57,13 +88,17 @@ class _FakePlatformHeadlessInAppWebView extends PlatformHeadlessInAppWebView {
   PlatformInAppWebViewController? get webViewController => null;
 
   @override
-  Future<void> run() async {}
+  Future<void> run() async {
+    if (failRun) throw StateError('headless run failed');
+  }
 
   @override
   bool isRunning() => false;
 
   @override
-  Future<void> dispose() async {}
+  Future<void> dispose() async {
+    onDispose?.call();
+  }
 }
 
 class _UnusedPlatformInAppWebViewWidget extends PlatformInAppWebViewWidget {

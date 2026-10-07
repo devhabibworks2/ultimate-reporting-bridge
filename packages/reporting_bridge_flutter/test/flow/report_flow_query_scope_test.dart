@@ -81,7 +81,12 @@ void main() {
 
     expect(bridge.syncCalls, isNotEmpty);
     expect(bridge.listCalls, isNotEmpty);
-    for (final call in <_ScopeCall>[...bridge.syncCalls, ...bridge.listCalls]) {
+    expect(bridge.defaultCalls, isNotEmpty);
+    for (final call in <_ScopeCall>[
+      ...bridge.syncCalls,
+      ...bridge.listCalls,
+      ...bridge.defaultCalls,
+    ]) {
       expect(call.systemCode, 'motakamel_transactions');
       expect(call.filter?.reportTypes, <String>['sales_invoice']);
       expect(call.filter?.layouts, <String>['Pages']);
@@ -218,6 +223,7 @@ final class _RecordingScopedBridgeClient extends ReportingBridgeClient {
 
   final List<_ScopeCall> syncCalls = <_ScopeCall>[];
   final List<_ScopeCall> listCalls = <_ScopeCall>[];
+  final List<_ScopeCall> defaultCalls = <_ScopeCall>[];
   final List<BridgeIdentityContext> identityUpdates = <BridgeIdentityContext>[];
 
   @override
@@ -279,6 +285,18 @@ final class _RecordingScopedBridgeClient extends ReportingBridgeClient {
         metadata: <String, dynamic>{'systemCode': systemCode},
       ),
     ];
+  }
+
+  @override
+  Future<List<TemplateDefaultHint>> listTemplateDefaults({
+    required String systemCode,
+    TemplateSyncFilter? filter,
+    Map<String, Object?> extra = const <String, Object?>{},
+  }) async {
+    defaultCalls.add(
+      _ScopeCall(systemCode: systemCode, filter: filter, extra: extra),
+    );
+    return const <TemplateDefaultHint>[];
   }
 
   @override

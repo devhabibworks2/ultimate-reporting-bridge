@@ -226,7 +226,6 @@ final class _FakeHeadlessController extends ChangeNotifier
     seedData: const <String, dynamic>{'id': 1},
     reportName: 'Invoice',
     entryPolicy: ReportEntryPolicy.smart,
-    actionPolicy: const ReportActionPolicy(),
     selectedTemplateCriteria: SelectedTemplateCriteria(
       reportType: UrbReportType.salesInvoice,
     ),
@@ -240,9 +239,6 @@ final class _FakeHeadlessController extends ChangeNotifier
 
   @override
   PresenterSurfaceBinding get presenterSurface => _surfaceBinding;
-
-  @override
-  ReportActionPolicy get actionPolicy => request.actionPolicy;
 
   @override
   BridgeUiFeatures get effectiveFeatures =>

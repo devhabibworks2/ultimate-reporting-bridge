@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:reporting_bridge/reporting_bridge.dart';
 
 import '../flow/report_flow_controller.dart';
+import '../headless/headless_presenter_surface.dart';
 import '../flow/report_flow_event.dart';
 import '../flow/report_flow_failure.dart';
 import '../flow/report_flow_state.dart';
@@ -94,10 +95,14 @@ class ReportFlowScreen extends StatefulWidget {
     super.key,
     required this.controller,
     required this.ui,
+    this.presenterSurface,
+    this.presenterSurfaceFactory,
   });
 
   final ReportFlowController controller;
   final BridgeUiConfig ui;
+  final HeadlessPresenterSurface? presenterSurface;
+  final HeadlessPresenterSurfaceFactory? presenterSurfaceFactory;
 
   @override
   State<ReportFlowScreen> createState() => _ReportFlowScreenState();
@@ -240,6 +245,8 @@ class _ReportFlowScreenState extends State<ReportFlowScreen> {
                   strings: strings,
                   features: features,
                   pdfPreview: pdfPreview,
+                  presenterSurface: widget.presenterSurface,
+                  presenterSurfaceFactory: widget.presenterSurfaceFactory,
                   searchController: _searchController,
                   onClose: _close,
                   onCancelOpening: _cancelOpeningImmediately,
@@ -283,6 +290,8 @@ class _ReportFlowScreenState extends State<ReportFlowScreen> {
                     strings: strings,
                     features: features,
                     pdfPreview: pdfPreview,
+                    presenterSurface: widget.presenterSurface,
+                    presenterSurfaceFactory: widget.presenterSurfaceFactory,
                     onClose: _close,
                     onCancelOpening: _cancelOpeningImmediately,
                   ),
@@ -377,6 +386,8 @@ class _PersistentPreviewFlow extends StatelessWidget {
     required this.strings,
     required this.features,
     required this.pdfPreview,
+    required this.presenterSurface,
+    required this.presenterSurfaceFactory,
     required this.searchController,
     required this.onClose,
     required this.onCancelOpening,
@@ -387,6 +398,8 @@ class _PersistentPreviewFlow extends StatelessWidget {
   final ReportFlowStrings strings;
   final BridgeUiFeatures features;
   final BridgePdfPreviewConfig pdfPreview;
+  final HeadlessPresenterSurface? presenterSurface;
+  final HeadlessPresenterSurfaceFactory? presenterSurfaceFactory;
   final TextEditingController searchController;
   final Future<void> Function() onClose;
   final VoidCallback onCancelOpening;
@@ -433,6 +446,8 @@ class _PersistentPreviewFlow extends StatelessWidget {
       strings: strings,
       features: features,
       pdfPreview: pdfPreview,
+      presenterSurface: presenterSurface,
+      presenterSurfaceFactory: presenterSurfaceFactory,
       onClose: onClose,
       onCancelOpening: onCancelOpening,
     );
@@ -2591,6 +2606,8 @@ class _PreviewPage extends StatefulWidget {
     required this.strings,
     required this.features,
     required this.pdfPreview,
+    required this.presenterSurface,
+    required this.presenterSurfaceFactory,
     required this.onClose,
     required this.onCancelOpening,
   });
@@ -2600,6 +2617,8 @@ class _PreviewPage extends StatefulWidget {
   final ReportFlowStrings strings;
   final BridgeUiFeatures features;
   final BridgePdfPreviewConfig pdfPreview;
+  final HeadlessPresenterSurface? presenterSurface;
+  final HeadlessPresenterSurfaceFactory? presenterSurfaceFactory;
   final Future<void> Function() onClose;
   final VoidCallback onCancelOpening;
 
@@ -2751,6 +2770,8 @@ class _PreviewPageState extends State<_PreviewPage> {
               templateName: template.templateName,
               controller: widget.controller,
               surfaceBinding: widget.controller.presenterSurface,
+              presenterSurface: widget.presenterSurface,
+              headlessSurfaceFactory: widget.presenterSurfaceFactory,
               pdfPreview: widget.pdfPreview,
               showInternalLoadingIndicator: false,
               onViewerFirstFrame: _markViewerReady,

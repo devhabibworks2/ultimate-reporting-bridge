@@ -111,6 +111,56 @@ void main() {
     expect(identical(probe.bytes, bytes), isTrue);
   });
 
+  testWidgets('borrows direct surface and disposes without shutting it down', (
+    tester,
+  ) async {
+    final surface = _FakeHeadlessSurface();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: BridgePresenterView(
+          launch: _launch('borrowed'),
+          templateName: 'Template',
+          controller: _FakeController(),
+          surfaceBinding: PresenterSurfaceBinding(),
+          presenterSurface: surface,
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(surface.startCalls, 1);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+
+    expect(surface.disposeCalls, 1);
+    expect(surface.shutdownCalls, 0);
+  });
+
+  testWidgets('borrowed surface is reused for replacement sessions', (
+    tester,
+  ) async {
+    final surface = _FakeHeadlessSurface();
+    Widget build(String sessionId) => MaterialApp(
+      home: BridgePresenterView(
+        launch: _launch(sessionId),
+        templateName: 'Template',
+        controller: _FakeController(),
+        surfaceBinding: PresenterSurfaceBinding(),
+        presenterSurface: surface,
+      ),
+    );
+
+    await tester.pumpWidget(build('s1'));
+    await tester.pump();
+    await tester.pumpWidget(build('s2'));
+    await tester.pump();
+
+    expect(surface.startCalls, 2);
+    expect(surface.shutdownCalls, 0);
+    expect(surface.disposeCalls, 0);
+  });
+
   testWidgets('replacement reuses warm runtime and clears prior PDF', (
     tester,
   ) async {
@@ -177,6 +227,7 @@ class _BytesProbe extends StatelessWidget {
 
 class _FakeHeadlessSurface implements WarmableHeadlessPresenterSurface {
   int startCalls = 0;
+  int disposeCalls = 0;
   int shutdownCalls = 0;
 
   @override
@@ -190,7 +241,9 @@ class _FakeHeadlessSurface implements WarmableHeadlessPresenterSurface {
   }
 
   @override
-  Future<void> dispose() async {}
+  Future<void> dispose() async {
+    disposeCalls += 1;
+  }
 
   @override
   Future<void> warmUp() async {}

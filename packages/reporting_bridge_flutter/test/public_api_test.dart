@@ -206,6 +206,7 @@ void main() {
     Future<PresenterWarmupResult> Function(
       ReportOpenRequest request, {
       bool refreshResources,
+      bool warmPresenterSurface,
       bool warmHeadlessSurface,
     })
     prepare(ReportingBridgeFlutterClient client) => client.warmUpPresenter;

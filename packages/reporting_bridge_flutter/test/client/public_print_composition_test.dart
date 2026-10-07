@@ -224,7 +224,6 @@ ReportOpenRequest _request() => ReportOpenRequest(
   seedData: const <String, dynamic>{'id': 1},
   reportName: 'Invoice',
   entryPolicy: ReportEntryPolicy.alwaysPrepare,
-  actionPolicy: const ReportActionPolicy(canPrintPdf: true),
   featuresOverride: const BridgeUiFeatures(showPrint: true),
   selectedTemplateCriteria: SelectedTemplateCriteria(
     reportType: UrbReportType.salesInvoice,

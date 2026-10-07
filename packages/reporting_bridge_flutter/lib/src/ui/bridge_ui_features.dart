@@ -1,5 +1,3 @@
-import '../flow/report_action_policy.dart';
-
 class BridgeUiFeatures {
   const BridgeUiFeatures({
     this.allowOfflineMode = true,
@@ -26,17 +24,6 @@ class BridgeUiFeatures {
   /// Defaults to true by product decision. Hosts that must prohibit
   /// diagnostic data export can disable it explicitly.
   final bool showDevelopmentSupport;
-
-  BridgeUiFeatures restrictTo(ReportActionPolicy policy) => BridgeUiFeatures(
-    allowOfflineMode: allowOfflineMode,
-    showCurrentTemplate: showCurrentTemplate,
-    showTemplateMetadata: showTemplateMetadata,
-    showPrint: showPrint && policy.canPrintPdf,
-    showSavePdf: showSavePdf && policy.canSavePdf,
-    showSharePdf: showSharePdf && policy.canSharePdf,
-    showSettings: showSettings,
-    showDevelopmentSupport: showDevelopmentSupport,
-  );
 
   bool get hasVisibleOutputAction => showPrint || showSavePdf || showSharePdf;
 }

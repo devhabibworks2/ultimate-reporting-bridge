@@ -151,6 +151,51 @@ void main() {
       expect(controller.value.templates, isEmpty);
     },
   );
+
+  test(
+    'query-surviving template must still satisfy compatibility constraints',
+    () async {
+      final queryFilter = TemplateSyncFilter(languages: <String>['en']);
+      final bridge = _FakeBridge(
+        root,
+        templates: <CachedTemplate>[
+          _canonical(
+            id: 'english-a4',
+            language: 'en',
+            size: 'A4',
+            width: 210,
+            height: 297,
+          ),
+        ],
+      );
+      final controller = ReportFlowControllerImpl(
+        request: buildTestOpenRequest(
+          entryPolicy: ReportEntryPolicy.alwaysPrepare,
+          filter: queryFilter,
+          compatibility: const TemplateCompatibilityConstraints(
+            language: ReportLanguage.ar,
+            layout: ReportLayout.pages,
+            size: ReportPageSize.a4,
+          ),
+        ),
+        runtime: ReportFlowRuntime(
+          connection: connection,
+          bridgeClient: bridge,
+          preferences: preferences,
+          filePlatform: const _NoopFiles(),
+          surfaceBinding: PresenterSurfaceBinding(),
+        ),
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      expect(bridge.listFilters, isNotEmpty);
+      expect(bridge.listFilters, everyElement(queryFilter));
+      expect(controller.value.templates, isEmpty);
+      expect(controller.eligibleTemplates, isEmpty);
+    },
+  );
 }
 
 class _FakeBridge extends ReportingBridgeClient {
@@ -166,6 +211,7 @@ class _FakeBridge extends ReportingBridgeClient {
       );
 
   final List<CachedTemplate> templates;
+  final List<TemplateSyncFilter?> listFilters = <TemplateSyncFilter?>[];
 
   @override
   Future<TemplateSyncSummary> syncTemplates({
@@ -185,7 +231,10 @@ class _FakeBridge extends ReportingBridgeClient {
     int? systemId,
     TemplateSyncFilter? filter,
     Map<String, Object?> extra = const <String, Object?>{},
-  }) async => List<CachedTemplate>.from(templates);
+  }) async {
+    listFilters.add(filter);
+    return List<CachedTemplate>.from(templates);
+  }
 
   @override
   Future<ReportingBridgeStatus> getStatus() async => ReportingBridgeStatus(

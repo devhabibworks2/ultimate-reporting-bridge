@@ -85,7 +85,16 @@ final class InAppHeadlessPresenterSurface
       },
     );
     _webView = webView;
-    await webView.run();
+    try {
+      await webView.run();
+    } catch (_) {
+      if (identical(_webView, webView)) {
+        _webView = null;
+        _webController = null;
+      }
+      await webView.dispose();
+      rethrow;
+    }
   }
 
   void _attach(InAppWebViewController webController) {
