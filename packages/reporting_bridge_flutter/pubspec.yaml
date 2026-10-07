@@ -1,7 +1,7 @@
 name: reporting_bridge_flutter
 description: Flutter workflow and default UI for Ultimate Report Builder Reporting Bridge.
 publish_to: "none"
-version: 1.0.2
+version: 1.0.3
 
 environment:
   sdk: ">=3.9.0 <4.0.0"
