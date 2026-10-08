@@ -534,6 +534,26 @@ void main() {
     ]);
     expect(backendCalls, 1);
 
+    final crossOriginRequest = await client.getUrl(uri);
+    crossOriginRequest.headers.set('Origin', 'https://attacker.example');
+    final crossOriginResponse = await crossOriginRequest.close();
+    expect(crossOriginResponse.statusCode, HttpStatus.forbidden);
+    expect(
+      backendCalls,
+      1,
+      reason: 'Cross-origin website must not trigger privileged relay',
+    );
+
+    final crossSiteRequest = await client.getUrl(uri);
+    crossSiteRequest.headers.set('Sec-Fetch-Site', 'cross-site');
+    final crossSiteResponse = await crossSiteRequest.close();
+    expect(crossSiteResponse.statusCode, HttpStatus.forbidden);
+    expect(
+      backendCalls,
+      1,
+      reason: 'Cross-site navigation cannot trigger Backend relay',
+    );
+
     final wrongMethod = await (await client.openUrl('HEAD', uri)).close();
     expect(wrongMethod.statusCode, HttpStatus.methodNotAllowed);
 

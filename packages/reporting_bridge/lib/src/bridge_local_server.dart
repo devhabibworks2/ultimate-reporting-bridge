@@ -252,6 +252,19 @@ class LocalPresenterServer {
       await request.response.close();
       return;
     }
+    // The loopback server carries privileged Backend headers not accessible
+    // to the web Presenter. Never expose this relay to arbitrary web origins.
+    final origin = request.headers.value('Origin');
+    final localOrigin = 'http://' + (request.headers.host ?? '');
+    final fetchSite = request.headers.value('Sec-Fetch-Site');
+    if ((origin != null && origin != localOrigin) ||
+        (fetchSite != null &&
+            fetchSite != 'same-origin' &&
+            fetchSite != 'none')) {
+      request.response.statusCode = HttpStatus.forbidden;
+      await request.response.close();
+      return;
+    }
     final params = request.uri.queryParametersAll;
     final urls = params['url'];
     if (params.length != 1 || urls == null || urls.length != 1) {
