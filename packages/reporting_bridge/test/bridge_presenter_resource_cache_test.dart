@@ -68,4 +68,34 @@ void main() {
       expect(await outside.readAsString(), 'outside');
     },
   );
+  test(
+    'persistent bytes survive local session replacement and server stop',
+    () async {
+      final root = await Directory.systemTemp.createTemp(
+        'bridge_cache_sessions_',
+      );
+      addTearDown(() => root.delete(recursive: true));
+      final presenter = Directory(root.path + '/presenter');
+      final runtime = Directory(root.path + '/runtime');
+      await presenter.create();
+      await runtime.create();
+      await File(presenter.path + '/index.html').writeAsString('site');
+      final store = PresenterResourceCacheStore(
+        cacheRoot: Directory(root.path + '/persistent'),
+      );
+      final key = 'a' * 64;
+      await store.write(key, Uint8List.fromList(<int>[9, 8, 7]));
+      final server = LocalPresenterServer(
+        presenterRoot: presenter,
+        runtimeRoot: runtime,
+        resourceCacheStore: store,
+      );
+      final first = await server.start(sessionId: 'first');
+      await first.stop();
+      final second = await server.start(sessionId: 'second');
+      await second.stop();
+      await server.stop();
+      expect(await store.read(key), Uint8List.fromList(<int>[9, 8, 7]));
+    },
+  );
 }
