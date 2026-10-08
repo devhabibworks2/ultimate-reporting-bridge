@@ -28,6 +28,62 @@ void main() {
   });
 
   test(
+    'custom family reaches preview and restores the saved selection',
+    () async {
+      final bridge = _FakeBridge(
+        root,
+        templates: [
+          _canonical(
+            id: 'transfer',
+            family: 'inventory_transfer',
+            language: 'ar',
+            size: 'A4',
+            width: 210,
+            height: 297,
+          ),
+          _canonical(
+            id: 'purchase',
+            family: 'purchase_order',
+            language: 'ar',
+            size: 'A4',
+            width: 210,
+            height: 297,
+          ),
+        ],
+      );
+      ReportFlowControllerImpl create() => ReportFlowControllerImpl(
+        request: buildTestOpenRequest(
+          reportType: 'inventory_transfer',
+          entryPolicy: ReportEntryPolicy.alwaysPrepare,
+          presenterMode: PresenterModePreference.online,
+        ),
+        runtime: ReportFlowRuntime(
+          connection: connection,
+          bridgeClient: bridge,
+          preferences: preferences,
+          filePlatform: const _NoopFiles(),
+          surfaceBinding: PresenterSurfaceBinding(),
+        ),
+      );
+      final first = create();
+      await first.initialize();
+      expect(first.value.templates.map((t) => t.templateCode), ['transfer']);
+      first.selectTemplate('transfer');
+      await first.continueFromPreparation();
+      expect(first.value.stage, ReportFlowStage.previewing);
+      expect(bridge.sessionTypes, ['inventory_transfer']);
+      await first.dispose();
+      final second = create();
+      addTearDown(second.dispose);
+      await second.initialize();
+      expect(second.value.selectedTemplateCode, 'transfer');
+      await second.continueFromPreparation();
+      expect(second.value.stage, ReportFlowStage.previewing);
+      expect(bridge.sessionTypes, ['inventory_transfer', 'inventory_transfer']);
+    },
+  );
+
+  test(
     'state.templates is the single eligible authority used by workflow',
     () async {
       final bridge = _FakeBridge(
@@ -212,6 +268,23 @@ class _FakeBridge extends ReportingBridgeClient {
 
   final List<CachedTemplate> templates;
   final List<TemplateSyncFilter?> listFilters = <TemplateSyncFilter?>[];
+  final List<String> sessionTypes = [];
+
+  @override
+  Future<PresenterSessionLaunch> prepareSession(
+    PresenterSessionRequest request,
+  ) async {
+    sessionTypes.add(request.reportType);
+    return const PresenterSessionLaunch(
+      presenterUrl: 'https://presenter.test/session',
+      sessionId: 'session',
+      presenterVersion: '1.0.0',
+      presenterDevVersion: 1,
+    );
+  }
+
+  @override
+  Future<void> dispose() async {}
 
   @override
   Future<TemplateSyncSummary> syncTemplates({
@@ -252,21 +325,19 @@ class _FakeBridge extends ReportingBridgeClient {
 
 CachedTemplate _canonical({
   required String id,
+  String family = 'sales_invoice',
   required String language,
   required String size,
   required double width,
   required double height,
 }) => CachedTemplate(
   code: id,
-  type: 'sales_invoice',
+  type: family,
   name: id,
   version: '1.0.0',
   document: <String, dynamic>{
     'schemaVersion': '1.0.0',
-    'meta': const <String, dynamic>{
-      'name': 'Invoice',
-      'family': 'sales_invoice',
-    },
+    'meta': <String, dynamic>{'name': 'Invoice', 'family': family},
     'page': <String, dynamic>{
       'layout': 'Pages',
       'size': size,

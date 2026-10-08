@@ -45,7 +45,7 @@ final class ReportTemplateMetadata {
         'Report family is required.',
       );
     }
-    final reportType = UrbReportType.parseCanonical(familyRaw);
+    final reportType = UrbReportTypeCode(familyRaw);
 
     final layoutRaw = _text(page['layout']);
     if (layoutRaw == null) {

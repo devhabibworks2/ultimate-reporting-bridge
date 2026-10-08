@@ -2,6 +2,55 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:reporting_bridge_flutter/reporting_bridge_flutter.dart';
 
 void main() {
+  test(
+    'custom families survive metadata parsing and eligibility filtering',
+    () {
+      final custom = _canonical(
+        id: 'inventory',
+        family: ' inventory_transfer ',
+        layout: 'Pages',
+        size: 'A4',
+        orientation: 'portrait',
+        language: 'ar',
+        width: 210,
+        height: 297,
+      );
+      final other = _canonical(
+        id: 'purchase',
+        family: 'purchase_order',
+        layout: 'Pages',
+        size: 'A4',
+        orientation: 'portrait',
+        language: 'ar',
+        width: 210,
+        height: 297,
+      );
+      expect(custom.reportMetadata.reportType.value, 'inventory_transfer');
+      expect(
+        filterEligibleTemplates([
+          custom,
+          other,
+        ], reportType: 'inventory_transfer'),
+        [custom],
+      );
+      expect(
+        filterEligibleTemplates([custom], reportType: 'sales_invoice'),
+        isEmpty,
+      );
+    },
+  );
+  test('blank custom families remain invalid', () {
+    final template = _canonical(
+      family: ' ',
+      layout: 'Pages',
+      size: 'A4',
+      orientation: 'portrait',
+      language: 'ar',
+      width: 210,
+      height: 297,
+    );
+    expect(ReportTemplateMetadata.tryFromTemplate(template), isNull);
+  });
   group('canonical PASS cases', () {
     test('Pages/A4/portrait/ar/mm', () {
       final metadata = ReportTemplateMetadata.fromTemplate(
@@ -304,11 +353,11 @@ void main() {
       );
     });
 
-    test('noncanonical meta.family', () {
+    test('missing meta.family', () {
       expect(
         () => ReportTemplateMetadata.fromTemplate(
           _canonical(
-            family: 'invoice',
+            family: null,
             layout: 'Pages',
             size: 'A4',
             orientation: 'portrait',
