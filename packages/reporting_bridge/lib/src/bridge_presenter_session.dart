@@ -3,6 +3,7 @@ import 'dart:io';
 import 'bridge_cache_namespace.dart';
 import 'bridge_config.dart';
 import 'bridge_contract.dart';
+import 'bridge_image_proxy_relay.dart';
 import 'bridge_local_server.dart';
 import 'bridge_presenter_cache.dart';
 import 'bridge_presenter_resource_cache.dart';
@@ -222,6 +223,12 @@ class PresenterSessionCoordinator {
       await presenterCache.normalizeCachedPresenterForOffline();
       candidateHandle = await candidateServer.start(
         sessionId: runtimeSession.sessionId,
+        imageProxyRelay: request.mode == PresenterSessionMode.online
+            ? BridgeImageProxyRelay(
+                apiBaseUrl: apiBaseUrl,
+                headers: effectiveHeaders,
+              )
+            : null,
       );
 
       final launch = PresenterSessionLaunch(

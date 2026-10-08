@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:archive/archive.dart';
 import 'package:reporting_bridge/reporting_bridge.dart';
+import 'package:reporting_bridge/src/bridge_image_proxy_relay.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -478,6 +479,93 @@ void main() {
         '<!doctype html><head><base href="/UltimateReport/apps/presenter/"></head>',
       );
     });
+  });
+
+  test('same-origin image relay enforces session and HTTP method', () async {
+    final root = await Directory.systemTemp.createTemp('bridge_image_route_');
+    addTearDown(() => root.delete(recursive: true));
+    final presenter = Directory(root.path + '/presenter');
+    final runtime = Directory(root.path + '/runtime');
+    await presenter.create();
+    await runtime.create();
+    await File(presenter.path + '/index.html').writeAsString('presenter');
+    final backend = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => backend.close(force: true));
+    var backendCalls = 0;
+    backend.listen((request) async {
+      backendCalls++;
+      request.response.headers.contentType = ContentType('image', 'png');
+      request.response.add(<int>[137, 80, 78, 71, 13, 10, 26, 10]);
+      await request.response.close();
+    });
+
+    final server = LocalPresenterServer(
+      presenterRoot: presenter,
+      runtimeRoot: runtime,
+    );
+    final handle = await server.start(
+      sessionId: 'allowed',
+      imageProxyRelay: BridgeImageProxyRelay(
+        apiBaseUrl: Uri.parse(
+          'http://127.0.0.1:' + backend.port.toString() + '/',
+        ),
+        headers: const <String, String>{'X-Tenant-Id': 'customer-A'},
+      ),
+    );
+    addTearDown(server.stop);
+    final client = HttpClient();
+    addTearDown(client.close);
+    final source = Uri.encodeQueryComponent('https://images.test/logo.png');
+    final uri = Uri.parse(
+      handle.baseUrl + '/runtime/allowed/image-proxy?url=' + source,
+    );
+    final result = await (await client.getUrl(uri)).close();
+    expect(result.statusCode, HttpStatus.ok);
+    expect(result.headers.contentType?.mimeType, 'image/png');
+    expect(await result.fold<List<int>>(<int>[], (a, b) => a..addAll(b)), <int>[
+      137,
+      80,
+      78,
+      71,
+      13,
+      10,
+      26,
+      10,
+    ]);
+    expect(backendCalls, 1);
+
+    final crossOriginRequest = await client.getUrl(uri);
+    crossOriginRequest.headers.set('Origin', 'https://attacker.example');
+    final crossOriginResponse = await crossOriginRequest.close();
+    expect(crossOriginResponse.statusCode, HttpStatus.forbidden);
+    expect(
+      backendCalls,
+      1,
+      reason: 'Cross-origin website must not trigger privileged relay',
+    );
+
+    final crossSiteRequest = await client.getUrl(uri);
+    crossSiteRequest.headers.set('Sec-Fetch-Site', 'cross-site');
+    final crossSiteResponse = await crossSiteRequest.close();
+    expect(crossSiteResponse.statusCode, HttpStatus.forbidden);
+    expect(
+      backendCalls,
+      1,
+      reason: 'Cross-site navigation cannot trigger Backend relay',
+    );
+
+    final wrongMethod = await (await client.openUrl('HEAD', uri)).close();
+    expect(wrongMethod.statusCode, HttpStatus.methodNotAllowed);
+
+    final missing = await (await client.getUrl(
+      Uri.parse(handle.baseUrl + '/runtime/allowed/image-proxy'),
+    )).close();
+    expect(missing.statusCode, HttpStatus.badRequest);
+
+    await handle.stop();
+    final released = await (await client.getUrl(uri)).close();
+    expect(released.statusCode, HttpStatus.notFound);
+    expect(backendCalls, 1);
   });
 
   group('LocalPresenterServer', () {

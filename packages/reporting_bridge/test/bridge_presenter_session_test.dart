@@ -138,6 +138,61 @@ void main() {
     },
   );
 
+  test(
+    'online session relays image requests but offline session does not',
+    () async {
+      final api = await _startManifestServer();
+      addTearDown(() => api.close(force: true));
+      final root = await Directory.systemTemp.createTemp(
+        'bridge_image_session_',
+      );
+      addTearDown(() => root.delete(recursive: true));
+      await _writeReadyPresenterSite(Directory(root.path + '/presenter'));
+      await _writeCachedManifest(
+        root,
+        presenterVersion: '1.2.3',
+        devVersion: 12,
+        manifestUrl:
+            'http://127.0.0.1:' +
+            api.port.toString() +
+            '/api/presenter/bundles/manifest',
+      );
+      final coordinator = _coordinator(
+        root: root,
+        apiBaseUrl: Uri.parse('http://127.0.0.1:' + api.port.toString() + '/'),
+      );
+      addTearDown(coordinator.dispose);
+      final online = await coordinator.prepare(_onlineRequest('relay-online'));
+      final client = HttpClient();
+      addTearDown(client.close);
+      final url = Uri.parse(
+        Uri.parse(online.presenterUrl).origin +
+            '/runtime/relay-online/image-proxy?url=' +
+            Uri.encodeQueryComponent('https://images.test/logo.png'),
+      );
+      // The fixture Backend returns 404, proving the online relay reached Backend.
+      final onlineResult = await (await client.getUrl(url)).close();
+      expect(onlineResult.statusCode, HttpStatus.badGateway);
+      final offline = await coordinator.prepare(
+        PresenterSessionRequest(
+          sessionId: 'relay-offline',
+          reportType: 'invoice',
+          reportName: 'Invoice',
+          mode: PresenterSessionMode.offline,
+          seedData: const <String, dynamic>{'value': 1},
+          template: _template('invoice-template'),
+        ),
+      );
+      final offlineUrl = Uri.parse(
+        Uri.parse(offline.presenterUrl).origin +
+            '/runtime/relay-offline/image-proxy?url=' +
+            Uri.encodeQueryComponent('https://images.test/logo.png'),
+      );
+      final offlineResult = await (await client.getUrl(offlineUrl)).close();
+      expect(offlineResult.statusCode, HttpStatus.notFound);
+    },
+  );
+
   test('offline session never requests manifest or bundle endpoints', () async {
     var endpointCalls = 0;
     final api = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);

@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'bridge_image_proxy_relay.dart';
 import 'bridge_presenter_resource_cache.dart';
 import 'bridge_runtime_error.dart';
 
@@ -37,16 +39,20 @@ class LocalPresenterServer {
   static const String _presenterRoutePrefix = '/UltimateReport/apps/presenter/';
   HttpServer? _server;
   final Set<String> _sessionIds = <String>{};
+  final Map<String, BridgeImageProxyRelay> _imageRelays =
+      <String, BridgeImageProxyRelay>{};
   bool _servePresenter = false;
 
   Future<LocalServerHandle> start({
     required String sessionId,
     PortPolicy portPolicy = const PortPolicy(),
+    BridgeImageProxyRelay? imageProxyRelay,
   }) async {
     return _start(
       sessionId: sessionId,
       portPolicy: portPolicy,
       servePresenter: true,
+      imageProxyRelay: imageProxyRelay,
     );
   }
 
@@ -65,6 +71,7 @@ class LocalPresenterServer {
     required String sessionId,
     required PortPolicy portPolicy,
     required bool servePresenter,
+    BridgeImageProxyRelay? imageProxyRelay,
   }) async {
     final activeSessionId = _validatedSessionId(sessionId);
     if (servePresenter &&
@@ -110,6 +117,11 @@ class LocalPresenterServer {
       }
 
       _sessionIds.add(activeSessionId);
+      if (imageProxyRelay == null) {
+        _imageRelays.remove(activeSessionId);
+      } else {
+        _imageRelays[activeSessionId] = imageProxyRelay;
+      }
       final baseUrl = 'http://127.0.0.1:${server.port}';
       return LocalServerHandle(
         port: server.port,
@@ -121,6 +133,7 @@ class LocalPresenterServer {
       );
     } on Object catch (error) {
       _sessionIds.remove(activeSessionId);
+      _imageRelays.remove(activeSessionId);
       if (createdServer) {
         await stop();
       }
@@ -149,13 +162,16 @@ class LocalPresenterServer {
   }
 
   Future<void> releaseSession(String sessionId) async {
-    _sessionIds.remove(_validatedSessionId(sessionId));
+    final key = _validatedSessionId(sessionId);
+    _sessionIds.remove(key);
+    _imageRelays.remove(key);
   }
 
   Future<void> stop() async {
     final server = _server;
     _server = null;
     _sessionIds.clear();
+    _imageRelays.clear();
     _servePresenter = false;
     await server?.close(force: true);
   }
@@ -177,6 +193,10 @@ class LocalPresenterServer {
 
     if (path.startsWith('/runtime/')) {
       final segments = path.split('/');
+      if (segments.length >= 4 && segments[3] == 'image-proxy') {
+        await _handleImageProxyRequest(request, segments);
+        return;
+      }
       if (segments.length >= 4 && segments[3] == 'resource-cache') {
         await _handleResourceCacheRequest(request, segments);
         return;
@@ -206,6 +226,77 @@ class LocalPresenterServer {
       return;
     }
     await file.openRead().pipe(request.response);
+  }
+
+  Future<void> _handleImageProxyRequest(
+    HttpRequest request,
+    List<String> segments,
+  ) async {
+    if (segments.length < 3 || !_sessionIds.contains(segments[2])) {
+      await _sendNotFound(request);
+      return;
+    }
+    final relay = _imageRelays[segments[2]];
+    if (relay == null) {
+      await _sendNotFound(request);
+      return;
+    }
+    if (segments.length != 4) {
+      request.response.statusCode = HttpStatus.badRequest;
+      await request.response.close();
+      return;
+    }
+    if (request.method != 'GET') {
+      request.response.statusCode = HttpStatus.methodNotAllowed;
+      request.response.headers.set('Allow', 'GET');
+      await request.response.close();
+      return;
+    }
+    // The loopback server carries privileged Backend headers not accessible
+    // to the web Presenter. Never expose this relay to arbitrary web origins.
+    final origin = request.headers.value('Origin');
+    final localOrigin = 'http://' + (request.headers.host ?? '');
+    final fetchSite = request.headers.value('Sec-Fetch-Site');
+    if ((origin != null && origin != localOrigin) ||
+        (fetchSite != null &&
+            fetchSite != 'same-origin' &&
+            fetchSite != 'none')) {
+      request.response.statusCode = HttpStatus.forbidden;
+      await request.response.close();
+      return;
+    }
+    final params = request.uri.queryParametersAll;
+    final urls = params['url'];
+    if (params.length != 1 || urls == null || urls.length != 1) {
+      request.response.statusCode = HttpStatus.badRequest;
+      await request.response.close();
+      return;
+    }
+    final source = Uri.tryParse(urls.single);
+    if (source == null ||
+        (source.scheme != 'http' && source.scheme != 'https') ||
+        !source.hasAuthority ||
+        source.host.isEmpty ||
+        source.userInfo.isNotEmpty) {
+      request.response.statusCode = HttpStatus.badRequest;
+      await request.response.close();
+      return;
+    }
+    try {
+      final result = await relay.fetch(source);
+      request.response
+        ..statusCode = result.statusCode
+        ..headers.contentType = ContentType.parse(result.contentType)
+        ..contentLength = result.bytes.length;
+      request.response.add(result.bytes);
+    } on ArgumentError {
+      request.response.statusCode = HttpStatus.badRequest;
+    } on TimeoutException {
+      request.response.statusCode = HttpStatus.gatewayTimeout;
+    } on Object {
+      request.response.statusCode = HttpStatus.badGateway;
+    }
+    await request.response.close();
   }
 
   Future<void> _handleResourceCacheRequest(
