@@ -55,62 +55,114 @@ void main() {
     },
   );
 
-  test('injected shared HTTP client survives cancellation and subsequent GET', () async {
-    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    addTearDown(() => server.close(force: true));
-    final shared = HttpClient();
-    addTearDown(() => shared.close(force: true));
-    final firstStarted = Completer<void>();
-    var requests = 0;
-    var factoryCalls = 0;
-    server.listen((request) async {
-      requests++;
-      if (requests == 1) {
-        firstStarted.complete();
-        return;
+  test(
+    'injected shared HTTP client survives cancellation and subsequent GET',
+    () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      final shared = HttpClient();
+      addTearDown(() => shared.close(force: true));
+      final firstStarted = Completer<void>();
+      var requests = 0;
+      var factoryCalls = 0;
+      server.listen((request) async {
+        requests++;
+        if (requests == 1) {
+          firstStarted.complete();
+          return;
+        }
+        request.response.headers
+          ..set(HttpHeaders.contentTypeHeader, 'image/png')
+          ..set('X-URB-Thumbnail-Content-Hash', _validHash)
+          ..set(
+            'X-URB-Thumbnail-Bytes-Sha256',
+            sha256.convert(_png).toString(),
+          );
+        request.response.add(_png);
+        await request.response.close();
+      });
+
+      HttpClient clientFactory() {
+        factoryCalls++;
+        return shared;
       }
-      request.response.headers
-        ..set(HttpHeaders.contentTypeHeader, 'image/png')
-        ..set('X-URB-Thumbnail-Content-Hash', _validHash)
-        ..set('X-URB-Thumbnail-Bytes-Sha256', sha256.convert(_png).toString());
-      request.response.add(_png);
-      await request.response.close();
-    });
 
-    HttpClient clientFactory() {
-      factoryCalls++;
-      return shared;
-    }
+      final cancellation = Completer<void>();
+      final first = fetchPublishedThumbnail(
+        apiBase: _api(server),
+        systemCode: 's',
+        templateCode: 't',
+        descriptor: _descriptor(),
+        headers: const {},
+        cancellation: cancellation.future,
+        httpClientFactory: clientFactory,
+      );
+      await firstStarted.future.timeout(const Duration(seconds: 2));
+      cancellation.complete();
+      await expectLater(
+        first.timeout(const Duration(seconds: 2)),
+        throwsA(isA<BridgeRuntimeException>()),
+      );
 
-    final cancellation = Completer<void>();
-    final first = fetchPublishedThumbnail(
-      apiBase: _api(server),
-      systemCode: 's',
-      templateCode: 't',
-      descriptor: _descriptor(),
-      headers: const {},
-      cancellation: cancellation.future,
-      httpClientFactory: clientFactory,
-    );
-    await firstStarted.future.timeout(const Duration(seconds: 2));
-    cancellation.complete();
-    await expectLater(
-      first.timeout(const Duration(seconds: 2)),
-      throwsA(isA<BridgeRuntimeException>()),
-    );
+      final second = await fetchPublishedThumbnail(
+        apiBase: _api(server),
+        systemCode: 's',
+        templateCode: 't',
+        descriptor: _descriptor(),
+        headers: const {},
+        httpClientFactory: clientFactory,
+      );
+      expect(second, _png);
+      expect(factoryCalls, 2);
+      expect(requests, 2);
+    },
+  );
 
-    final second = await fetchPublishedThumbnail(
-      apiBase: _api(server),
-      systemCode: 's',
-      templateCode: 't',
-      descriptor: _descriptor(),
-      headers: const {},
-      httpClientFactory: clientFactory,
-    );
-    expect(second, _png);
-    expect(factoryCalls, 2);
-    expect(requests, 2);
-  });
+  test(
+    'slow continuous response cannot extend the total body deadline',
+    () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        final response = request.response;
+        response.headers
+          ..set(HttpHeaders.contentTypeHeader, 'image/png')
+          ..set('X-URB-Thumbnail-Content-Hash', _validHash)
+          ..set(
+            'X-URB-Thumbnail-Bytes-Sha256',
+            sha256.convert(_png).toString(),
+          );
+        try {
+          response.add(_png.take(8).toList());
+          await response.flush();
+          for (var index = 0; index < 80; index++) {
+            await Future<void>.delayed(const Duration(milliseconds: 180));
+            response.add(<int>[index % 256]);
+            await response.flush();
+          }
+        } on Object {
+          // The fetch is expected to abort the transport before it completes.
+        }
+      });
+
+      await expectLater(
+        fetchPublishedThumbnail(
+          apiBase: _api(server),
+          systemCode: 's',
+          templateCode: 't',
+          descriptor: _descriptor(),
+          headers: const {},
+        ).timeout(const Duration(seconds: 10)),
+        throwsA(
+          isA<BridgeRuntimeException>().having(
+            (error) => error.message,
+            'failure reason',
+            contains('total response deadline'),
+          ),
+        ),
+      );
+    },
+  );
 
   test('unavailable descriptor makes no request', () async {
     var calls = 0;

@@ -119,19 +119,18 @@ Future<Uint8List?> fetchPublishedThumbnail({
       );
     }
 
-    final bytes = BytesBuilder(copy: false);
-    var receivedBytes = 0;
-    await for (final chunk in response.timeout(const Duration(seconds: 8))) {
-      receivedBytes += chunk.length;
-      if (receivedBytes > _maxThumbnailBytes) {
+    // One total deadline bounds a response even if a server trickles bytes.
+    // Aborting the request releases this slot without closing a shared client.
+    final result = await _readBoundedThumbnailBytes(response).timeout(
+      const Duration(seconds: 8),
+      onTimeout: () {
+        activeRequest?.abort();
         throw const BridgeRuntimeException(
-          BridgePublishedThumbnailFetchErrorCodes.responseInvalid,
-          'Published thumbnail exceeds the 2 MiB limit.',
+          BridgePublishedThumbnailFetchErrorCodes.requestFailed,
+          'Published thumbnail total response deadline exceeded.',
         );
-      }
-      bytes.add(chunk);
-    }
-    final result = bytes.takeBytes();
+      },
+    );
 
     if (!_hasPngSignature(result) ||
         sha256.convert(result).toString() != expectedBytesHash) {
@@ -151,6 +150,24 @@ Future<Uint8List?> fetchPublishedThumbnail({
   } finally {
     if (ownsClient) client.close(force: true);
   }
+}
+
+Future<Uint8List> _readBoundedThumbnailBytes(
+  HttpClientResponse response,
+) async {
+  final bytes = BytesBuilder(copy: false);
+  var receivedBytes = 0;
+  await for (final chunk in response) {
+    receivedBytes += chunk.length;
+    if (receivedBytes > _maxThumbnailBytes) {
+      throw const BridgeRuntimeException(
+        BridgePublishedThumbnailFetchErrorCodes.responseInvalid,
+        'Published thumbnail exceeds the 2 MiB limit.',
+      );
+    }
+    bytes.add(chunk);
+  }
+  return bytes.takeBytes();
 }
 
 String? _canonicalMimeType(String? value) {

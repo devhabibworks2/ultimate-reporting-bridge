@@ -20,6 +20,27 @@ import '../printing/thermal_printer_models.dart';
 import 'report_result.dart';
 import 'report_template_metadata.dart';
 
+/// Cancel authentication-header resolution on screen/identity change.
+///
+/// This must run *before* opening the HTTP request: a blocked host-provided
+/// header callback must not permanently occupy one of four thumbnail slots.
+Future<Map<String, String>> resolveCancellableThumbnailHeaders({
+  required BridgeHeaderContext context,
+  BridgeHeadersProvider? provider,
+  required Map<String, String> fallback,
+  required Future<void> cancellation,
+  Duration deadline = const Duration(seconds: 8),
+}) => Future.any<Map<String, String>>(<Future<Map<String, String>>>[
+  resolveBridgeHeaders(
+    context: context,
+    provider: provider,
+    fallback: fallback,
+  ),
+  cancellation.then<Map<String, String>>(
+    (_) => throw StateError('Published thumbnail request was cancelled.'),
+  ),
+]).timeout(deadline);
+
 class ReportFlowControllerImpl
     implements
         ReportFlowController,
@@ -119,7 +140,7 @@ class ReportFlowControllerImpl
         store: store,
         fetch:
             ({required template, required scope, required cancellation}) async {
-              final headers = await resolveBridgeHeaders(
+              final headers = await resolveCancellableThumbnailHeaders(
                 context: BridgeHeaderContext(
                   operation: BridgeHeaderOperation.publishedThumbnail,
                   apiBaseUrl: connection.endpoints.apiBaseUrl,
@@ -132,6 +153,7 @@ class ReportFlowControllerImpl
                 ),
                 provider: connection.headersProvider,
                 fallback: connection.headers,
+                cancellation: cancellation,
               );
               final descriptor = template.publishedThumbnail;
               if (descriptor == null || !descriptor.available) return null;
@@ -1727,11 +1749,23 @@ class ReportFlowControllerImpl
     _runtime.publishedThumbnailController?.leaveScreen();
     final ownedFuture = _thumbnailControllerFuture;
     if (ownedFuture != null) {
-      try {
-        (await ownedFuture)?.dispose();
-      } on Object {
-        // Cleanup should continue if a platform thumbnail store failed.
-      }
+      // Controller creation can wait on platform secure-storage initialization.
+      // Do not block terminal disposal; a late owned result must still be
+      // disposed instead of becoming a leaked active controller.
+      unawaited(
+        ownedFuture.then<void>(
+          (controller) {
+            try {
+              controller?.dispose();
+            } on Object {
+              // A platform cleanup failure must not block flow disposal.
+            }
+          },
+          onError: (Object _, StackTrace __) {
+            // No owned instance was created to release.
+          },
+        ),
+      );
     }
     _cancelRenderWatchdog();
     final previewPreparation = _previewPreparationFuture;

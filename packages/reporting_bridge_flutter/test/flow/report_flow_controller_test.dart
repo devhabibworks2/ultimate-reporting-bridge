@@ -81,6 +81,71 @@ void main() {
   }
 
   test(
+    'dispose returns while owned thumbnail controller factory is pending',
+    () async {
+      final pendingFactory = Completer<PublishedThumbnailController?>();
+      final flow = createController(
+        thumbnailTenantId: 'tenant-a',
+        userId: 'user-a',
+        thumbnailControllerFactory: () => pendingFactory.future,
+      );
+      final pendingImage = flow.publishedThumbnailFor(_template('t1'));
+      await Future<void>.delayed(Duration.zero);
+      try {
+        await flow.dispose().timeout(const Duration(milliseconds: 400));
+      } finally {
+        pendingFactory.complete(null);
+        expect(await pendingImage, isNull);
+      }
+    },
+  );
+
+  test(
+    'late owned controller completion is disposed after flow exits',
+    () async {
+      final pendingFactory = Completer<PublishedThumbnailController?>();
+      final owned = PublishedThumbnailController(
+        store: NativePublishedThumbnailStore(
+          root: Directory('${root.path}/late-owned-thumbnails'),
+          keyProvider: _ThumbnailTestKeyProvider(),
+          nativeEnabled: true,
+        ),
+        fetch:
+            ({
+              required template,
+              required scope,
+              required cancellation,
+            }) async =>
+                Uint8List.fromList(<int>[137, 80, 78, 71, 13, 10, 26, 10, 1]),
+      );
+      final flow = createController(
+        thumbnailTenantId: 'tenant-a',
+        userId: 'user-a',
+        thumbnailControllerFactory: () => pendingFactory.future,
+      );
+      final pendingImage = flow.publishedThumbnailFor(_template('t1'));
+      await Future<void>.delayed(Duration.zero);
+      await flow.dispose().timeout(const Duration(milliseconds: 400));
+      pendingFactory.complete(owned);
+      expect(await pendingImage, isNull);
+      await Future<void>.delayed(Duration.zero);
+      expect(
+        await owned.imageForVisibleTemplate(
+          _ownedThumbnailFixture(),
+          TrustedThumbnailScope(
+            apiBase: Uri.parse('https://example.test/api'),
+            tenantId: 'tenant-a',
+            userId: 'user-a',
+            systemCode: 'legacy_system_1',
+            templateCode: 't1',
+          ),
+        ),
+        isNull,
+      );
+    },
+  );
+
+  test(
     'disposing a flow disposes its lazily owned thumbnail controller',
     () async {
       final owned = PublishedThumbnailController(
