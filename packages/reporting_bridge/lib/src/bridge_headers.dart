@@ -9,6 +9,7 @@ enum BridgeHeaderOperation {
   listTemplates,
   syncPresenter,
   prepareSession,
+  publishedThumbnail,
 }
 
 class BridgeHeaderContext {

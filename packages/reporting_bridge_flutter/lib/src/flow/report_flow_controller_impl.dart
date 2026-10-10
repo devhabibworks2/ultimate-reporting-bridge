@@ -29,7 +29,10 @@ import 'report_template_metadata.dart';
 /// `ReportFlowFailureCode.cleanupFailed`, and
 /// `ReportFlowFailureCode.persistenceFailed`.
 class ReportFlowControllerImpl extends base.ReportFlowControllerImpl
-    implements ReportFlowActionController, ReportFlowThermalPrinterController {
+    implements
+        ReportFlowActionController,
+        ReportFlowThermalPrinterController,
+        ReportFlowPublishedThumbnailAccess {
   factory ReportFlowControllerImpl({
     required ReportOpenRequest request,
     required ReportFlowRuntime runtime,
@@ -64,6 +67,9 @@ class ReportFlowControllerImpl extends base.ReportFlowControllerImpl
       printPlatform: runtime.printPlatform,
       thermalPrinterSettings: runtime.thermalPrinterSettings,
       supportSharePlatform: runtime.supportSharePlatform,
+      publishedThumbnailController: runtime.publishedThumbnailController,
+      publishedThumbnailControllerFactory:
+          runtime.publishedThumbnailControllerFactory,
     );
     return ReportFlowControllerImpl._(
       request: effectiveRequest,

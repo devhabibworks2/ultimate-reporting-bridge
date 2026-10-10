@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:reporting_bridge/reporting_bridge.dart';
 
 import '../flow/report_flow_controller.dart';
@@ -1581,6 +1582,13 @@ class _SelectionPageState extends State<_SelectionPage> {
                         template.templateCode,
                     showMetadata: widget.features.showTemplateMetadata,
                     strings: widget.strings,
+                    loadPublishedThumbnail:
+                        widget.controller is ReportFlowPublishedThumbnailAccess
+                        ? (value) =>
+                              (widget.controller
+                                      as ReportFlowPublishedThumbnailAccess)
+                                  .publishedThumbnailFor(value)
+                        : null,
                     onTap: widget.state.busy
                         ? null
                         : () => widget.controller.selectTemplate(
@@ -2400,12 +2408,13 @@ class _CurrentTemplateCard extends StatelessWidget {
   }
 }
 
-class _TemplateCard extends StatelessWidget {
+class _TemplateCard extends StatefulWidget {
   const _TemplateCard({
     required this.template,
     required this.selected,
     required this.showMetadata,
     required this.strings,
+    this.loadPublishedThumbnail,
     required this.onTap,
   });
 
@@ -2413,18 +2422,112 @@ class _TemplateCard extends StatelessWidget {
   final bool selected;
   final bool showMetadata;
   final ReportFlowStrings strings;
+  final Future<Uint8List?> Function(CachedTemplate template)?
+  loadPublishedThumbnail;
   final VoidCallback? onTap;
+
+  @override
+  State<_TemplateCard> createState() => _TemplateCardState();
+}
+
+class _TemplateCardState extends State<_TemplateCard> {
+  ScrollPosition? _scrollPosition;
+  Uint8List? _thumbnailBytes;
+  bool _thumbnailRequested = false;
+  int _thumbnailGeneration = 0;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final position = Scrollable.maybeOf(context)?.position;
+    if (identical(position, _scrollPosition)) return;
+    _scrollPosition?.removeListener(_checkThumbnailVisibility);
+    _scrollPosition = position;
+    _scrollPosition?.addListener(_checkThumbnailVisibility);
+    _scheduleThumbnailVisibilityCheck();
+  }
+
+  @override
+  void didUpdateWidget(covariant _TemplateCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final oldRef = oldWidget.template.publishedThumbnail;
+    final newRef = widget.template.publishedThumbnail;
+    if (oldWidget.template.templateCode != widget.template.templateCode ||
+        oldRef != newRef) {
+      _thumbnailGeneration++;
+      _thumbnailBytes = null;
+      _thumbnailRequested = false;
+      _scheduleThumbnailVisibilityCheck();
+    }
+  }
+
+  @override
+  void dispose() {
+    _thumbnailGeneration++;
+    _scrollPosition?.removeListener(_checkThumbnailVisibility);
+    super.dispose();
+  }
+
+  void _scheduleThumbnailVisibilityCheck() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _checkThumbnailVisibility();
+    });
+  }
+
+  void _checkThumbnailVisibility() {
+    final loader = widget.loadPublishedThumbnail;
+    if (_thumbnailRequested || loader == null) return;
+    final descriptor = widget.template.publishedThumbnail;
+    if (descriptor == null || !descriptor.available) return;
+    final position = _scrollPosition;
+    final object = context.findRenderObject();
+    if (position == null || object is! RenderBox || !object.hasSize) return;
+    final viewport = RenderAbstractViewport.maybeOf(object);
+    if (viewport == null) return;
+    final itemOffset = viewport.getOffsetToReveal(object, 0).offset;
+    final itemEnd = itemOffset + object.size.height;
+    final visibleStart = position.pixels - 200;
+    final visibleEnd = position.pixels + position.viewportDimension + 200;
+    if (itemEnd < visibleStart || itemOffset > visibleEnd) return;
+    _thumbnailRequested = true;
+    // Capture the requested version before the async boundary. A list cell
+    // can be reused for another template while the original GET is pending.
+    final requestedTemplate = widget.template;
+    final generation = _thumbnailGeneration;
+    unawaited(_loadThumbnail(loader, requestedTemplate, generation));
+  }
+
+  Future<void> _loadThumbnail(
+    Future<Uint8List?> Function(CachedTemplate template) loader,
+    CachedTemplate requestedTemplate,
+    int generation,
+  ) async {
+    try {
+      final bytes = await loader(requestedTemplate);
+      if (!mounted ||
+          bytes == null ||
+          generation != _thumbnailGeneration ||
+          widget.template.templateCode != requestedTemplate.templateCode ||
+          widget.template.publishedThumbnail !=
+              requestedTemplate.publishedThumbnail) {
+        return;
+      }
+      setState(() => _thumbnailBytes = bytes);
+    } on Object {
+      // A missing/unauthorized image leaves the existing silhouette in place.
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final metadata = TemplatePresentationMetadata.tryFromTemplate(
-      template,
-      strings: strings,
+      widget.template,
+      strings: widget.strings,
     );
     if (metadata == null) {
       return const SizedBox.shrink();
     }
-    final displayName = _displayTemplateName(template.templateName);
+    final displayName = _displayTemplateName(widget.template.templateName);
     final label =
         '$displayName, ${metadata.description}, '
         '${metadata.reportTypeLabel}, ${metadata.languageLabel}, '
@@ -2438,23 +2541,25 @@ class _TemplateCard extends StatelessWidget {
 
     return Semantics(
       button: true,
-      enabled: onTap != null,
-      selected: selected,
+      enabled: widget.onTap != null,
+      selected: widget.selected,
       label: label,
       child: ExcludeSemantics(
         child: Material(
-          key: ValueKey<String>('template-card-${template.templateCode}'),
-          color: selected ? selectedSurface : scheme.surface,
+          key: ValueKey<String>(
+            'template-card-${widget.template.templateCode}',
+          ),
+          color: widget.selected ? selectedSurface : scheme.surface,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
             side: BorderSide(
-              color: selected ? scheme.primary : scheme.outlineVariant,
-              width: selected ? 1.8 : 1,
+              color: widget.selected ? scheme.primary : scheme.outlineVariant,
+              width: widget.selected ? 1.8 : 1,
             ),
           ),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
-            onTap: onTap,
+            onTap: widget.onTap,
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final textScale = MediaQuery.textScalerOf(context).scale(1);
@@ -2468,6 +2573,7 @@ class _TemplateCard extends StatelessWidget {
                     children: <Widget>[
                       TemplatePreview(
                         metadata: metadata,
+                        publishedImageBytes: _thumbnailBytes,
                         width: previewWidth,
                         height: previewHeight,
                       ),
@@ -2488,7 +2594,7 @@ class _TemplateCard extends StatelessWidget {
                               style: Theme.of(context).textTheme.titleSmall
                                   ?.copyWith(fontWeight: FontWeight.w800),
                             ),
-                            if (showMetadata) ...<Widget>[
+                            if (widget.showMetadata) ...<Widget>[
                               const SizedBox(height: 5),
                               Text(
                                 metadata.description,
@@ -2524,8 +2630,8 @@ class _TemplateCard extends StatelessWidget {
                       Padding(
                         padding: const EdgeInsets.only(top: 34),
                         child: _TemplateSelectionIndicator(
-                          templateCode: template.templateCode,
-                          selected: selected,
+                          templateCode: widget.template.templateCode,
+                          selected: widget.selected,
                         ),
                       ),
                     ],

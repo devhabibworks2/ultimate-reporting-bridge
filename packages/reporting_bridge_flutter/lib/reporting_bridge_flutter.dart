@@ -30,6 +30,8 @@ export 'src/platform/android_print_configuration.dart';
 export 'src/platform/bridge_platform_adapters.dart';
 export 'src/platform/ios_print_configuration.dart';
 export 'src/platform/platform_printing.dart';
+export 'src/thumbnails/native_published_thumbnail_store.dart';
+export 'src/thumbnails/published_thumbnail_controller.dart';
 export 'src/platform/presenter_surface_binding.dart';
 export 'src/presenter/presenter_warmup.dart';
 export 'src/ui/bridge_pdf_preview_config.dart';

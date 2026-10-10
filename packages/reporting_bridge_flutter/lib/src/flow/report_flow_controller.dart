@@ -128,6 +128,10 @@ abstract interface class ReportFlowActionController {
   Future<ReportPrintResult> printPdf();
 }
 
+abstract interface class ReportFlowPublishedThumbnailAccess {
+  Future<Uint8List?> publishedThumbnailFor(CachedTemplate template);
+}
+
 /// Optional access to the app-wide managed thermal-printer settings.
 abstract interface class ReportFlowThermalPrinterController {
   ThermalPrinterSettingsController? get thermalPrinterSettings;

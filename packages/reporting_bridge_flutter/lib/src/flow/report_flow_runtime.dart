@@ -6,6 +6,7 @@ import '../platform/bridge_platform_adapters.dart';
 import '../platform/presenter_surface_binding.dart';
 import '../presenter/report_resource_preparation_service.dart';
 import '../printing/thermal_printer_controller.dart';
+import '../thumbnails/published_thumbnail_controller.dart';
 
 class ReportFlowRuntime {
   ReportFlowRuntime({
@@ -18,6 +19,8 @@ class ReportFlowRuntime {
     this.printPlatform = const UnsupportedReportPrintPlatform(),
     this.thermalPrinterSettings,
     this.supportSharePlatform = const UnsupportedReportSupportSharePlatform(),
+    this.publishedThumbnailController,
+    this.publishedThumbnailControllerFactory,
   }) : resourcePreparation =
            resourcePreparation ??
            ReportResourcePreparationService(bridgeClient: bridgeClient),
@@ -33,4 +36,9 @@ class ReportFlowRuntime {
   final ReportPrintPlatform printPlatform;
   final ThermalPrinterSettingsController? thermalPrinterSettings;
   final ReportSupportSharePlatform supportSharePlatform;
+  final PublishedThumbnailController? publishedThumbnailController;
+
+  /// Override the lazily owned controller factory in isolated tests.
+  final Future<PublishedThumbnailController?> Function()?
+  publishedThumbnailControllerFactory;
 }

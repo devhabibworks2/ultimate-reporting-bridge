@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,6 +11,59 @@ import '../test_open_request.dart';
 const bool _loadingUiOnlyTestFlag = bool.fromEnvironment('URB_LOADING_UI_ONLY');
 
 void main() {
+  testWidgets(
+    'outdated thumbnail completion cannot render on a reused template card',
+    (tester) async {
+      final firstImage = Completer<Uint8List?>();
+      final first = _selectionState().templates.first;
+      final published = CachedTemplate(
+        type: first.type,
+        document: first.document,
+        code: first.code,
+        name: first.name,
+        version: first.version,
+        systemId: first.systemId,
+        publishedVersionNo: 1,
+        publishedThumbnail: BridgePublishedThumbnail.fromMap(const {
+          'versionNo': 1,
+          'contentHash':
+              'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          'mimeType': 'image/png',
+          'available': true,
+        }),
+      );
+      final controller = _ThumbnailFakeController(
+        _selectionState().copyWith(templates: [published]),
+        (_) => firstImage.future,
+      );
+      await _pumpDirectFlow(tester, controller);
+      expect(controller.fetches, 1);
+
+      // One list slot is reused for another template while the first GET
+      // remains unresolved. The new card has no published image.
+      final other = CachedTemplate(
+        type: first.type,
+        document: first.document,
+        code: 't2',
+        name: 'Other template',
+      );
+      controller.setState(
+        controller.value.copyWith(
+          templates: [other],
+          selectedTemplateCode: 't2',
+        ),
+      );
+      await tester.pumpAndSettle();
+      firstImage.complete(
+        Uint8List.fromList([137, 80, 78, 71, 13, 10, 26, 10, 1, 2]),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(Image), findsNothing);
+      expect(controller.fetches, 1);
+    },
+  );
+
   testWidgets('close button cleans up, pops once, and returns the result', (
     WidgetTester tester,
   ) async {
@@ -2719,4 +2773,18 @@ class _TestPlatformInAppWebViewWidget extends PlatformInAppWebViewWidget {
 
   @override
   void dispose() {}
+}
+
+class _ThumbnailFakeController extends _FakeController
+    implements ReportFlowPublishedThumbnailAccess {
+  _ThumbnailFakeController(super.value, this._load);
+
+  final Future<Uint8List?> Function(CachedTemplate template) _load;
+  int fetches = 0;
+
+  @override
+  Future<Uint8List?> publishedThumbnailFor(CachedTemplate template) {
+    fetches++;
+    return _load(template);
+  }
 }

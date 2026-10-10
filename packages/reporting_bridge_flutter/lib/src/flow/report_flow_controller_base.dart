@@ -8,6 +8,8 @@ import '../contracts/report_open_request.dart';
 import '../persistence/report_flow_preference_store.dart';
 import '../platform/presenter_surface_binding.dart';
 import '../support/report_support_package.dart';
+import '../thumbnails/native_published_thumbnail_store.dart';
+import '../thumbnails/published_thumbnail_controller.dart';
 import '../ui/bridge_ui_features.dart';
 import 'report_flow_controller.dart';
 import 'report_flow_event.dart';
@@ -22,7 +24,8 @@ class ReportFlowControllerImpl
     implements
         ReportFlowController,
         ReportFlowStructuredFailureController,
-        ReportFlowSupportController {
+        ReportFlowSupportController,
+        ReportFlowPublishedThumbnailAccess {
   ReportFlowControllerImpl({
     required this.request,
     required ReportFlowRuntime runtime,
@@ -62,6 +65,7 @@ class ReportFlowControllerImpl
 
   ReportFlowState _value;
   bool _disposed = false;
+  Future<PublishedThumbnailController?>? _thumbnailControllerFuture;
   bool _initialized = false;
   bool _presenterWasOpened = false;
   Future<void>? _previewPreparationFuture;
@@ -75,6 +79,77 @@ class ReportFlowControllerImpl
 
   @override
   Stream<ReportFlowEvent> get events => _events.stream;
+
+  @override
+  Future<Uint8List?> publishedThumbnailFor(CachedTemplate template) async {
+    if (_disposed) return null;
+    final injected = _runtime.publishedThumbnailController;
+    final tenantId = _runtime.connection.thumbnailTenantId?.trim();
+    final userId = request.selectedTemplateCriteria.identity.userId?.trim();
+    if (tenantId == null ||
+        tenantId.isEmpty ||
+        userId == null ||
+        userId.isEmpty) {
+      return null;
+    }
+    final controller =
+        injected ??
+        await (_thumbnailControllerFuture ??= _createThumbnailController());
+    if (controller == null || _disposed) return null;
+    final sync = request.templateSyncRequest;
+    return controller.imageForVisibleTemplate(
+      template,
+      TrustedThumbnailScope(
+        apiBase: _runtime.connection.endpoints.apiBaseUrl,
+        tenantId: tenantId,
+        userId: userId,
+        systemCode: sync.systemCode.value,
+        templateCode: template.templateCode,
+      ),
+    );
+  }
+
+  Future<PublishedThumbnailController?> _createThumbnailController() async {
+    final connection = _runtime.connection;
+    try {
+      final injectedFactory = _runtime.publishedThumbnailControllerFactory;
+      if (injectedFactory != null) return await injectedFactory();
+      final store = await NativePublishedThumbnailStore.createDefault();
+      return PublishedThumbnailController(
+        store: store,
+        fetch:
+            ({required template, required scope, required cancellation}) async {
+              final headers = await resolveBridgeHeaders(
+                context: BridgeHeaderContext(
+                  operation: BridgeHeaderOperation.publishedThumbnail,
+                  apiBaseUrl: connection.endpoints.apiBaseUrl,
+                  systemCode: scope.systemCode,
+                  userId: scope.userId,
+                  branchId: request.selectedTemplateCriteria.identity.branchId,
+                  systemUnit:
+                      request.selectedTemplateCriteria.identity.systemUnit,
+                  reportType: request.reportType.value,
+                ),
+                provider: connection.headersProvider,
+                fallback: connection.headers,
+              );
+              final descriptor = template.publishedThumbnail;
+              if (descriptor == null || !descriptor.available) return null;
+              return fetchPublishedThumbnail(
+                apiBase: connection.endpoints.apiBaseUrl,
+                systemCode: scope.systemCode,
+                templateCode: template.templateCode,
+                descriptor: descriptor,
+                headers: headers,
+                cancellation: cancellation,
+                httpClientFactory: connection.httpClientFactory,
+              );
+            },
+      );
+    } on Object {
+      return null;
+    }
+  }
 
   @override
   PresenterSurfaceBinding get presenterSurface => _runtime.surfaceBinding;
@@ -1647,6 +1722,17 @@ class ReportFlowControllerImpl
       }
     }
     _disposed = true;
+    // Runtime-injected controllers have external ownership; the controller
+    // created by our own lazy factory is always ours to dispose.
+    _runtime.publishedThumbnailController?.leaveScreen();
+    final ownedFuture = _thumbnailControllerFuture;
+    if (ownedFuture != null) {
+      try {
+        (await ownedFuture)?.dispose();
+      } on Object {
+        // Cleanup should continue if a platform thumbnail store failed.
+      }
+    }
     _cancelRenderWatchdog();
     final previewPreparation = _previewPreparationFuture;
     if (previewPreparation != null) {

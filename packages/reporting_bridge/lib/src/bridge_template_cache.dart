@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 
 import 'bridge_contract.dart';
+import 'bridge_published_thumbnail.dart';
 import 'bridge_runtime_error.dart';
 import 'bridge_selected_template.dart';
 import 'bridge_semantic_version.dart';
@@ -19,6 +20,7 @@ class CachedTemplate {
     this.name,
     this.description,
     this.publishedVersionNo,
+    BridgePublishedThumbnail? publishedThumbnail,
     this.metadata = const <String, dynamic>{},
     this.compatibility = const <String, dynamic>{},
     this.version,
@@ -26,7 +28,8 @@ class CachedTemplate {
     this.minBridgeVersion,
     int? minPresenterDevVersion,
     int? maxPresenterDevVersion,
-  }) : _legacyMinPresenterDevVersion = minPresenterDevVersion,
+  }) : _publishedThumbnail = publishedThumbnail,
+       _legacyMinPresenterDevVersion = minPresenterDevVersion,
        _legacyMaxPresenterDevVersion = maxPresenterDevVersion;
 
   final String type;
@@ -37,6 +40,7 @@ class CachedTemplate {
   final String? name;
   final String? description;
   final int? publishedVersionNo;
+  final BridgePublishedThumbnail? _publishedThumbnail;
   final Map<String, dynamic> metadata;
   final Map<String, dynamic> compatibility;
   final String? version;
@@ -44,6 +48,13 @@ class CachedTemplate {
   final String? minBridgeVersion;
   final int? _legacyMinPresenterDevVersion;
   final int? _legacyMaxPresenterDevVersion;
+
+  BridgePublishedThumbnail? get publishedThumbnail {
+    final thumbnail = _publishedThumbnail;
+    return thumbnail != null && publishedVersionNo == thumbnail.versionNo
+        ? thumbnail
+        : null;
+  }
 
   SelectedTemplate get selectedTemplate =>
       SelectedTemplate(type: type, code: templateCode, systemCode: systemCode);
@@ -148,6 +159,7 @@ class CachedTemplate {
   }
 
   Map<String, dynamic> toMap() {
+    final thumbnail = publishedThumbnail;
     return <String, dynamic>{
       'type': type,
       'document': document,
@@ -157,6 +169,8 @@ class CachedTemplate {
       if (name != null) 'name': name,
       if (description != null) 'description': description,
       if (publishedVersionNo != null) 'publishedVersionNo': publishedVersionNo,
+      if (thumbnail != null && publishedVersionNo == thumbnail.versionNo)
+        'thumbnail': thumbnail.toMap(),
       if (metadata.isNotEmpty) 'metadata': metadata,
       'compatibility': <String, dynamic>{
         ...compatibility,
@@ -200,6 +214,9 @@ class CachedTemplate {
         ? compatibility
         : const <String, dynamic>{};
 
+    final publishedVersionNo = _nullablePositiveInt(raw['publishedVersionNo']);
+    final thumbnail = BridgePublishedThumbnail.fromMap(raw['thumbnail']);
+
     return CachedTemplate(
       type: type.toString(),
       document: _stringMap(document),
@@ -208,7 +225,10 @@ class CachedTemplate {
       code: code,
       name: _stringOrNull(raw['name']),
       description: _stringOrNull(raw['description']),
-      publishedVersionNo: _nullablePositiveInt(raw['publishedVersionNo']),
+      publishedVersionNo: publishedVersionNo,
+      publishedThumbnail: publishedVersionNo == thumbnail?.versionNo
+          ? thumbnail
+          : null,
       metadata: raw['metadata'] is Map
           ? _stringMap(raw['metadata'] as Map)
           : const <String, dynamic>{},

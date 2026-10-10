@@ -9,6 +9,7 @@ class ReportServerConnection {
     required this.endpoints,
     required this.cacheRoot,
     this.bundleManifestUrl,
+    this.thumbnailTenantId,
     this.headers = const <String, String>{},
     this.headersProvider,
     this.httpClientFactory,
@@ -18,6 +19,10 @@ class ReportServerConnection {
   final ReportServerEndpoints endpoints;
   final Directory cacheRoot;
   final String? bundleManifestUrl;
+
+  /// Stable authenticated customer/tenant identity for native thumbnail scope.
+  /// When absent, thumbnail retrieval and persistence stay disabled.
+  final String? thumbnailTenantId;
   final Map<String, String> headers;
   final BridgeHeadersProvider? headersProvider;
   final HttpClient Function()? httpClientFactory;

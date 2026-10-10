@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:reporting_bridge/reporting_bridge.dart';
 
@@ -195,11 +197,13 @@ class TemplatePreview extends StatelessWidget {
   const TemplatePreview({
     super.key,
     required this.metadata,
+    this.publishedImageBytes,
     this.width = 92,
     this.height = 116,
   });
 
   final TemplatePresentationMetadata metadata;
+  final Uint8List? publishedImageBytes;
   final double width;
   final double height;
 
@@ -224,7 +228,15 @@ class TemplatePreview extends StatelessWidget {
           Positioned.fill(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(9, 9, 9, 30),
-              child: _TemplateLayoutSilhouette(spec: spec),
+              child: publishedImageBytes == null
+                  ? _TemplateLayoutSilhouette(spec: spec)
+                  : Image.memory(
+                      publishedImageBytes!,
+                      fit: BoxFit.contain,
+                      filterQuality: FilterQuality.medium,
+                      errorBuilder: (context, error, stackTrace) =>
+                          _TemplateLayoutSilhouette(spec: spec),
+                    ),
             ),
           ),
           Positioned(

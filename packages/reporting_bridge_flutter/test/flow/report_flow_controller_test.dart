@@ -37,6 +37,11 @@ void main() {
     ReportEntryPolicy entryPolicy = ReportEntryPolicy.alwaysPrepare,
     int systemId = 1,
     String? initialTemplateCode,
+    String? thumbnailTenantId,
+    String? userId,
+    PublishedThumbnailController? injectedThumbnailController,
+    Future<PublishedThumbnailController?> Function()?
+    thumbnailControllerFactory,
     TemplateCompatibilityConstraints compatibility =
         const TemplateCompatibilityConstraints(),
   }) {
@@ -51,6 +56,7 @@ void main() {
         entryPolicy: entryPolicy,
         initialTemplateCode: initialTemplateCode,
         compatibility: compatibility,
+        userId: userId,
       ),
       runtime: ReportFlowRuntime(
         connection: ReportServerConnection(
@@ -58,6 +64,7 @@ void main() {
             Uri.parse('https://example.test'),
           ),
           cacheRoot: root,
+          thumbnailTenantId: thumbnailTenantId,
         ),
         bridgeClient: bridge,
         preferences: preferences,
@@ -67,9 +74,92 @@ void main() {
             supportSharePlatform ??
             const UnsupportedReportSupportSharePlatform(),
         surfaceBinding: surfaceBinding ?? PresenterSurfaceBinding(),
+        publishedThumbnailController: injectedThumbnailController,
+        publishedThumbnailControllerFactory: thumbnailControllerFactory,
       ),
     );
   }
+
+  test(
+    'disposing a flow disposes its lazily owned thumbnail controller',
+    () async {
+      final owned = PublishedThumbnailController(
+        store: NativePublishedThumbnailStore(
+          root: Directory('${root.path}/owned-thumbnails'),
+          keyProvider: _ThumbnailTestKeyProvider(),
+          nativeEnabled: true,
+        ),
+        fetch:
+            ({
+              required template,
+              required scope,
+              required cancellation,
+            }) async =>
+                Uint8List.fromList(<int>[137, 80, 78, 71, 13, 10, 26, 10, 1]),
+      );
+      var factoryCalls = 0;
+      final flow = createController(
+        thumbnailTenantId: 'tenant-a',
+        userId: 'user-a',
+        thumbnailControllerFactory: () async {
+          factoryCalls++;
+          return owned;
+        },
+      );
+      expect(await flow.publishedThumbnailFor(_template('t1')), isNull);
+      expect(factoryCalls, 1);
+      await flow.dispose();
+      final thumbnail = _ownedThumbnailFixture();
+      final scope = TrustedThumbnailScope(
+        apiBase: Uri.parse('https://example.test/api'),
+        tenantId: 'tenant-a',
+        userId: 'user-a',
+        systemCode: 'legacy_system_1',
+        templateCode: 't1',
+      );
+      // A mere leaveScreen() would allow this later request and its fetch.
+      expect(await owned.imageForVisibleTemplate(thumbnail, scope), isNull);
+      expect(await flow.publishedThumbnailFor(thumbnail), isNull);
+    },
+  );
+
+  test(
+    'disposing a flow does not dispose an injected thumbnail controller',
+    () async {
+      final injected = PublishedThumbnailController(
+        store: NativePublishedThumbnailStore(
+          root: Directory('${root.path}/injected-thumbnails'),
+          keyProvider: _ThumbnailTestKeyProvider(),
+          nativeEnabled: true,
+        ),
+        fetch:
+            ({
+              required template,
+              required scope,
+              required cancellation,
+            }) async =>
+                Uint8List.fromList(<int>[137, 80, 78, 71, 13, 10, 26, 10, 1]),
+      );
+      addTearDown(injected.dispose);
+      final flow = createController(
+        thumbnailTenantId: 'tenant-a',
+        userId: 'user-a',
+        injectedThumbnailController: injected,
+      );
+      await flow.dispose();
+      final bytes = await injected.imageForVisibleTemplate(
+        _ownedThumbnailFixture(),
+        TrustedThumbnailScope(
+          apiBase: Uri.parse('https://example.test/api'),
+          tenantId: 'tenant-a',
+          userId: 'user-a',
+          systemCode: 'legacy_system_1',
+          templateCode: 't1',
+        ),
+      );
+      expect(bytes, isNotNull);
+    },
+  );
 
   test('controller starts with offline mode when Host omits presenterMode', () {
     final controller = createController();
@@ -2426,3 +2516,24 @@ class _FakeSupportSharePlatform implements ReportSupportSharePlatform {
     lastOrigin = sharePositionOrigin;
   }
 }
+
+class _ThumbnailTestKeyProvider implements ThumbnailKeyProvider {
+  @override
+  Future<Uint8List?> loadOrCreateKey() async =>
+      Uint8List.fromList(List<int>.filled(32, 7));
+}
+
+CachedTemplate _ownedThumbnailFixture() => CachedTemplate(
+  code: 't1',
+  type: 'sales_invoice',
+  systemId: 1,
+  publishedVersionNo: 1,
+  publishedThumbnail: BridgePublishedThumbnail.fromMap(const {
+    'versionNo': 1,
+    'contentHash':
+        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    'mimeType': 'image/png',
+    'available': true,
+  }),
+  document: const <String, dynamic>{},
+);
