@@ -459,6 +459,72 @@ void main() {
     },
   );
 
+  test(
+    'opt-in thumbnail synchronization never exceeds four concurrent PNG GETs',
+    () async {
+      final root = await Directory.systemTemp.createTemp(
+        'bridge-image-parallel-',
+      );
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() async {
+        await server.close(force: true);
+        if (await root.exists()) await root.delete(recursive: true);
+      });
+      const hash =
+          'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+      final png = base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=',
+      );
+      var active = 0;
+      var peak = 0;
+      var total = 0;
+      server.listen((request) async {
+        if (request.uri.path == '/api/presenter/template-thumbnails') {
+          total++;
+          active++;
+          if (active > peak) peak = active;
+          await Future<void>.delayed(const Duration(milliseconds: 75));
+          request.response.headers.contentType = ContentType('image', 'png');
+          request.response.headers.set('X-URB-Thumbnail-Content-Hash', hash);
+          request.response.headers.set(
+            'X-URB-Thumbnail-Bytes-Sha256',
+            sha256.convert(png).toString(),
+          );
+          request.response.add(png);
+          await request.response.close();
+          active--;
+          return;
+        }
+        await utf8.decoder.bind(request).join();
+        final templates = List<Map<String, dynamic>>.generate(6, (i) {
+          final item = _queryTemplate('tpl-$i', 7, 'sales_invoice');
+          item['thumbnail'] = const <String, Object>{
+            'versionNo': 7,
+            'contentHash': hash,
+            'mimeType': 'image/png',
+            'available': true,
+          };
+          return item;
+        });
+        await _writeJson(request, _queryEnvelope(templates));
+      });
+      final gateway = PresenterServerGateway(
+        apiBaseUrl: _api(server),
+        bridgeRoot: root,
+      );
+      final query = TemplateQueryRequest(systemCode: 'motakamel_transactions');
+      final summary = await gateway.syncTemplates(
+        query: query,
+        syncThumbnails: true,
+      );
+      expect(summary.syncedCount, 6);
+      expect(summary.thumbnailSync?.downloaded, 6);
+      expect(summary.thumbnailSync?.failed, 0);
+      expect(total, 6);
+      expect(peak, 4);
+    },
+  );
+
   test('tenant, branch, user, and system-unit catalogs are isolated', () async {
     final root = await Directory.systemTemp.createTemp('bridge-query-scope-');
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
