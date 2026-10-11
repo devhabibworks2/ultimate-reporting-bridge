@@ -16,7 +16,6 @@ final class BridgeTemplateThumbnailStore {
   final Directory cacheRoot;
   static const maxImageBytes = 2 * 1024 * 1024;
   static const _pngSignature = <int>[137, 80, 78, 71, 13, 10, 26, 10];
-  static const _pngIend = <int>[0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130];
   static final _candidate = RegExp(
     r'^tpl_[0-9a-f]{64}_[1-9][0-9]*_[0-9a-f]{64}\.png$',
   );
@@ -32,15 +31,62 @@ final class BridgeTemplateThumbnailStore {
     );
   }
 
+  static int _word(List<int> data, int offset) =>
+      (data[offset] << 24) |
+      (data[offset + 1] << 16) |
+      (data[offset + 2] << 8) |
+      data[offset + 3];
+
+  static int _crc32(List<int> data, int start, int end) {
+    var crc = 0xffffffff;
+    for (var i = start; i < end; i++) {
+      crc ^= data[i];
+      for (var bit = 0; bit < 8; bit++) {
+        crc = (crc >> 1) ^ ((crc & 1) != 0 ? 0xedb88320 : 0);
+      }
+    }
+    return (crc ^ 0xffffffff) & 0xffffffff;
+  }
+
+  /// Structural PNG parser: chunk boundaries, sizes and CRCs must all agree.
   static bool _looksLikePng(List<int> png) {
-    if (png.length < 33 || png.length > maxImageBytes) return false;
+    if (png.length < 57 || png.length > maxImageBytes) return false;
     for (var i = 0; i < _pngSignature.length; i++) {
       if (png[i] != _pngSignature[i]) return false;
     }
-    for (var i = 0; i < _pngIend.length; i++) {
-      if (png[png.length - _pngIend.length + i] != _pngIend[i]) return false;
+    var position = _pngSignature.length;
+    var chunkCount = 0;
+    var sawIdat = false;
+    while (position + 12 <= png.length) {
+      final length = _word(png, position);
+      if (length < 0 ||
+          length > maxImageBytes ||
+          position + 12 + length > png.length) {
+        return false;
+      }
+      final end = position + 12 + length;
+      final type = String.fromCharCodes(
+        png.sublist(position + 4, position + 8),
+      );
+      if (chunkCount == 0) {
+        if (type != 'IHDR' || length != 13) return false;
+        final width = _word(png, position + 8);
+        final height = _word(png, position + 12);
+        if (width < 1 || height < 1 || width > 640 || height > 640) {
+          return false;
+        }
+      }
+      if (_crc32(png, position + 4, end - 4) != _word(png, end - 4)) {
+        return false;
+      }
+      if (type == 'IDAT') sawIdat = true;
+      if (type == 'IEND') {
+        return length == 0 && sawIdat && end == png.length;
+      }
+      position = end;
+      chunkCount++;
     }
-    return true;
+    return false;
   }
 
   Future<Uint8List?> read(CachedTemplate template) async {
@@ -61,7 +107,18 @@ final class BridgeTemplateThumbnailStore {
     }
   }
 
-  Future<void> write(CachedTemplate template, Uint8List png) async {
+  Future<void> write(
+    CachedTemplate template,
+    Uint8List png, {
+    String? expectedBytesSha256,
+  }) async {
+    if (expectedBytesSha256 != null &&
+        (!RegExp(r'^[0-9a-f]{64}$').hasMatch(expectedBytesSha256) ||
+            sha256.convert(png).toString() != expectedBytesSha256)) {
+      throw const FormatException(
+        'Published image bytes failed SHA-256 verification.',
+      );
+    }
     final file = _file(template);
     if (file == null) {
       throw StateError('A valid published thumbnail identity is required.');

@@ -8,7 +8,7 @@ import 'package:test/test.dart';
 
 final _png = Uint8List.fromList(
   base64Decode(
-    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRR0AAAAASUVORK5CYII=',
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=',
   ),
 );
 const _hashA =
@@ -127,6 +127,41 @@ void main() {
       expect(await note.readAsString(), 'keep');
       expect(await link.exists(), isTrue);
       expect(await outside.readAsString(), 'important');
+    },
+  );
+
+  test(
+    'rejects a modified internal PNG chunk even if the signature and trailer match',
+    () async {
+      final template = _template();
+      await store.write(template, _png);
+      final changed = Uint8List.fromList(_png);
+      changed[44] ^= 1; // data changed while chunk CRC stays original.
+      final digest = sha256
+          .convert(utf8.encode(template.templateCode))
+          .toString();
+      final file = File('${root.path}/tpl_${digest}_3_$_hashA.png');
+      await file.writeAsBytes(changed, flush: true);
+      expect(await store.read(template), isNull);
+    },
+  );
+
+  test(
+    'rejects a mismatched trusted byte digest without replacing good PNG',
+    () async {
+      final template = _template();
+      await store.write(template, _png);
+      expect(
+        () => store.write(template, _png, expectedBytesSha256: '0' * 64),
+        throwsA(isA<FormatException>()),
+      );
+      expect(await store.read(template), orderedEquals(_png));
+      await store.write(
+        template,
+        _png,
+        expectedBytesSha256: sha256.convert(_png).toString(),
+      );
+      expect(await store.read(template), orderedEquals(_png));
     },
   );
 
