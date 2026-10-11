@@ -11,10 +11,61 @@ import 'bridge_template_cache.dart';
 /// The caller supplies the already-authorized, query-scoped catalog directory.
 /// Reads never fetch from the network and writes cannot change catalog identity.
 final class BridgeTemplateThumbnailStore {
-  BridgeTemplateThumbnailStore({required this.cacheRoot});
+  BridgeTemplateThumbnailStore({
+    required this.cacheRoot,
+    Directory? scopeRoot,
+    Directory? globalRoot,
+    this.maxImagesPerScope = 64,
+    this.maxBytesPerScope = 16 * 1024 * 1024,
+    this.maxGlobalBytes = 128 * 1024 * 1024,
+  }) : scopeRoot = scopeRoot ?? cacheRoot,
+       globalRoot = globalRoot ?? scopeRoot ?? cacheRoot;
 
   final Directory cacheRoot;
+
+  /// Trusted user/tenant/system cache root, shared by all filter catalogs.
+  final Directory scopeRoot;
+
+  /// Trusted bridge cache root, shared by all identities.
+  final Directory globalRoot;
+  final int maxImagesPerScope;
+  final int maxBytesPerScope;
+  final int maxGlobalBytes;
   static const maxImageBytes = 2 * 1024 * 1024;
+
+  static String _canonicalPath(Directory value) {
+    final path = value.absolute.uri.normalizePath().toFilePath();
+    return path.length > 1 && path.endsWith(Platform.pathSeparator)
+        ? path.substring(0, path.length - 1)
+        : path;
+  }
+
+  static bool _inside(Directory child, Directory ancestor) {
+    final a = _canonicalPath(ancestor);
+    final c = _canonicalPath(child);
+    return c == a || c.startsWith('$a${Platform.pathSeparator}');
+  }
+
+  Future<void> _requireTrustedRoots() async {
+    if (!_inside(cacheRoot, scopeRoot) || !_inside(scopeRoot, globalRoot)) {
+      throw StateError(
+        'Thumbnail cache path is outside trusted identity scope.',
+      );
+    }
+    var cursor = cacheRoot;
+    final global = _canonicalPath(globalRoot);
+    while (true) {
+      if (await FileSystemEntity.type(cursor.path, followLinks: false) ==
+          FileSystemEntityType.link) {
+        throw StateError(
+          'Thumbnail storage cannot traverse symlinked directories.',
+        );
+      }
+      if (_canonicalPath(cursor) == global) break;
+      cursor = cursor.parent;
+    }
+  }
+
   static const _pngSignature = <int>[137, 80, 78, 71, 13, 10, 26, 10];
   static final _candidate = RegExp(
     r'^tpl_[0-9a-f]{64}_[1-9][0-9]*_[0-9a-f]{64}\.png$',
@@ -90,6 +141,11 @@ final class BridgeTemplateThumbnailStore {
   }
 
   Future<Uint8List?> read(CachedTemplate template) async {
+    try {
+      await _requireTrustedRoots();
+    } on StateError {
+      return null;
+    }
     final file = _file(template);
     if (file == null || !await cacheRoot.exists()) return null;
     try {
@@ -101,7 +157,13 @@ final class BridgeTemplateThumbnailStore {
       }
       if (await file.length() > maxImageBytes) return null;
       final bytes = await file.readAsBytes();
-      return _looksLikePng(bytes) ? bytes : null;
+      if (!_looksLikePng(bytes)) return null;
+      try {
+        await file.setLastModified(DateTime.now().toUtc());
+      } on FileSystemException {
+        // A readable offline image remains valid even on read-only storage.
+      }
+      return bytes;
     } on FileSystemException {
       return null;
     }
@@ -112,6 +174,7 @@ final class BridgeTemplateThumbnailStore {
     Uint8List png, {
     String? expectedBytesSha256,
   }) async {
+    await _requireTrustedRoots();
     if (expectedBytesSha256 != null &&
         (!RegExp(r'^[0-9a-f]{64}$').hasMatch(expectedBytesSha256) ||
             sha256.convert(png).toString() != expectedBytesSha256)) {
@@ -146,13 +209,89 @@ final class BridgeTemplateThumbnailStore {
         throw const FormatException('Staged PNG failed validation.');
       }
       await tmp.rename(file.path);
+      await _enforceQuota(file.path);
     } finally {
       if (await tmp.exists()) await tmp.delete();
     }
   }
 
+  Future<List<({File file, int size, DateTime modified})>> _imagesIn(
+    Directory root,
+  ) async {
+    if (!await root.exists()) return [];
+    if (await FileSystemEntity.type(root.path, followLinks: false) !=
+        FileSystemEntityType.directory) {
+      throw StateError('Thumbnail quota root must not be a symlink.');
+    }
+    final images = <({File file, int size, DateTime modified})>[];
+    await for (final entity in root.list(recursive: true, followLinks: false)) {
+      if (entity is! File ||
+          !_candidate.hasMatch(entity.uri.pathSegments.last)) {
+        continue;
+      }
+      try {
+        final stat = await entity.stat();
+        if (stat.type != FileSystemEntityType.file) continue;
+        images.add((file: entity, size: stat.size, modified: stat.modified));
+      } on FileSystemException {
+        continue;
+      }
+    }
+    return images;
+  }
+
+  Future<void> _pruneQuota(
+    Directory root, {
+    required int maxCount,
+    required int maxBytes,
+    required String protect,
+  }) async {
+    final images = await _imagesIn(root);
+    images.sort((a, b) {
+      if (a.file.path == protect) return 1;
+      if (b.file.path == protect) return -1;
+      final byTime = a.modified.compareTo(b.modified);
+      return byTime != 0 ? byTime : a.file.path.compareTo(b.file.path);
+    });
+    var count = images.length;
+    var bytes = images.fold<int>(0, (total, image) => total + image.size);
+    for (final image in images) {
+      if (count <= maxCount && bytes <= maxBytes) break;
+      if (image.file.path == protect) {
+        throw StateError('New PNG alone exceeds the cache budget.');
+      }
+      try {
+        await image.file.delete();
+        count--;
+        bytes -= image.size;
+      } on FileSystemException {
+        // Fail closed: make the budget failure observable to the caller.
+        rethrow;
+      }
+    }
+  }
+
+  Future<void> _enforceQuota(String protectedPath) async {
+    if (maxImagesPerScope < 1 || maxBytesPerScope < 1 || maxGlobalBytes < 1) {
+      throw StateError('Thumbnail quotas must be positive.');
+    }
+    await _pruneQuota(
+      scopeRoot,
+      maxCount: maxImagesPerScope,
+      maxBytes: maxBytesPerScope,
+      protect: protectedPath,
+    );
+    await _pruneQuota(
+      globalRoot,
+      maxCount: 0x7fffffff,
+      maxBytes: maxGlobalBytes,
+      protect: protectedPath,
+    );
+  }
+
   /// Remove only obsolete sibling PNGs, never JSON, other files, or symlinks.
   Future<void> deleteObsolete(Iterable<CachedTemplate> activeTemplates) async {
+    await _requireTrustedRoots();
     if (!await cacheRoot.exists()) return;
     if (await FileSystemEntity.type(cacheRoot.path, followLinks: false) !=
         FileSystemEntityType.directory) {

@@ -65,6 +65,123 @@ void main() {
     },
   );
 
+  test(
+    'limits count across two catalogs of one authenticated scope using LRU',
+    () async {
+      final identityRoot = Directory('${root.path}/scoped/api/identity');
+      final firstCatalog = Directory('${identityRoot.path}/catalog_first');
+      final secondCatalog = Directory('${identityRoot.path}/catalog_second');
+      final first = BridgeTemplateThumbnailStore(
+        cacheRoot: firstCatalog,
+        scopeRoot: identityRoot,
+        globalRoot: root,
+        maxImagesPerScope: 2,
+      );
+      final second = BridgeTemplateThumbnailStore(
+        cacheRoot: secondCatalog,
+        scopeRoot: identityRoot,
+        globalRoot: root,
+        maxImagesPerScope: 2,
+      );
+      final a = _template(code: 'A');
+      final b = _template(code: 'B');
+      final c = _template(code: 'C');
+      await first.write(a, _png);
+      final older = File((await firstCatalog.list().first).path);
+      await older.setLastModified(DateTime.utc(2020));
+      await second.write(b, _png);
+      await second.write(c, _png);
+      expect(await first.read(a), isNull);
+      expect(await second.read(b), orderedEquals(_png));
+      expect(await second.read(c), orderedEquals(_png));
+    },
+  );
+
+  test(
+    'enforces global budget across distinct identities and filter catalogs',
+    () async {
+      final api = Directory('${root.path}/scoped/api');
+      final one = Directory('${api.path}/identity1/catalog_a');
+      final two = Directory('${api.path}/identity2/catalog_b');
+      final s1 = BridgeTemplateThumbnailStore(
+        cacheRoot: one,
+        scopeRoot: one.parent,
+        globalRoot: root,
+        maxGlobalBytes: _png.length * 2,
+      );
+      final s2 = BridgeTemplateThumbnailStore(
+        cacheRoot: two,
+        scopeRoot: two.parent,
+        globalRoot: root,
+        maxGlobalBytes: _png.length * 2,
+      );
+      await s1.write(_template(code: 'A'), _png);
+      final oldest = File((await one.list().first).path);
+      await oldest.setLastModified(DateTime.utc(2020));
+      await s2.write(_template(code: 'B'), _png);
+      await s2.write(_template(code: 'C'), _png);
+      expect(await s1.read(_template(code: 'A')), isNull);
+      expect(await s2.read(_template(code: 'C')), orderedEquals(_png));
+    },
+  );
+
+  test(
+    'refuses a cache directory outside the supplied trusted identity root',
+    () async {
+      final wrong = Directory('${root.path}/other-user/catalog');
+      final trusted = Directory('${root.path}/identity-a');
+      final untrusted = BridgeTemplateThumbnailStore(
+        cacheRoot: wrong,
+        scopeRoot: trusted,
+        globalRoot: root,
+      );
+      await expectLater(
+        untrusted.write(_template(code: 'INV'), _png),
+        throwsA(isA<StateError>()),
+      );
+      expect(await wrong.exists(), isFalse);
+    },
+  );
+
+  test(
+    'reading a cached image makes it most recently used for eviction',
+    () async {
+      final scoped = BridgeTemplateThumbnailStore(
+        cacheRoot: root,
+        maxImagesPerScope: 2,
+      );
+      final a = _template(code: 'A');
+      final b = _template(code: 'B');
+      final c = _template(code: 'C');
+      await scoped.write(a, _png);
+      await scoped.write(b, _png);
+      final aHash = sha256.convert(utf8.encode('A')).toString();
+      final bHash = sha256.convert(utf8.encode('B')).toString();
+      await File(
+        '${root.path}/tpl_${aHash}_3_$_hashA.png',
+      ).setLastModified(DateTime.utc(2020));
+      await File(
+        '${root.path}/tpl_${bHash}_3_$_hashA.png',
+      ).setLastModified(DateTime.utc(2021));
+      expect(await scoped.read(a), orderedEquals(_png));
+      await scoped.write(c, _png);
+      expect(await scoped.read(b), isNull);
+      expect(await scoped.read(a), orderedEquals(_png));
+      expect(await scoped.read(c), orderedEquals(_png));
+    },
+  );
+
+  test('identity byte cap removes oldest while preserving newest', () async {
+    final scoped = BridgeTemplateThumbnailStore(
+      cacheRoot: root,
+      maxBytesPerScope: _png.length,
+    );
+    await scoped.write(_template(code: 'A'), _png);
+    await scoped.write(_template(code: 'B'), _png);
+    expect(await scoped.read(_template(code: 'A')), isNull);
+    expect(await scoped.read(_template(code: 'B')), orderedEquals(_png));
+  });
+
   test('mismatching version/hash does not accept older image', () async {
     final template = _template();
     await store.write(template, _png);
