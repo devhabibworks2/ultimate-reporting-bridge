@@ -138,6 +138,7 @@ class ReportingBridgeClient {
     required String systemCode,
     TemplateSyncFilter? filter,
     Map<String, Object?> extra = const <String, Object?>{},
+    bool syncThumbnails = false,
   }) async {
     _ensureActive();
     final query = TemplateQueryRequest(
@@ -153,6 +154,7 @@ class ReportingBridgeClient {
     final summary = await _serverGateway.syncTemplates(
       query: query,
       headers: headers,
+      syncThumbnails: syncThumbnails,
     );
     _lastTemplateQuery = query;
     return summary;

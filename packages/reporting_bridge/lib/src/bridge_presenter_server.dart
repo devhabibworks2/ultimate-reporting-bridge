@@ -7,6 +7,7 @@ import 'bridge_template_cache.dart';
 import 'bridge_template_default.dart';
 import 'bridge_template_query.dart';
 import 'bridge_template_sync.dart';
+import 'bridge_template_thumbnail_sync.dart';
 
 /// Owns Presenter template transport for one API source.
 class PresenterServerGateway {
@@ -55,15 +56,25 @@ class PresenterServerGateway {
   Future<TemplateSyncSummary> syncTemplates({
     required TemplateQueryRequest query,
     Map<String, String>? headers,
+    bool syncThumbnails = false,
   }) async {
     final effectiveHeaders = filterPresenterBridgeHeaders(headers ?? _headers);
     final cache = await _queryTemplateCache(query, effectiveHeaders);
-    return _templateSync.queryTemplatesToCache(
+    final summary = await _templateSync.queryTemplatesToCache(
       apiBase: apiBaseUrl,
       headers: effectiveHeaders,
       cache: cache,
       request: query,
     );
+    if (!syncThumbnails || summary.fromCache) return summary;
+    final images = await syncPublishedTemplateThumbnails(
+      apiBase: apiBaseUrl,
+      headers: effectiveHeaders,
+      cache: cache,
+      systemCode: query.systemCode,
+      globalRoot: Directory('${bridgeRoot.path}/templates/scoped'),
+    );
+    return summary.withThumbnailSync(images);
   }
 
   Future<List<CachedTemplate>> listTemplates({

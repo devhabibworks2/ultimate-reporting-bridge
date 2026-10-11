@@ -525,12 +525,34 @@ class PresenterTemplateSyncService {
   }
 }
 
+final class ThumbnailSyncSummary {
+  const ThumbnailSyncSummary({
+    required this.downloaded,
+    required this.reused,
+    required this.failed,
+    required this.skipped,
+  });
+
+  final int downloaded;
+  final int reused;
+  final int failed;
+  final int skipped;
+
+  Map<String, int> toMap() => {
+    'downloaded': downloaded,
+    'reused': reused,
+    'failed': failed,
+    'skipped': skipped,
+  };
+}
+
 class TemplateSyncSummary {
   const TemplateSyncSummary({
     required this.syncedCount,
     required this.listCount,
     required this.errors,
     this.fromCache = false,
+    this.thumbnailSync,
     this.cacheReason,
     this.catalogRevision,
     this.systemCode,
@@ -545,6 +567,7 @@ class TemplateSyncSummary {
   final int listCount;
   final List<String> errors;
   final bool fromCache;
+  final ThumbnailSyncSummary? thumbnailSync;
   final String? cacheReason;
   final String? catalogRevision;
   final String? systemCode;
@@ -554,11 +577,29 @@ class TemplateSyncSummary {
   final Map<String, dynamic>? appliedFilter;
   final List<TemplateDefaultHint> defaultTemplates;
 
+  TemplateSyncSummary withThumbnailSync(ThumbnailSyncSummary thumbnail) =>
+      TemplateSyncSummary(
+        syncedCount: syncedCount,
+        listCount: listCount,
+        errors: errors,
+        fromCache: fromCache,
+        cacheReason: cacheReason,
+        catalogRevision: catalogRevision,
+        systemCode: systemCode,
+        systemId: systemId,
+        systemName: systemName,
+        systemDescription: systemDescription,
+        appliedFilter: appliedFilter,
+        defaultTemplates: defaultTemplates,
+        thumbnailSync: thumbnail,
+      );
+
   Map<String, dynamic> toMap() => <String, dynamic>{
     'syncedCount': syncedCount,
     'listCount': listCount,
     'errors': errors,
     'fromCache': fromCache,
+    if (thumbnailSync != null) 'thumbnailSync': thumbnailSync!.toMap(),
     if (cacheReason != null) 'cacheReason': cacheReason,
     if (catalogRevision != null) 'catalogRevision': catalogRevision,
     if (systemCode != null) 'systemCode': systemCode,

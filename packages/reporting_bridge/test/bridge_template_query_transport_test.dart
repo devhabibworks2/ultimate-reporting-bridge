@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:reporting_bridge/reporting_bridge.dart';
 import 'package:test/test.dart';
 
@@ -366,6 +367,95 @@ void main() {
       await gateway.syncTemplates(query: query);
       expect(await storedImages.read(template8), isNull);
       expect(imageGetCount, 0);
+    },
+  );
+
+  test(
+    'optional image sync defaults to zero GET; opt-in downloads only missing PNG',
+    () async {
+      final root = await Directory.systemTemp.createTemp('bridge-image-optin-');
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() async {
+        await server.close(force: true);
+        if (await root.exists()) await root.delete(recursive: true);
+      });
+      const hash =
+          'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+      final png = base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=',
+      );
+      var imageGets = 0;
+      var newVersion = false;
+      var denyImages = false;
+      server.listen((request) async {
+        if (request.uri.path == '/api/presenter/template-thumbnails') {
+          imageGets++;
+          if (denyImages) {
+            request.response.statusCode = HttpStatus.forbidden;
+            await request.response.close();
+            return;
+          }
+          request.response.headers.contentType = ContentType('image', 'png');
+          request.response.headers.set('X-URB-Thumbnail-Content-Hash', hash);
+          request.response.headers.set(
+            'X-URB-Thumbnail-Bytes-Sha256',
+            sha256.convert(png).toString(),
+          );
+          request.response.add(png);
+          await request.response.close();
+          return;
+        }
+        await utf8.decoder.bind(request).join();
+        final item = _queryTemplate('existing', 7, 'sales_invoice');
+        item['publishedVersionNo'] = newVersion ? 8 : 7;
+        item['thumbnail'] = <String, Object>{
+          'versionNo': newVersion ? 8 : 7,
+          'contentHash': newVersion ? 'b' * 64 : hash,
+          'mimeType': 'image/png',
+          'available': true,
+        };
+        await _writeJson(request, _queryEnvelope([item]));
+      });
+
+      final gateway = PresenterServerGateway(
+        apiBaseUrl: _api(server),
+        bridgeRoot: root,
+      );
+      final query = TemplateQueryRequest(systemCode: 'motakamel_transactions');
+      final first = await gateway.syncTemplates(query: query);
+      expect(first.syncedCount, 1);
+      expect(first.thumbnailSync, isNull);
+      expect(imageGets, 0);
+
+      final second = await gateway.syncTemplates(
+        query: query,
+        syncThumbnails: true,
+      );
+      expect(second.syncedCount, 1);
+      expect(second.thumbnailSync?.downloaded, 1);
+      expect(second.thumbnailSync?.failed, 0);
+      expect(imageGets, 1);
+
+      final again = await gateway.syncTemplates(
+        query: query,
+        syncThumbnails: true,
+      );
+      expect(again.thumbnailSync?.reused, 1);
+      expect(imageGets, 1);
+
+      newVersion = true;
+      denyImages = true;
+      final denied = await gateway.syncTemplates(
+        query: query,
+        syncThumbnails: true,
+      );
+      expect(denied.syncedCount, 1);
+      expect(denied.thumbnailSync?.failed, 1);
+      expect(imageGets, 2);
+      expect(
+        (await gateway.listTemplates(query: query)).single.publishedVersionNo,
+        8,
+      );
     },
   );
 
