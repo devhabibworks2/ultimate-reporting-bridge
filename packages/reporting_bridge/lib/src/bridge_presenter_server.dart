@@ -1,4 +1,7 @@
 import 'dart:io';
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 
 import 'bridge_cache_namespace.dart';
 import 'bridge_identity_context.dart';
@@ -135,6 +138,7 @@ class PresenterServerGateway {
     final scope = BridgeTemplateCacheScope(
       apiBaseUrl: cacheIdentityBaseUrl,
       tenantId: bridgeTenantIdFromHeaders(headers),
+      authContextDigest: _authContextDigest(headers),
       identity: _validatedEffectiveIdentity(query.identity, headers),
       systemCode: query.systemCode,
       filter: query.filter,
@@ -146,6 +150,12 @@ class PresenterServerGateway {
         scope: scope,
       ),
     );
+  }
+
+  static String? _authContextDigest(Map<String, String> headers) {
+    final authorization = bridgeHeaderValue(headers, 'Authorization');
+    if (authorization == null) return null;
+    return sha256.convert(utf8.encode(authorization)).toString();
   }
 
   BridgeIdentityContext _validatedEffectiveIdentity(

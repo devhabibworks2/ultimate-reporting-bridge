@@ -52,6 +52,22 @@ void main() {
     },
   );
 
+  test('forwards optional image sync without requiring a userId', () async {
+    final service = ReportResourcePreparationService(bridgeClient: bridge);
+    final optIn = TemplateSyncRequest(
+      systemCode: UrbSystem.motakamelTransactions,
+      syncThumbnails: true,
+    );
+    await service.syncTemplates(optIn);
+    expect(bridge.syncThumbnailsReceived, isTrue);
+    expect(bridge.identity.userId, isNull);
+
+    await service.syncTemplates(
+      TemplateSyncRequest(systemCode: UrbSystem.motakamelTransactions),
+    );
+    expect(bridge.syncThumbnailsReceived, isFalse);
+  });
+
   test(
     'offline preparation syncs Presenter and returns its manifest',
     () async {
@@ -78,6 +94,7 @@ final class _RecordingBridge extends ReportingBridgeClient {
   Map<String, Object?>? extra;
   BridgeIdentityContext identity = BridgeIdentityContext();
   int presenterSyncCalls = 0;
+  bool? syncThumbnailsReceived;
 
   @override
   Future<void> updateIdentityContext(BridgeIdentityContext value) async {
@@ -90,7 +107,9 @@ final class _RecordingBridge extends ReportingBridgeClient {
     int? systemId,
     TemplateSyncFilter? filter,
     Map<String, Object?> extra = const <String, Object?>{},
+    bool syncThumbnails = false,
   }) async {
+    syncThumbnailsReceived = syncThumbnails;
     this.systemCode = systemCode;
     this.filter = filter;
     this.extra = extra;

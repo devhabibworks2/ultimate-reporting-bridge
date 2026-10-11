@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reporting_bridge/reporting_bridge.dart';
+import 'package:reporting_bridge_flutter/src/thumbnails/core_published_thumbnail_store.dart';
 import 'package:reporting_bridge_flutter/src/thumbnails/native_published_thumbnail_store.dart';
 import 'package:reporting_bridge_flutter/src/thumbnails/published_thumbnail_controller.dart';
 
@@ -11,20 +13,23 @@ const _hashA =
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const _hashB =
     'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
-final _png = Uint8List.fromList(<int>[137, 80, 78, 71, 13, 10, 26, 10, 1, 2]);
+final _png = Uint8List.fromList(
+  base64Decode(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=',
+  ),
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late Directory root;
-  late NativePublishedThumbnailStore store;
-  late _Keys keys;
+  late CorePublishedThumbnailStore store;
   setUp(() async {
     root = await Directory.systemTemp.createTemp('thumbnail-controller-');
-    keys = _Keys();
-    store = NativePublishedThumbnailStore(
-      root: root,
-      keyProvider: keys,
-      nativeEnabled: true,
+    store = CorePublishedThumbnailStore(
+      bridgeRoot: root,
+      cacheIdentityBaseUrl: Uri.parse('https://api.example.test/'),
+      filter: TemplateSyncFilter(),
+      extra: const <String, Object?>{},
     );
   });
   tearDown(() async {
@@ -199,9 +204,3 @@ TrustedThumbnailScope _scope({
   systemCode: 'sales',
   templateCode: template,
 );
-
-final class _Keys implements ThumbnailKeyProvider {
-  final key = Uint8List.fromList(List<int>.filled(32, 7));
-  @override
-  Future<Uint8List?> loadOrCreateKey() async => key;
-}

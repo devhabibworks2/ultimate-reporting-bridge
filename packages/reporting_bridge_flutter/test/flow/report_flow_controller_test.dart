@@ -4,11 +4,18 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' show Rect;
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reporting_bridge_flutter/reporting_bridge_flutter.dart';
 import 'package:reporting_bridge_flutter/src/flow/report_flow_controller_impl.dart';
 import 'package:reporting_bridge_flutter/src/flow/report_flow_runtime.dart';
 import '../test_open_request.dart';
+
+final Uint8List _validThumbnailPng = Uint8List.fromList(
+  base64Decode(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=',
+  ),
+);
 
 void main() {
   late Directory root;
@@ -39,6 +46,9 @@ void main() {
     String? initialTemplateCode,
     String? thumbnailTenantId,
     String? userId,
+    Map<String, String> headers = const <String, String>{},
+    BridgeHeadersProvider? headersProvider,
+    Uri? serverUrl,
     PublishedThumbnailController? injectedThumbnailController,
     Future<PublishedThumbnailController?> Function()?
     thumbnailControllerFactory,
@@ -61,10 +71,12 @@ void main() {
       runtime: ReportFlowRuntime(
         connection: ReportServerConnection(
           endpoints: ReportServerEndpoints.deployed(
-            Uri.parse('https://example.test'),
+            serverUrl ?? Uri.parse('https://example.test'),
           ),
           cacheRoot: root,
           thumbnailTenantId: thumbnailTenantId,
+          headers: headers,
+          headersProvider: headersProvider,
         ),
         bridgeClient: bridge,
         preferences: preferences,
@@ -79,6 +91,320 @@ void main() {
       ),
     );
   }
+
+  test('default flow reads the core sibling PNG cache without userId', () async {
+    const authorization = 'ApiKey testing-customer';
+    final endpoints = ReportServerEndpoints.deployed(
+      Uri.parse('https://example.test'),
+    );
+    final filter = TemplateSyncFilter(reportTypes: const ['sales_invoice']);
+    final catalog = bridgeTemplateCacheDirectoryForScope(
+      bridgeRoot: root,
+      scope: BridgeTemplateCacheScope(
+        apiBaseUrl: endpoints.cacheIdentityBaseUrl,
+        authContextDigest: sha256
+            .convert(utf8.encode(authorization))
+            .toString(),
+        systemCode: 'legacy_system_1',
+        filter: filter,
+        extra: const <String, Object?>{},
+      ),
+    );
+    final template = _ownedThumbnailFixture();
+    final png = Uint8List.fromList(
+      base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=',
+      ),
+    );
+    await BridgeTemplateThumbnailStore(cacheRoot: catalog).write(template, png);
+
+    final flow = createController(
+      headers: const {'Authorization': authorization},
+    );
+    addTearDown(flow.dispose);
+    expect(await flow.publishedThumbnailFor(template), orderedEquals(png));
+  });
+
+  test(
+    'published thumbnail loads without tenantId and without userId',
+    () async {
+      var fetches = 0;
+      final owned = PublishedThumbnailController(
+        store: CorePublishedThumbnailStore(
+          bridgeRoot: Directory('${root.path}/no-identity'),
+          cacheIdentityBaseUrl: Uri.parse(
+            'https://example.test/UltimateReport/backend/',
+          ),
+          filter: TemplateSyncFilter(
+            reportTypes: const <String>['sales_invoice'],
+          ),
+          extra: const <String, Object?>{},
+        ),
+        fetch:
+            ({required template, required scope, required cancellation}) async {
+              fetches++;
+              expect(scope.userId, isNull);
+              expect(scope.tenantId, isNull);
+              return _validThumbnailPng;
+            },
+      );
+      final flow = createController(injectedThumbnailController: owned);
+      addTearDown(flow.dispose);
+      addTearDown(owned.dispose);
+      final bytes = await flow.publishedThumbnailFor(_ownedThumbnailFixture());
+      expect(bytes, isNotNull);
+      expect(fetches, 1);
+    },
+  );
+
+  test(
+    'tenant hint without authenticated context never caches a thumbnail',
+    () async {
+      var fetches = 0;
+      final owned = PublishedThumbnailController(
+        store: CorePublishedThumbnailStore(
+          bridgeRoot: Directory('${root.path}/unauthenticated-tenant'),
+          cacheIdentityBaseUrl: Uri.parse(
+            'https://example.test/UltimateReport/backend/',
+          ),
+          filter: TemplateSyncFilter(reportTypes: const ['sales_invoice']),
+          extra: const <String, Object?>{},
+        ),
+        fetch:
+            ({required template, required scope, required cancellation}) async {
+              expect(scope.customerContext, isNull);
+              expect(scope.cacheEnabled, isFalse);
+              fetches++;
+              return _validThumbnailPng;
+            },
+      );
+      addTearDown(owned.dispose);
+      final flow = createController(
+        headers: const <String, String>{'X-Tenant-Id': 'tenant-shared'},
+        injectedThumbnailController: owned,
+      );
+      addTearDown(flow.dispose);
+      final template = _ownedThumbnailFixture();
+      expect(await flow.publishedThumbnailFor(template), isNotNull);
+      expect(await flow.publishedThumbnailFor(template), isNotNull);
+      expect(fetches, 2);
+    },
+  );
+
+  test('changing authenticated headers never caches B image under A', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    var getCalls = 0;
+    server.listen((request) async {
+      getCalls++;
+      request.response.headers
+        ..set(HttpHeaders.contentTypeHeader, 'image/png')
+        ..set('X-URB-Thumbnail-Content-Hash', 'a' * 64)
+        ..set(
+          'X-URB-Thumbnail-Bytes-Sha256',
+          sha256.convert(_validThumbnailPng).toString(),
+        );
+      request.response.add(_validThumbnailPng);
+      await request.response.close();
+    });
+    var resolutions = 0;
+    final flow = createController(
+      serverUrl: Uri.parse('http://127.0.0.1:${server.port}'),
+      headersProvider: (_) {
+        resolutions++;
+        return <String, String>{
+          'Authorization': resolutions == 1
+              ? 'ApiKey customer-A'
+              : 'ApiKey customer-B',
+        };
+      },
+    );
+    addTearDown(flow.dispose);
+    final image = await flow.publishedThumbnailFor(_ownedThumbnailFixture());
+    expect(image, isNull);
+    expect(resolutions, 2);
+    expect(getCalls, 0);
+  });
+
+  test(
+    'changing tenant header under one key never caches another customer',
+    () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      var getCalls = 0;
+      server.listen((request) async {
+        getCalls++;
+        request.response.headers
+          ..set(HttpHeaders.contentTypeHeader, 'image/png')
+          ..set('X-URB-Thumbnail-Content-Hash', 'a' * 64)
+          ..set(
+            'X-URB-Thumbnail-Bytes-Sha256',
+            sha256.convert(_validThumbnailPng).toString(),
+          );
+        request.response.add(_validThumbnailPng);
+        await request.response.close();
+      });
+      var resolutions = 0;
+      final flow = createController(
+        serverUrl: Uri.parse('http://127.0.0.1:${server.port}'),
+        headersProvider: (_) {
+          resolutions++;
+          return <String, String>{
+            'Authorization': 'ApiKey one-shared-key',
+            'X-Tenant-Id': resolutions == 1 ? 'customer-A' : 'customer-B',
+          };
+        },
+      );
+      addTearDown(flow.dispose);
+      expect(
+        await flow.publishedThumbnailFor(_ownedThumbnailFixture()),
+        isNull,
+      );
+      expect(resolutions, 2);
+      expect(getCalls, 0);
+    },
+  );
+
+  test(
+    'published thumbnail loads when userId is available but tenant is not',
+    () async {
+      var fetches = 0;
+      final owned = PublishedThumbnailController(
+        store: CorePublishedThumbnailStore(
+          bridgeRoot: Directory('${root.path}/with-user'),
+          cacheIdentityBaseUrl: Uri.parse(
+            'https://example.test/UltimateReport/backend/',
+          ),
+          filter: TemplateSyncFilter(
+            reportTypes: const <String>['sales_invoice'],
+          ),
+          extra: const <String, Object?>{},
+        ),
+        fetch:
+            ({required template, required scope, required cancellation}) async {
+              fetches++;
+              expect(scope.userId, 'existing-user');
+              expect(scope.tenantId, isNull);
+              return _validThumbnailPng;
+            },
+      );
+      final flow = createController(
+        userId: 'existing-user',
+        injectedThumbnailController: owned,
+      );
+      addTearDown(flow.dispose);
+      addTearDown(owned.dispose);
+      expect(
+        await flow.publishedThumbnailFor(_ownedThumbnailFixture()),
+        isNotNull,
+      );
+      expect(fetches, 1);
+    },
+  );
+
+  test(
+    'optional user and tenant use authenticated server scope for caching',
+    () async {
+      var fetches = 0;
+      final shared = PublishedThumbnailController(
+        store: CorePublishedThumbnailStore(
+          bridgeRoot: Directory('${root.path}/customer-separated'),
+          cacheIdentityBaseUrl: Uri.parse(
+            'https://example.test/UltimateReport/backend/',
+          ),
+          filter: TemplateSyncFilter(
+            reportTypes: const <String>['sales_invoice'],
+          ),
+          extra: const <String, Object?>{},
+        ),
+        fetch:
+            ({required template, required scope, required cancellation}) async {
+              fetches++;
+              expect(scope.userId, 'shared-user');
+              expect(scope.tenantId, isNull);
+              expect(scope.customerContext, isNotNull);
+              expect(scope.customerContext, isNot(contains('private-key')));
+              expect(scope.cacheEnabled, isTrue);
+              return _validThumbnailPng;
+            },
+      );
+      addTearDown(shared.dispose);
+      final template = _ownedThumbnailFixture();
+      final customerA = createController(
+        userId: 'shared-user',
+        headers: const <String, String>{
+          'Authorization': 'ApiKey private-key-a',
+        },
+        injectedThumbnailController: shared,
+      );
+      final customerB = createController(
+        userId: 'shared-user',
+        headers: const <String, String>{
+          'Authorization': 'ApiKey private-key-b',
+        },
+        injectedThumbnailController: shared,
+      );
+      addTearDown(customerA.dispose);
+      addTearDown(customerB.dispose);
+      expect(await customerA.publishedThumbnailFor(template), isNotNull);
+      expect(await customerA.publishedThumbnailFor(template), isNotNull);
+      expect(fetches, 1);
+      expect(await customerB.publishedThumbnailFor(template), isNotNull);
+      expect(fetches, 2); // Cannot read customer A's cache.
+    },
+  );
+
+  test(
+    'explicit tenant hints partition published thumbnail cache even with shared authorization',
+    () async {
+      var fetches = 0;
+      final observedTenants = <String?>[];
+      final shared = PublishedThumbnailController(
+        store: CorePublishedThumbnailStore(
+          bridgeRoot: Directory('${root.path}/hint-separated'),
+          cacheIdentityBaseUrl: Uri.parse(
+            'https://example.test/UltimateReport/backend/',
+          ),
+          filter: TemplateSyncFilter(
+            reportTypes: const <String>['sales_invoice'],
+          ),
+          extra: const <String, Object?>{},
+        ),
+        fetch:
+            ({required template, required scope, required cancellation}) async {
+              fetches++;
+              observedTenants.add(scope.tenantId);
+              expect(scope.cacheEnabled, isTrue);
+              expect(scope.customerContext, isNotNull);
+              return _validThumbnailPng;
+            },
+      );
+      addTearDown(shared.dispose);
+      final template = _ownedThumbnailFixture();
+      final customerA = createController(
+        userId: 'shared-user',
+        thumbnailTenantId: 'tenant-A',
+        headers: const {'Authorization': 'ApiKey shared-customer-token'},
+        injectedThumbnailController: shared,
+      );
+      final customerB = createController(
+        userId: 'shared-user',
+        thumbnailTenantId: 'tenant-B',
+        headers: const {'Authorization': 'ApiKey shared-customer-token'},
+        injectedThumbnailController: shared,
+      );
+      addTearDown(customerA.dispose);
+      addTearDown(customerB.dispose);
+      expect(await customerA.publishedThumbnailFor(template), isNotNull);
+      expect(await customerA.publishedThumbnailFor(template), isNotNull);
+      expect(fetches, 1);
+      expect(await customerB.publishedThumbnailFor(template), isNotNull);
+      expect(fetches, 2);
+      expect(observedTenants[0], isNot(observedTenants[1]));
+      expect(await customerA.publishedThumbnailFor(template), isNotNull);
+      expect(fetches, 2);
+    },
+  );
 
   test(
     'dispose returns while owned thumbnail controller factory is pending',
@@ -105,18 +431,22 @@ void main() {
     () async {
       final pendingFactory = Completer<PublishedThumbnailController?>();
       final owned = PublishedThumbnailController(
-        store: NativePublishedThumbnailStore(
-          root: Directory('${root.path}/late-owned-thumbnails'),
-          keyProvider: _ThumbnailTestKeyProvider(),
-          nativeEnabled: true,
+        store: CorePublishedThumbnailStore(
+          bridgeRoot: Directory('${root.path}/late-owned-thumbnails'),
+          cacheIdentityBaseUrl: Uri.parse(
+            'https://example.test/UltimateReport/backend/',
+          ),
+          filter: TemplateSyncFilter(
+            reportTypes: const <String>['sales_invoice'],
+          ),
+          extra: const <String, Object?>{},
         ),
         fetch:
             ({
               required template,
               required scope,
               required cancellation,
-            }) async =>
-                Uint8List.fromList(<int>[137, 80, 78, 71, 13, 10, 26, 10, 1]),
+            }) async => _validThumbnailPng,
       );
       final flow = createController(
         thumbnailTenantId: 'tenant-a',
@@ -149,18 +479,22 @@ void main() {
     'disposing a flow disposes its lazily owned thumbnail controller',
     () async {
       final owned = PublishedThumbnailController(
-        store: NativePublishedThumbnailStore(
-          root: Directory('${root.path}/owned-thumbnails'),
-          keyProvider: _ThumbnailTestKeyProvider(),
-          nativeEnabled: true,
+        store: CorePublishedThumbnailStore(
+          bridgeRoot: Directory('${root.path}/owned-thumbnails'),
+          cacheIdentityBaseUrl: Uri.parse(
+            'https://example.test/UltimateReport/backend/',
+          ),
+          filter: TemplateSyncFilter(
+            reportTypes: const <String>['sales_invoice'],
+          ),
+          extra: const <String, Object?>{},
         ),
         fetch:
             ({
               required template,
               required scope,
               required cancellation,
-            }) async =>
-                Uint8List.fromList(<int>[137, 80, 78, 71, 13, 10, 26, 10, 1]),
+            }) async => _validThumbnailPng,
       );
       var factoryCalls = 0;
       final flow = createController(
@@ -192,18 +526,22 @@ void main() {
     'disposing a flow does not dispose an injected thumbnail controller',
     () async {
       final injected = PublishedThumbnailController(
-        store: NativePublishedThumbnailStore(
-          root: Directory('${root.path}/injected-thumbnails'),
-          keyProvider: _ThumbnailTestKeyProvider(),
-          nativeEnabled: true,
+        store: CorePublishedThumbnailStore(
+          bridgeRoot: Directory('${root.path}/injected-thumbnails'),
+          cacheIdentityBaseUrl: Uri.parse(
+            'https://example.test/UltimateReport/backend/',
+          ),
+          filter: TemplateSyncFilter(
+            reportTypes: const <String>['sales_invoice'],
+          ),
+          extra: const <String, Object?>{},
         ),
         fetch:
             ({
               required template,
               required scope,
               required cancellation,
-            }) async =>
-                Uint8List.fromList(<int>[137, 80, 78, 71, 13, 10, 26, 10, 1]),
+            }) async => _validThumbnailPng,
       );
       addTearDown(injected.dispose);
       final flow = createController(
@@ -2402,6 +2740,7 @@ class _FakeBridgeClient extends ReportingBridgeClient {
     int? systemId,
     TemplateSyncFilter? filter,
     Map<String, Object?> extra = const <String, Object?>{},
+    bool syncThumbnails = false,
   }) async {
     templateSyncCalls += 1;
     await templateSyncBarrier?.future;
@@ -2580,12 +2919,6 @@ class _FakeSupportSharePlatform implements ReportSupportSharePlatform {
     lastFilename = filename;
     lastOrigin = sharePositionOrigin;
   }
-}
-
-class _ThumbnailTestKeyProvider implements ThumbnailKeyProvider {
-  @override
-  Future<Uint8List?> loadOrCreateKey() async =>
-      Uint8List.fromList(List<int>.filled(32, 7));
 }
 
 CachedTemplate _ownedThumbnailFixture() => CachedTemplate(

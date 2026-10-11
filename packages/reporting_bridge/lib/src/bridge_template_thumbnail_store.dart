@@ -289,6 +289,31 @@ final class BridgeTemplateThumbnailStore {
     );
   }
 
+  /// Remove versions of one template only. Never touch unrelated catalog JSON
+  /// or other template PNGs; reject unsafe roots and symlink entries.
+  Future<void> deleteTemplateImages(String templateCode) async {
+    await _requireTrustedRoots();
+    if (!await cacheRoot.exists()) return;
+    if (await FileSystemEntity.type(cacheRoot.path, followLinks: false) !=
+        FileSystemEntityType.directory) {
+      return;
+    }
+    final digest = sha256.convert(utf8.encode(templateCode)).toString();
+    final templatePattern = RegExp(
+      '^tpl_${digest}_[1-9][0-9]*_[0-9a-f]{64}\\.png'
+      r'$',
+    );
+    await for (final entity in cacheRoot.list(followLinks: false)) {
+      if (entity is! File ||
+          !templatePattern.hasMatch(entity.uri.pathSegments.last) ||
+          await FileSystemEntity.type(entity.path, followLinks: false) !=
+              FileSystemEntityType.file) {
+        continue;
+      }
+      await entity.delete();
+    }
+  }
+
   /// Remove only obsolete sibling PNGs, never JSON, other files, or symlinks.
   Future<void> deleteObsolete(Iterable<CachedTemplate> activeTemplates) async {
     await _requireTrustedRoots();

@@ -219,6 +219,7 @@ class _FakeBridge extends ReportingBridgeClient {
     int? systemId,
     TemplateSyncFilter? filter,
     Map<String, Object?> extra = const <String, Object?>{},
+    bool syncThumbnails = false,
   }) async => TemplateSyncSummary(
     syncedCount: templates.length,
     listCount: templates.length,

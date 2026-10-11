@@ -65,6 +65,28 @@ void main() {
     );
   });
 
+  test('same optional userId cannot share catalogs across credentials', () {
+    final base = Uri.parse('https://reports.example/api/');
+    BridgeTemplateCacheScope scope(String fingerprint) =>
+        BridgeTemplateCacheScope(
+          apiBaseUrl: base,
+          authContextDigest: fingerprint,
+          identity: BridgeIdentityContext(userId: 'shared-user'),
+          systemCode: 'skey-pos',
+          filter: TemplateSyncFilter(),
+          extra: const <String, Object?>{},
+        );
+    final a = scope(List<String>.filled(64, 'a').join());
+    final b = scope(List<String>.filled(64, 'b').join());
+    expect(a.namespace, isNot(b.namespace));
+    expect(a.namespace, isNot(contains('shared-user')));
+    final directory = bridgeTemplateCacheDirectoryForScope(
+      bridgeRoot: Directory('/safe/root'),
+      scope: a,
+    ).path;
+    expect(directory, isNot(contains(List<String>.filled(64, 'a').join())));
+  });
+
   test('scope fingerprints are stable and unsafe values never enter paths', () {
     final first = BridgeTemplateCacheScope(
       apiBaseUrl: Uri.parse('https://reports.example/api'),

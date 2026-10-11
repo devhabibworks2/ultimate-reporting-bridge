@@ -341,6 +341,7 @@ final class _RecordingBridgeClient extends ReportingBridgeClient {
     required String systemCode,
     TemplateSyncFilter? filter,
     Map<String, Object?> extra = const <String, Object?>{},
+    bool syncThumbnails = false,
   }) async {
     syncSystemCode = systemCode;
     syncFilter = filter;

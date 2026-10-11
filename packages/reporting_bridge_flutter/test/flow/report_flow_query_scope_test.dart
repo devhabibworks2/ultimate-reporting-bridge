@@ -237,6 +237,7 @@ final class _RecordingScopedBridgeClient extends ReportingBridgeClient {
     required String systemCode,
     TemplateSyncFilter? filter,
     Map<String, Object?> extra = const <String, Object?>{},
+    bool syncThumbnails = false,
   }) async {
     syncCalls.add(
       _ScopeCall(systemCode: systemCode, filter: filter, extra: extra),

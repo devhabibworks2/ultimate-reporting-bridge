@@ -15,13 +15,13 @@ typedef PublishedThumbnailFetch =
 /// Loads only bytes already published and stored by the server.
 final class PublishedThumbnailController {
   PublishedThumbnailController({
-    required NativePublishedThumbnailStore store,
+    required PublishedThumbnailImageStore store,
     required PublishedThumbnailFetch fetch,
   }) : _store = store,
        _fetch = fetch;
 
   factory PublishedThumbnailController.forServer({
-    required NativePublishedThumbnailStore store,
+    required PublishedThumbnailImageStore store,
     required Uri apiBase,
     required Map<String, String> headers,
   }) => PublishedThumbnailController(
@@ -39,7 +39,7 @@ final class PublishedThumbnailController {
 
   static const int maxConcurrentRequests = 4;
 
-  final NativePublishedThumbnailStore _store;
+  final PublishedThumbnailImageStore _store;
   final PublishedThumbnailFetch _fetch;
   final Set<_ThumbnailCancellation> _requests = <_ThumbnailCancellation>{};
   final Map<String, Map<String, BridgePublishedThumbnail>> _confirmed =

@@ -43,6 +43,7 @@ final class ReportResourcePreparationService
       systemCode: request.systemCode.value,
       filter: request.filter,
       extra: request.extra,
+      syncThumbnails: request.syncThumbnails,
     );
   }
 

@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'dart:ui' show Rect;
 
 import 'package:flutter/foundation.dart';
@@ -8,6 +10,7 @@ import '../contracts/report_open_request.dart';
 import '../persistence/report_flow_preference_store.dart';
 import '../platform/presenter_surface_binding.dart';
 import '../support/report_support_package.dart';
+import '../thumbnails/core_published_thumbnail_store.dart';
 import '../thumbnails/native_published_thumbnail_store.dart';
 import '../thumbnails/published_thumbnail_controller.dart';
 import '../ui/bridge_ui_features.dart';
@@ -19,6 +22,14 @@ import 'report_flow_state.dart';
 import '../printing/thermal_printer_models.dart';
 import 'report_result.dart';
 import 'report_template_metadata.dart';
+
+/// Treat a Host tenant hint only as additional cache partitioning, never as
+/// authentication. Include both identities without ambiguous concatenation.
+String? _thumbnailTenantWithHint(String? headerTenant, String? hostTenantHint) {
+  final hint = hostTenantHint?.trim();
+  if (hint == null || hint.isEmpty) return headerTenant;
+  return jsonEncode(<String?>[headerTenant, hint]);
+}
 
 /// Cancel authentication-header resolution on screen/identity change.
 ///
@@ -105,14 +116,51 @@ class ReportFlowControllerImpl
   Future<Uint8List?> publishedThumbnailFor(CachedTemplate template) async {
     if (_disposed) return null;
     final injected = _runtime.publishedThumbnailController;
-    final tenantId = _runtime.connection.thumbnailTenantId?.trim();
+    final connection = _runtime.connection;
     final userId = request.selectedTemplateCriteria.identity.userId?.trim();
-    if (tenantId == null ||
-        tenantId.isEmpty ||
-        userId == null ||
-        userId.isEmpty) {
+    // Resolve the same existing authenticated headers used for thumbnail GETs.
+    // This scopes an encrypted cache to the credential/customer even when the
+    // Host supplies neither userId nor the optional thumbnailTenantId.
+    Map<String, String> headers;
+    try {
+      headers = await resolveBridgeHeaders(
+        context: BridgeHeaderContext(
+          operation: BridgeHeaderOperation.publishedThumbnail,
+          apiBaseUrl: connection.endpoints.apiBaseUrl,
+          systemCode: request.templateSyncRequest.systemCode.value,
+          userId: userId,
+          branchId: request.selectedTemplateCriteria.identity.branchId,
+          systemUnit: request.selectedTemplateCriteria.identity.systemUnit,
+          reportType: request.reportType.value,
+        ),
+        provider: connection.headersProvider,
+        fallback: connection.headers,
+      ).timeout(const Duration(seconds: 8));
+    } on Object {
+      // Header failures still reach the ordinary authenticated network fetch;
+      // never treat a missing userId or tenantId as a reason to hide an image.
+      headers = connection.headers;
+    }
+    String? headerValue(String name) {
+      for (final entry in headers.entries) {
+        if (entry.key.toLowerCase() == name.toLowerCase()) {
+          final value = entry.value.trim();
+          return value.isEmpty ? null : value;
+        }
+      }
       return null;
     }
+
+    final authorization = headerValue('Authorization');
+    final customerContext = authorization == null
+        ? null
+        : sha256.convert(utf8.encode(authorization)).toString();
+    // The authenticated header establishes authority. The optional Host hint
+    // only further partitions a credential-scoped cache across customers.
+    final tenantId = _thumbnailTenantWithHint(
+      headerValue('X-Customer-Id') ?? headerValue('X-Tenant-Id'),
+      connection.thumbnailTenantId,
+    );
     final controller =
         injected ??
         await (_thumbnailControllerFuture ??= _createThumbnailController());
@@ -124,6 +172,11 @@ class ReportFlowControllerImpl
         apiBase: _runtime.connection.endpoints.apiBaseUrl,
         tenantId: tenantId,
         userId: userId,
+        customerContext: customerContext,
+        // Persist only when authenticated context distinguishes customers.
+        // A caller-supplied tenant hint alone cannot authorize shared cache.
+        // Missing identifiers never prevent an ordinary thumbnail GET.
+        cacheEnabled: customerContext != null,
         systemCode: sync.systemCode.value,
         templateCode: template.templateCode,
       ),
@@ -135,7 +188,14 @@ class ReportFlowControllerImpl
     try {
       final injectedFactory = _runtime.publishedThumbnailControllerFactory;
       if (injectedFactory != null) return await injectedFactory();
-      final store = await NativePublishedThumbnailStore.createDefault();
+      final store = CorePublishedThumbnailStore(
+        bridgeRoot: connection.cacheRoot,
+        cacheIdentityBaseUrl: connection.endpoints.cacheIdentityBaseUrl,
+        filter: request.templateSyncRequest.filter,
+        extra: request.templateSyncRequest.extra,
+        branchId: request.selectedTemplateCriteria.identity.branchId,
+        systemUnit: request.selectedTemplateCriteria.identity.systemUnit,
+      );
       return PublishedThumbnailController(
         store: store,
         fetch:
@@ -155,6 +215,46 @@ class ReportFlowControllerImpl
                 fallback: connection.headers,
                 cancellation: cancellation,
               );
+              // A dynamic headers provider may switch customers between
+              // scope selection and transport. Never persist B's bytes in A's
+              // previously resolved authenticated cache scope.
+              String? resolvedAuthorization;
+              for (final entry in headers.entries) {
+                if (entry.key.toLowerCase() == 'authorization') {
+                  resolvedAuthorization = entry.value.trim();
+                  break;
+                }
+              }
+              final fetchedCustomerContext =
+                  resolvedAuthorization == null || resolvedAuthorization.isEmpty
+                  ? null
+                  : sha256
+                        .convert(utf8.encode(resolvedAuthorization))
+                        .toString();
+              if (scope.cacheEnabled &&
+                  fetchedCustomerContext != scope.customerContext) {
+                return null;
+              }
+              String? currentTenant;
+              for (final name in const <String>[
+                'X-Customer-Id',
+                'X-Tenant-Id',
+              ]) {
+                for (final entry in headers.entries) {
+                  if (entry.key.toLowerCase() == name.toLowerCase()) {
+                    currentTenant = entry.value.trim();
+                    break;
+                  }
+                }
+                if (currentTenant != null) break;
+              }
+              final currentTenantScope = _thumbnailTenantWithHint(
+                currentTenant,
+                connection.thumbnailTenantId,
+              );
+              if (scope.cacheEnabled && currentTenantScope != scope.tenantId) {
+                return null;
+              }
               final descriptor = template.publishedThumbnail;
               if (descriptor == null || !descriptor.available) return null;
               return fetchPublishedThumbnail(

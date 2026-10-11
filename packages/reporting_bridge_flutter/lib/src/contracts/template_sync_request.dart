@@ -10,6 +10,7 @@ final class TemplateSyncRequest {
     ReportIdentity identity = const ReportIdentity(),
     TemplateSyncFilter? filter,
     Map<String, Object?> extra = const <String, Object?>{},
+    this.syncThumbnails = false,
   }) : identity = ReportIdentity.normalized(
          userId: identity.userId,
          branchId: identity.branchId,
@@ -22,4 +23,5 @@ final class TemplateSyncRequest {
   final ReportIdentity identity;
   final TemplateSyncFilter filter;
   final Map<String, Object?> extra;
+  final bool syncThumbnails;
 }

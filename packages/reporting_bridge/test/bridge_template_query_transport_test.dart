@@ -150,6 +150,56 @@ void main() {
   });
 
   test(
+    'same user and endpoint isolate catalogs by authenticated customer',
+    () async {
+      final root = await Directory.systemTemp.createTemp(
+        'auth-isolated-catalog-',
+      );
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() async {
+        await server.close(force: true);
+        if (await root.exists()) await root.delete(recursive: true);
+      });
+      server.listen((request) async {
+        await utf8.decoder.bind(request).join();
+        final isA = request.headers.value('Authorization') == 'ApiKey sample-a';
+        await _writeJson(
+          request,
+          _queryEnvelope(<Map<String, dynamic>>[
+            _queryTemplate(isA ? 'from-a' : 'from-b', 7, 'sales_invoice'),
+          ]),
+        );
+      });
+      final gateway = PresenterServerGateway(
+        apiBaseUrl: _api(server),
+        bridgeRoot: root,
+      );
+      final query = TemplateQueryRequest(
+        systemCode: 'motakamel_transactions',
+        identity: BridgeIdentityContext(userId: 'shared-user'),
+      );
+      const a = <String, String>{'Authorization': 'ApiKey sample-a'};
+      const b = <String, String>{'Authorization': 'ApiKey sample-b'};
+      await gateway.syncTemplates(query: query, headers: a);
+      await gateway.syncTemplates(query: query, headers: b);
+      expect(
+        (await gateway.listTemplates(
+          query: query,
+          headers: a,
+        )).single.templateCode,
+        'from-a-code',
+      );
+      expect(
+        (await gateway.listTemplates(
+          query: query,
+          headers: b,
+        )).single.templateCode,
+        'from-b-code',
+      );
+    },
+  );
+
+  test(
     'maps backend errors and preserves the previous valid catalog',
     () async {
       final root = await Directory.systemTemp.createTemp('bridge-query-error-');

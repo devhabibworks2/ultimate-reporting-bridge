@@ -20,8 +20,9 @@ class ReportServerConnection {
   final Directory cacheRoot;
   final String? bundleManifestUrl;
 
-  /// Stable authenticated customer/tenant identity for native thumbnail scope.
-  /// When absent, thumbnail retrieval and persistence stay disabled.
+  /// Optional additional customer/tenant cache isolation. Existing Hosts do
+  /// not need to provide this: thumbnail GETs use existing authorization and
+  /// caching is scoped to the resolved credential/customer when available.
   final String? thumbnailTenantId;
   final Map<String, String> headers;
   final BridgeHeadersProvider? headersProvider;

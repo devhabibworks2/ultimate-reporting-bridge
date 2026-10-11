@@ -89,15 +89,22 @@ final class BridgeTemplateCacheScope {
     required Map<String, Object?> extra,
     BridgeIdentityContext? identity,
     String? tenantId,
+    String? authContextDigest,
   }) : apiBaseUrl = normalizeBridgeApiBaseUrl(apiBaseUrl),
        systemCode = _requiredCanonicalSystemCode(systemCode),
        identity = identity ?? BridgeIdentityContext(),
        tenantId = _trimmedOrNull(tenantId),
+       authContextDigest = authContextDigest == null
+           ? null
+           : _requireAuthDigest(authContextDigest),
        filterFingerprint = filter.fingerprint,
        extraFingerprint = canonicalJsonFingerprint(extra);
 
   final Uri apiBaseUrl;
   final String? tenantId;
+
+  /// SHA-256 of existing authenticated context. Never store raw credentials.
+  final String? authContextDigest;
   final BridgeIdentityContext identity;
   final String systemCode;
   final String filterFingerprint;
@@ -105,6 +112,7 @@ final class BridgeTemplateCacheScope {
 
   Map<String, Object?> toCanonicalJson() => <String, Object?>{
     'tenantId': tenantId ?? '',
+    if (authContextDigest != null) 'authContextDigest': authContextDigest,
     'branchId': identity.branchId ?? '',
     'userId': identity.userId ?? '',
     'systemUnit': identity.systemUnit ?? '',
@@ -124,6 +132,17 @@ final class BridgeTemplateCacheScope {
 
   @override
   int get hashCode => Object.hash(apiBaseUrl, namespace);
+}
+
+String _requireAuthDigest(String digest) {
+  if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(digest)) {
+    throw ArgumentError.value(
+      null,
+      'authContextDigest',
+      'Must be a SHA-256 digest.',
+    );
+  }
+  return digest;
 }
 
 Directory bridgeTemplateCacheDirectoryForApi({
