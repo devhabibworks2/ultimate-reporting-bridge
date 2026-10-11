@@ -267,6 +267,108 @@ void main() {
     },
   );
 
+  test(
+    'atomic catalog replacement retains exact published PNG, never a stale version',
+    () async {
+      final root = await Directory.systemTemp.createTemp(
+        'bridge-png-catalog-swap-',
+      );
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() async {
+        await server.close(force: true);
+        if (await root.exists()) await root.delete(recursive: true);
+      });
+      const hash7 =
+          'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+      const hash8 =
+          'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+      final png = base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=',
+      );
+      var newest = false;
+      var invalid = false;
+      var imageGetCount = 0;
+      server.listen((request) async {
+        if (request.uri.path == '/api/presenter/template-thumbnails') {
+          imageGetCount++;
+          request.response.statusCode = HttpStatus.notFound;
+          await request.response.close();
+          return;
+        }
+        await utf8.decoder.bind(request).join();
+        final item = _queryTemplate('existing', 7, 'sales_invoice');
+        item['publishedVersionNo'] = newest ? 8 : 7;
+        item['thumbnail'] = <String, Object>{
+          'versionNo': newest ? 8 : 7,
+          'contentHash': newest ? hash8 : hash7,
+          'mimeType': 'image/png',
+          'available': true,
+        };
+        final envelope = _queryEnvelope([item]);
+        if (invalid) (envelope['data'] as Map<String, dynamic>)['count'] = 2;
+        await _writeJson(request, envelope);
+      });
+      final gateway = PresenterServerGateway(
+        apiBaseUrl: _api(server),
+        bridgeRoot: root,
+      );
+      final query = TemplateQueryRequest(systemCode: 'motakamel_transactions');
+      final scope = BridgeTemplateCacheScope(
+        apiBaseUrl: _api(server),
+        systemCode: query.systemCode,
+        identity: query.identity,
+        filter: query.filter,
+        extra: query.extra,
+      );
+      final catalog = bridgeTemplateCacheDirectoryForScope(
+        bridgeRoot: root,
+        scope: scope,
+      );
+      final storedImages = BridgeTemplateThumbnailStore(cacheRoot: catalog);
+      await gateway.syncTemplates(query: query);
+      final template7 = (await gateway.listTemplates(query: query)).single;
+      expect(template7.publishedThumbnail?.versionNo, 7);
+      await storedImages.write(template7, png);
+      expect(await storedImages.read(template7), orderedEquals(png));
+
+      await gateway.syncTemplates(query: query);
+      expect(await storedImages.read(template7), orderedEquals(png));
+      expect(imageGetCount, 0);
+
+      invalid = true;
+      await expectLater(
+        gateway.syncTemplates(query: query),
+        throwsA(isA<BridgeRuntimeException>()),
+      );
+      invalid = false;
+      expect(await storedImages.read(template7), orderedEquals(png));
+
+      newest = true;
+      await gateway.syncTemplates(query: query);
+      final template8 = (await gateway.listTemplates(query: query)).single;
+      expect(template8.publishedThumbnail?.versionNo, 8);
+      expect(await storedImages.read(template8), isNull);
+      expect(await storedImages.read(template7), isNull);
+      expect(imageGetCount, 0);
+
+      // Even a same-path catalog with a foreign filter fingerprint
+      // must not donate its PNG to the next query.
+      await storedImages.write(template8, png);
+      await TemplateCacheService(cacheRoot: catalog).writeCatalogMetadata(
+        TemplateCatalogMetadata(
+          catalogRevision: 'foreign',
+          systemCode: query.systemCode,
+          systemId: 7,
+          filterFingerprint: 'foreign-filter',
+          extraFingerprint: 'foreign-extra',
+        ),
+      );
+      await gateway.syncTemplates(query: query);
+      expect(await storedImages.read(template8), isNull);
+      expect(imageGetCount, 0);
+    },
+  );
+
   test('tenant, branch, user, and system-unit catalogs are isolated', () async {
     final root = await Directory.systemTemp.createTemp('bridge-query-scope-');
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);

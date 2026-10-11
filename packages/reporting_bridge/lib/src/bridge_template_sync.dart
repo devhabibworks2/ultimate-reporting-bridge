@@ -8,6 +8,7 @@ import 'bridge_runtime_error.dart';
 import 'bridge_template_cache.dart';
 import 'bridge_template_default.dart';
 import 'bridge_template_query.dart';
+import 'bridge_template_thumbnail_store.dart';
 
 const List<String> kPresenterBridgeApprovedHeaderNames = <String>[
   'Authorization',
@@ -452,22 +453,52 @@ class PresenterTemplateSyncService {
     if (await backup.exists()) await backup.delete(recursive: true);
     await staging.create(recursive: true);
 
-    final stagedCache = TemplateCacheService(cacheRoot: staging);
-    for (final template in downloaded) {
-      await stagedCache.putTemplate(template);
-    }
-    await stagedCache.writeCatalogMetadata(metadata);
-    if (storedSelection != null && metadata.systemCode != null) {
-      await stagedCache.reconcileSelectedTemplate(
-        catalog: downloaded,
-        systemCode: metadata.systemCode!,
-        stored: storedSelection,
-      );
-    }
-
     var originalMoved = false;
     var stagedInstalled = false;
     try {
+      final stagedCache = TemplateCacheService(cacheRoot: staging);
+      for (final template in downloaded) {
+        await stagedCache.putTemplate(template);
+      }
+      // Only a verified PNG for the identical published identity may survive.
+      // The cacheRoot already isolates endpoint/tenant/user/system/filter.
+      final oldMetadata = await cache.readCatalogMetadata();
+      final scopeMatches =
+          oldMetadata != null &&
+          oldMetadata.systemCode == metadata.systemCode &&
+          oldMetadata.systemId == metadata.systemId &&
+          oldMetadata.filterFingerprint == metadata.filterFingerprint &&
+          oldMetadata.extraFingerprint == metadata.extraFingerprint;
+      if (scopeMatches) {
+        final from = BridgeTemplateThumbnailStore(cacheRoot: root);
+        final to = BridgeTemplateThumbnailStore(cacheRoot: staging);
+        for (final template in downloaded) {
+          final currentImage = template.publishedThumbnail;
+          if (currentImage == null || !currentImage.available) continue;
+          final previous = await cache.getTemplateByCode(template.templateCode);
+          final oldImage = previous?.publishedThumbnail;
+          if (oldImage == null ||
+              !oldImage.available ||
+              oldImage.versionNo != currentImage.versionNo ||
+              oldImage.contentHash != currentImage.contentHash ||
+              previous?.systemId != template.systemId ||
+              previous?.systemCode != template.systemCode) {
+            continue;
+          }
+          final bytes = await from.read(previous!);
+          if (bytes == null) continue;
+          await to.write(template, bytes);
+        }
+      }
+      await stagedCache.writeCatalogMetadata(metadata);
+      if (storedSelection != null && metadata.systemCode != null) {
+        await stagedCache.reconcileSelectedTemplate(
+          catalog: downloaded,
+          systemCode: metadata.systemCode!,
+          stored: storedSelection,
+        );
+      }
+
       if (await root.exists()) {
         await root.rename(backup.path);
         originalMoved = true;
