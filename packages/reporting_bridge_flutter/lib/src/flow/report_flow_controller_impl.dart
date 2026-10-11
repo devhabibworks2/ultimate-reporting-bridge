@@ -664,6 +664,7 @@ class _WorkflowBridgeClient extends ReportingBridgeClient {
     required String systemCode,
     TemplateSyncFilter? filter,
     Map<String, Object?> extra = const <String, Object?>{},
+    bool syncThumbnails = false,
   }) async {
     await _ensureRequestScope();
     final sync = templateSyncRequest;
@@ -671,6 +672,7 @@ class _WorkflowBridgeClient extends ReportingBridgeClient {
       systemCode: sync.systemCode.value,
       filter: sync.filter,
       extra: sync.extra,
+      syncThumbnails: syncThumbnails,
     );
   }
 

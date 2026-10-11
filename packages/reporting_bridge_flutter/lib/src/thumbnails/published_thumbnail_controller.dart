@@ -12,20 +12,6 @@ typedef PublishedThumbnailFetch =
       required Future<void> cancellation,
     });
 
-final class ThumbnailSyncSummary {
-  const ThumbnailSyncSummary({
-    required this.downloaded,
-    required this.reused,
-    required this.failed,
-    required this.skipped,
-  });
-
-  final int downloaded;
-  final int reused;
-  final int failed;
-  final int skipped;
-}
-
 /// Loads only bytes already published and stored by the server.
 final class PublishedThumbnailController {
   PublishedThumbnailController({
