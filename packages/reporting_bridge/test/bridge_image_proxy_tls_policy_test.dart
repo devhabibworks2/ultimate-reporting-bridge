@@ -13,42 +13,51 @@ void main() {
     );
   });
 
-  test('untrusted HTTPS image certificates require exact host opt-in', () {
-    const hosts = <String>{'app.skeyerp.com'};
+  test('invalid HTTPS image certificate acceptance defaults to true', () {
     expect(
       allowUntrustedImageCertificate(
         Uri.parse('https://app.skeyerp.com/img.png'),
-        hosts,
       ),
       isTrue,
     );
     expect(
       allowUntrustedImageCertificate(
-        Uri.parse('https://other.skeyerp.com/img.png'),
-        hosts,
+        Uri.parse('https://another-public-host.org/image.jpg'),
       ),
-      isFalse,
+      isTrue,
     );
-    expect(
-      allowUntrustedImageCertificate(
-        Uri.parse('http://app.skeyerp.com/img.png'),
-        hosts,
-      ),
-      isFalse,
-    );
+  });
+
+  test('false flag restores HTTPS certificate verification', () {
     expect(
       allowUntrustedImageCertificate(
         Uri.parse('https://app.skeyerp.com/img.png'),
-        const <String>{},
+        allowInvalidHttpsCertificates: false,
       ),
       isFalse,
     );
     expect(
       allowUntrustedImageCertificate(
-        Uri.parse('https://127.0.0.1/img.png'),
-        hosts,
+        Uri.parse('https://another-public-host.org/image.jpg'),
+        allowInvalidHttpsCertificates: false,
       ),
       isFalse,
     );
   });
+
+  test(
+    'invalid certificate flag is never applicable to HTTP or private URLs',
+    () {
+      expect(
+        allowUntrustedImageCertificate(
+          Uri.parse('http://images.example.org/a.png'),
+        ),
+        isFalse,
+      );
+      expect(
+        allowUntrustedImageCertificate(Uri.parse('https://127.0.0.1/a.png')),
+        isFalse,
+      );
+    },
+  );
 }

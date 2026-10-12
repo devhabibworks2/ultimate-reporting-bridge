@@ -6,7 +6,7 @@ import 'dart:typed_data';
 /// Never carries host authorization, user cookies or client request headers.
 Future<Uint8List?> fetchBridgePublicImage(
   Uri uri, {
-  Set<String> allowInvalidTlsImageHosts = const <String>{},
+  bool allowInvalidHttpsCertificates = true,
 }) async {
   if (!isAllowedBridgeImageUrl(uri)) return null;
   final List<InternetAddress> addresses;
@@ -36,8 +36,10 @@ Future<Uint8List?> fetchBridgePublicImage(
         (socket) => SecureSocket.secure(
           socket,
           host: uri.host,
-          onBadCertificate: (_) =>
-              allowUntrustedImageCertificate(uri, allowInvalidTlsImageHosts),
+          onBadCertificate: (_) => allowUntrustedImageCertificate(
+            uri,
+            allowInvalidHttpsCertificates: allowInvalidHttpsCertificates,
+          ),
         ),
       );
     }
@@ -55,14 +57,18 @@ Future<Uint8List?> fetchBridgePublicImage(
   }
 }
 
-/// Explicit opt-in for remote image assets only.
-/// This relaxes peer certificate verification for ONE configured origin.
-/// It must not be used with API, authentication or other HTTPS clients.
-/// Missing/invalid cert acceptance risks image substitution.
-bool allowUntrustedImageCertificate(Uri uri, Set<String> hosts) {
+/// Certificate verification is optional for remote images only.
+/// Defaults to permitting invalid HTTPS certificates for image fetching.
+/// Set [allowInvalidHttpsCertificates] to false to require valid TLS.
+/// This is not used for authentication or backend API calls.
+/// Untrusted certificates may allow images to be replaced in transit.
+bool allowUntrustedImageCertificate(
+  Uri uri, {
+  bool allowInvalidHttpsCertificates = true,
+}) {
   return uri.isScheme('https') &&
       isAllowedBridgeImageUrl(uri) &&
-      hosts.contains(uri.host.toLowerCase());
+      allowInvalidHttpsCertificates;
 }
 
 bool isAllowedBridgeImageUrl(Uri uri) {
