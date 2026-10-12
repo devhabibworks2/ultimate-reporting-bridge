@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'bridge_presenter_resource_cache.dart';
+import 'bridge_image_proxy_fetch.dart';
 import 'bridge_runtime_error.dart';
 
 class PortPolicy {
@@ -29,11 +30,13 @@ class LocalPresenterServer {
     required this.presenterRoot,
     required this.runtimeRoot,
     this.resourceCacheStore,
+    this.imageProxyFetch = fetchBridgePublicImage,
   });
 
   final Directory presenterRoot;
   final Directory runtimeRoot;
   final PresenterResourceCacheStore? resourceCacheStore;
+  final Future<Uint8List?> Function(Uri) imageProxyFetch;
   static const String _presenterRoutePrefix = '/UltimateReport/apps/presenter/';
   HttpServer? _server;
   final Set<String> _sessionIds = <String>{};
@@ -181,6 +184,10 @@ class LocalPresenterServer {
         await _handleResourceCacheRequest(request, segments);
         return;
       }
+      if (segments.length >= 4 && segments[3] == 'image-proxy') {
+        await _handleImageProxyRequest(request, segments);
+        return;
+      }
     }
 
     if (request.method != 'GET' && request.method != 'HEAD') {
@@ -206,6 +213,73 @@ class LocalPresenterServer {
       return;
     }
     await file.openRead().pipe(request.response);
+  }
+
+  Future<void> _handleImageProxyRequest(
+    HttpRequest request,
+    List<String> segments,
+  ) async {
+    // Not a public open proxy: only same-origin calls from a live session.
+    request.response.headers.removeAll('Access-Control-Allow-Origin');
+    if (segments.length != 4 || !_sessionIds.contains(segments[2])) {
+      await _sendNotFound(request);
+      return;
+    }
+    if (request.method != 'GET') {
+      await _sendMethodNotAllowed(request);
+      return;
+    }
+    final host = request.headers.value(HttpHeaders.hostHeader);
+    final origin = request.headers.value('origin');
+    final port = request.connectionInfo?.localPort ?? 0;
+    if (host != '127.0.0.1:$port' ||
+        (origin != null && origin != 'http://127.0.0.1:$port')) {
+      request.response.statusCode = HttpStatus.forbidden;
+      await request.response.close();
+      return;
+    }
+
+    final params = request.uri.queryParametersAll['url'];
+    if (params == null || params.length != 1 || params.single.isEmpty) {
+      request.response.statusCode = HttpStatus.badRequest;
+      await request.response.close();
+      return;
+    }
+    final url = Uri.tryParse(params.single);
+    if (url == null || !isAllowedBridgeImageUrl(url)) {
+      request.response.statusCode = HttpStatus.forbidden;
+      await request.response.close();
+      return;
+    }
+    try {
+      final bytes = await imageProxyFetch(
+        url,
+      ).timeout(const Duration(seconds: 16));
+      if (!_sessionIds.contains(segments[2])) {
+        await _sendNotFound(request);
+        return;
+      }
+      if (bytes == null) {
+        request.response.statusCode = HttpStatus.badGateway;
+      } else if (bytes.length > 5 * 1024 * 1024) {
+        request.response.statusCode = HttpStatus.requestEntityTooLarge;
+      } else {
+        final mime = bridgeImageMime(bytes);
+        if (mime == null) {
+          request.response.statusCode = HttpStatus.badGateway;
+        } else {
+          request.response
+            ..statusCode = HttpStatus.ok
+            ..headers.set(HttpHeaders.contentTypeHeader, mime)
+            ..contentLength = bytes.length
+            ..add(bytes);
+        }
+      }
+      await request.response.close();
+    } on Object {
+      request.response.statusCode = HttpStatus.badGateway;
+      await request.response.close();
+    }
   }
 
   Future<void> _handleResourceCacheRequest(
