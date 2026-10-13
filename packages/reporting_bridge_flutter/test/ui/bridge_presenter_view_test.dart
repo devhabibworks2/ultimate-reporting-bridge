@@ -161,6 +161,39 @@ void main() {
     expect(surface.disposeCalls, 0);
   });
 
+  testWidgets('replaces a borrowed surface when its widget input changes', (
+    tester,
+  ) async {
+    final original = _FakeHeadlessSurface();
+    final replacement = _FakeHeadlessSurface();
+    final binding = PresenterSurfaceBinding();
+    final controller = _FakeController();
+    Widget build(HeadlessPresenterSurface surface) => MaterialApp(
+      home: BridgePresenterView(
+        launch: _launch('same-session'),
+        templateName: 'Template',
+        controller: controller,
+        surfaceBinding: binding,
+        presenterSurface: surface,
+      ),
+    );
+
+    await tester.pumpWidget(build(original));
+    await tester.pump();
+    await tester.pumpWidget(build(replacement));
+    await tester.pump();
+
+    expect(original.disposeCalls, 1);
+    expect(original.shutdownCalls, 0);
+    expect(replacement.startCalls, 1);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+
+    expect(replacement.disposeCalls, 1);
+    expect(replacement.shutdownCalls, 0);
+  });
+
   testWidgets('replacement reuses warm runtime and clears prior PDF', (
     tester,
   ) async {

@@ -66,7 +66,12 @@ class _BridgePresenterViewState extends State<BridgePresenterView> {
   @override
   void didUpdateWidget(covariant BridgePresenterView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.launch.sessionId == widget.launch.sessionId &&
+    final replaceSurface = !identical(
+      oldWidget.presenterSurface,
+      widget.presenterSurface,
+    );
+    if (!replaceSurface &&
+        oldWidget.launch.sessionId == widget.launch.sessionId &&
         oldWidget.launch.presenterUrl == widget.launch.presenterUrl &&
         oldWidget.launch.presenterVersion == widget.launch.presenterVersion &&
         oldWidget.launch.presenterDevVersion ==
@@ -81,7 +86,16 @@ class _BridgePresenterViewState extends State<BridgePresenterView> {
     widget.surfaceBinding.beginPreviewTiming(widget.launch.sessionId);
     final generation = ++_surfaceGeneration;
     _surfaceError = null;
-    unawaited(_startSurface(_surface, generation));
+    if (!replaceSurface) {
+      unawaited(_startSurface(_surface, generation));
+      return;
+    }
+
+    final oldSurface = _surface;
+    final oldOwnsSurface = _ownsSurface;
+    _surface = _createSurface();
+    _ownsSurface = widget.presenterSurface == null;
+    unawaited(_replaceSurface(oldSurface, oldOwnsSurface, generation));
   }
 
   HeadlessPresenterSurface _createSurface() =>
@@ -117,8 +131,21 @@ class _BridgePresenterViewState extends State<BridgePresenterView> {
     }
   }
 
-  Future<void> _shutdownSurface(HeadlessPresenterSurface surface) =>
-      _ownsSurface
+  Future<void> _replaceSurface(
+    HeadlessPresenterSurface oldSurface,
+    bool oldOwnsSurface,
+    int generation,
+  ) async {
+    await _shutdownSurface(oldSurface, ownsSurface: oldOwnsSurface);
+    if (!mounted || generation != _surfaceGeneration) return;
+    await _startSurface(_surface, generation);
+  }
+
+  Future<void> _shutdownSurface(
+    HeadlessPresenterSurface surface, {
+    required bool ownsSurface,
+  }) =>
+      ownsSurface
       ? surface is WarmableHeadlessPresenterSurface
             ? surface.shutdown()
             : surface.dispose()
@@ -166,7 +193,7 @@ class _BridgePresenterViewState extends State<BridgePresenterView> {
   void dispose() {
     _surfaceGeneration += 1;
     widget.surfaceBinding.detachSession(widget.launch.sessionId);
-    unawaited(_shutdownSurface(_surface));
+    unawaited(_shutdownSurface(_surface, ownsSurface: _ownsSurface));
     super.dispose();
   }
 }
