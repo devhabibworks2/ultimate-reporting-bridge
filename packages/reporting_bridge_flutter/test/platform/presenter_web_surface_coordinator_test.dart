@@ -121,6 +121,35 @@ void main() {
     expect(controller.structuredFailureSessionIds, <String?>['fail-1']);
   });
 
+  test(
+    'string-only onRenderFailed preserves its diagnostic without inventing a path',
+    () {
+      const diagnostic = 'Presenter rejected an unknown style token.';
+      coordinator.attach(
+        webController: webController,
+        sessionId: 'session-string-failure',
+        templateName: 'Invoice',
+        controller: controller,
+        surfaceBinding: binding,
+      );
+
+      final accepted = binding.acceptMessage(<String, dynamic>{
+        'channel': bridgeWebMessageChannel,
+        'method': BridgeWebMethods.presenterLifecycle,
+        'event': 'onRenderFailed',
+        'contractVersion': BridgeContract.payloadVersion,
+        'payload': diagnostic,
+      });
+
+      expect(accepted, isTrue);
+      expect(controller.structuredFailures, hasLength(1));
+      final failure = controller.structuredFailures.single;
+      expect(failure.code, ReportFlowFailureCode.renderFailed);
+      expect(failure.diagnostic, diagnostic);
+      expect(failure.technicalPath, isNull);
+    },
+  );
+
   test('load start and progress map to controller', () {
     coordinator.handleLoadStart(controller);
     coordinator.handleProgress(controller, 42);

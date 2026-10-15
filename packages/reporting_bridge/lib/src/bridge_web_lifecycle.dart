@@ -46,6 +46,8 @@ class PresenterWebLifecycleEvent {
     final rawPayload = map['payload'];
     final payload = rawPayload is Map
         ? rawPayload.map((key, value) => MapEntry(key.toString(), value))
+        : state == PresenterWebLifecycleState.failed && rawPayload is String
+        ? <String, dynamic>{'error': rawPayload}
         : const <String, dynamic>{};
     final rawVersion = map['contractVersion'] ?? payload['contractVersion'];
     final contractVersion = rawVersion is int

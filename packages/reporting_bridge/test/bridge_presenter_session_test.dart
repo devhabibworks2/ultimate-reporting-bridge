@@ -432,6 +432,181 @@ void main() {
   );
 
   test(
+    'replacement sessions apply overrides independently from cached template',
+    () async {
+      final root = await Directory.systemTemp.createTemp(
+        'bridge_session_style_override_replacement_',
+      );
+      addTearDown(() => root.delete(recursive: true));
+      final sourceDocument = _styleOverrideDocument();
+      final sourceBefore = jsonEncode(sourceDocument);
+      final cache = TemplateCacheService(
+        cacheRoot: Directory('${root.path}/template-cache'),
+      );
+      await cache.putTemplate(
+        _template(
+          'style-template',
+          document: sourceDocument,
+          systemCode: 'motakamel_transactions',
+        ),
+      );
+      final selectedTemplate = (await cache.getTemplateByCode(
+        'style-template',
+      ))!;
+      final cachedBefore = jsonEncode(selectedTemplate.document);
+      final api = await _startManifestServer();
+      addTearDown(() => api.close(force: true));
+      final coordinator = _coordinator(
+        root: root,
+        apiBaseUrl: Uri.parse('http://127.0.0.1:${api.port}/'),
+      );
+      addTearDown(coordinator.dispose);
+      const seedData = <String, dynamic>{'value': 'same-seed'};
+
+      await coordinator.prepare(
+        PresenterSessionRequest(
+          sessionId: 'style-session-a',
+          reportType: 'invoice',
+          reportName: 'Style report',
+          mode: PresenterSessionMode.online,
+          seedData: seedData,
+          template: selectedTemplate,
+          templateStyleOverrides: ReportTemplateStyleOverrides(
+            color: <String, Object?>{'primary': '#AA0000'},
+            font: <String, Object?>{'size_md': 7.5},
+          ),
+        ),
+      );
+      final firstTemplateFile = File(
+        '${root.path}/runtime/style-session-a/template.json',
+      );
+      final firstDocument =
+          jsonDecode(await firstTemplateFile.readAsString())
+              as Map<String, dynamic>;
+      final firstTokens = firstDocument['styleTokens'] as Map;
+      final firstColor = firstTokens['color'] as Map;
+      final firstFont = firstTokens['font'] as Map;
+      final firstDocumentSnapshot = jsonEncode(firstDocument);
+      expect(firstColor['primary'], '#AA0000');
+      expect(firstFont['size_md'], 7.5);
+      expect(firstFont['weight_bold'], '700');
+
+      await coordinator.prepare(
+        PresenterSessionRequest(
+          sessionId: 'style-session-b',
+          reportType: 'invoice',
+          reportName: 'Style report',
+          mode: PresenterSessionMode.online,
+          seedData: seedData,
+          template: selectedTemplate,
+          templateStyleOverrides: ReportTemplateStyleOverrides(
+            color: <String, Object?>{'table_header_bg': '#001122'},
+            font: <String, Object?>{'family': 'UnknownFont'},
+          ),
+        ),
+      );
+
+      final secondDocument =
+          jsonDecode(
+                await File(
+                  '${root.path}/runtime/style-session-b/template.json',
+                ).readAsString(),
+              )
+              as Map<String, dynamic>;
+      final secondTokens = secondDocument['styleTokens'] as Map;
+      final secondColor = secondTokens['color'] as Map;
+      final secondFont = secondTokens['font'] as Map;
+      final sourceTokens = sourceDocument['styleTokens'] as Map;
+      final sourceColor = sourceTokens['color'] as Map;
+      final sourceFont = sourceTokens['font'] as Map;
+
+      expect(secondColor['primary'], sourceColor['primary']);
+      expect(secondColor['table_header_bg'], '#001122');
+      expect(secondFont['family'], 'UnknownFont');
+      expect(secondFont['size_md'], sourceFont['size_md']);
+      expect(jsonEncode(sourceDocument), sourceBefore);
+      expect(jsonEncode(selectedTemplate.document), cachedBefore);
+      final cachedAfter = await cache.getTemplateByCode('style-template');
+      expect(jsonEncode(cachedAfter!.document), cachedBefore);
+      expect(firstDocumentSnapshot, contains('#AA0000'));
+      expect(firstDocumentSnapshot, isNot(contains('#001122')));
+      expect(coordinator.activeSessionId, 'style-session-b');
+    },
+  );
+
+  test(
+    'structural override failure keeps the active session and its files intact',
+    () async {
+      final api = await _startManifestServer();
+      addTearDown(() => api.close(force: true));
+      final root = await Directory.systemTemp.createTemp(
+        'bridge_session_style_override_structure_',
+      );
+      addTearDown(() => root.delete(recursive: true));
+      final coordinator = _coordinator(
+        root: root,
+        apiBaseUrl: Uri.parse('http://127.0.0.1:${api.port}/'),
+      );
+      addTearDown(coordinator.dispose);
+
+      await coordinator.prepare(
+        PresenterSessionRequest(
+          sessionId: 'active-style-session',
+          reportType: 'invoice',
+          reportName: 'Invoice',
+          mode: PresenterSessionMode.online,
+          seedData: const <String, dynamic>{'value': 'active'},
+          template: _template('active-template'),
+        ),
+      );
+      final activeTemplateFile = File(
+        '${root.path}/runtime/active-style-session/template.json',
+      );
+      final activeSeedFile = File(
+        '${root.path}/runtime/active-style-session/seed_report_data.json',
+      );
+      final activeTemplateBefore = await activeTemplateFile.readAsString();
+      final activeSeedBefore = await activeSeedFile.readAsString();
+      final structurallyInvalidDocument = <String, dynamic>{
+        'meta': <String, dynamic>{'type': 'invoice'},
+        'styleTokens': 'not-an-object',
+        'elements': const <dynamic>[],
+      };
+      final invalidTemplate = _template(
+        'invalid-style-template',
+        document: structurallyInvalidDocument,
+      );
+      final invalidSourceBefore = jsonEncode(invalidTemplate.document);
+
+      await expectLater(
+        coordinator.prepare(
+          PresenterSessionRequest(
+            sessionId: 'rejected-style-session',
+            reportType: 'invoice',
+            reportName: 'Invoice',
+            mode: PresenterSessionMode.online,
+            seedData: const <String, dynamic>{'value': 'replacement'},
+            template: invalidTemplate,
+            templateStyleOverrides: ReportTemplateStyleOverrides(
+              color: <String, Object?>{'primary': '#0E5A9C'},
+            ),
+          ),
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
+
+      expect(coordinator.activeSessionId, 'active-style-session');
+      expect(await activeTemplateFile.readAsString(), activeTemplateBefore);
+      expect(await activeSeedFile.readAsString(), activeSeedBefore);
+      expect(
+        await Directory('${root.path}/runtime/rejected-style-session').exists(),
+        isFalse,
+      );
+      expect(jsonEncode(invalidTemplate.document), invalidSourceBefore);
+    },
+  );
+
+  test(
     'coordinator.stop terminal-stops the shared localhost Presenter server',
     () async {
       final api = await _startManifestServer();
