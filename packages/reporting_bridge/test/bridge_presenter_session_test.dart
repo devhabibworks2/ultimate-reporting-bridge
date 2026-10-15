@@ -269,6 +269,169 @@ void main() {
   );
 
   test(
+    'coordinator writes per-session style overrides in online and offline modes',
+    () async {
+      final root = await Directory.systemTemp.createTemp(
+        'bridge_session_style_overrides_',
+      );
+      addTearDown(() => root.delete(recursive: true));
+      final sourceDocument = _styleOverrideDocument();
+      final sourceBefore = jsonEncode(sourceDocument);
+      final cache = TemplateCacheService(
+        cacheRoot: Directory('${root.path}/template-cache'),
+      );
+      await cache.putTemplate(
+        _template(
+          'style-template',
+          document: sourceDocument,
+          systemCode: 'motakamel_transactions',
+        ),
+      );
+      final cachedTemplate = await cache.getTemplateByCode('style-template');
+      expect(cachedTemplate, isNotNull);
+      final selectedTemplate = cachedTemplate!;
+      final cachedBefore = jsonEncode(selectedTemplate.document);
+      expect(cachedBefore, sourceBefore);
+
+      final api = await _startManifestServer();
+      addTearDown(() => api.close(force: true));
+      final seedData = <String, dynamic>{
+        'ReportId': 'style-report',
+        'rows': <dynamic>[
+          <String, dynamic>{'id': 1, 'amount': 42.5},
+        ],
+      };
+      final seedBefore = jsonEncode(seedData);
+      final overrides = ReportTemplateStyleOverrides(
+        color: <String, Object?>{'primary': '#0E5A9C', 'future_color_leaf': 12},
+        font: <String, Object?>{
+          'family': 'UnknownFont',
+          'size_md': 9.5,
+          'size_xs': -3,
+        },
+      );
+      final effectiveDocuments = <String>[];
+
+      for (final mode in <PresenterSessionMode>[
+        PresenterSessionMode.online,
+        PresenterSessionMode.offline,
+      ]) {
+        final modeRoot = Directory('${root.path}/${mode.name}')
+          ..createSync(recursive: true);
+        if (mode == PresenterSessionMode.offline) {
+          await _writeReadyPresenterSite(
+            Directory('${modeRoot.path}/presenter'),
+          );
+          await _writeCachedManifest(
+            modeRoot,
+            presenterVersion: '2.0.0',
+            devVersion: 20,
+          );
+        }
+        final coordinator = _coordinator(
+          root: modeRoot,
+          apiBaseUrl: mode == PresenterSessionMode.online
+              ? Uri.parse('http://127.0.0.1:${api.port}/')
+              : Uri.parse('https://reports.example/'),
+        );
+        addTearDown(coordinator.dispose);
+        final sessionId = 'style-${mode.name}';
+        final sessionRequest = PresenterSessionRequest(
+          sessionId: sessionId,
+          reportType: 'invoice',
+          reportName: 'Style report',
+          mode: mode,
+          seedData: seedData,
+          template: selectedTemplate,
+          templateStyleOverrides: overrides,
+        );
+        expect(sessionRequest.templateStyleOverrides, same(overrides));
+        expect(sessionRequest.template, same(selectedTemplate));
+
+        await coordinator.prepare(sessionRequest);
+
+        final runtimeTemplateFile = File(
+          '${modeRoot.path}/runtime/$sessionId/template.json',
+        );
+        final runtimeDocument =
+            jsonDecode(await runtimeTemplateFile.readAsString())
+                as Map<String, dynamic>;
+        final styleTokens = runtimeDocument['styleTokens'] as Map;
+        expect(styleTokens, <String, dynamic>{
+          'color': <String, dynamic>{
+            'primary': '#0E5A9C',
+            'table_header_bg': '#223344',
+            'text_primary': '#334455',
+            'future_color_leaf': 12,
+          },
+          'font': <String, dynamic>{
+            'family': 'UnknownFont',
+            'size_md': 9.5,
+            'size_xs': -3,
+            'weight_bold': '700',
+          },
+          'spacing': <String, dynamic>{'md': 8},
+          'border': <String, dynamic>{'width': 1},
+          'radius': <String, dynamic>{'md': 4},
+          'system': <String, dynamic>{'brand': 'canonical'},
+        });
+        expect(runtimeDocument['meta'], sourceDocument['meta']);
+        expect(runtimeDocument['page'], sourceDocument['page']);
+        expect(runtimeDocument['elements'], sourceDocument['elements']);
+        effectiveDocuments.add(jsonEncode(runtimeDocument));
+
+        final runtimeSeedFile = File(
+          '${modeRoot.path}/runtime/$sessionId/seed_report_data.json',
+        );
+        expect(await runtimeSeedFile.readAsString(), seedBefore);
+        final runtimeSession =
+            jsonDecode(
+                  await File(
+                    '${modeRoot.path}/runtime/$sessionId/session.json',
+                  ).readAsString(),
+                )
+                as Map;
+        expect(runtimeSession['selectedTemplate'], <String, dynamic>{
+          'type': 'invoice',
+          'code': 'style-template',
+          'systemCode': 'motakamel_transactions',
+        });
+
+        expect(jsonEncode(sourceDocument), sourceBefore);
+        expect(jsonEncode(selectedTemplate.document), cachedBefore);
+        expect(
+          jsonEncode(
+            (await cache.getTemplateByCode('style-template'))!.document,
+          ),
+          cachedBefore,
+        );
+
+        final noOverrideSessionId = 'style-no-override-${mode.name}';
+        await coordinator.prepare(
+          PresenterSessionRequest(
+            sessionId: noOverrideSessionId,
+            reportType: 'invoice',
+            reportName: 'Style report',
+            mode: mode,
+            seedData: seedData,
+            template: selectedTemplate,
+          ),
+        );
+        final noOverrideTemplate = await File(
+          '${modeRoot.path}/runtime/$noOverrideSessionId/template.json',
+        ).readAsString();
+        expect(noOverrideTemplate, cachedBefore);
+        final noOverrideSeedFile = File(
+          '${modeRoot.path}/runtime/$noOverrideSessionId/seed_report_data.json',
+        );
+        expect(await noOverrideSeedFile.readAsString(), seedBefore);
+      }
+
+      expect(effectiveDocuments[0], effectiveDocuments[1]);
+    },
+  );
+
+  test(
     'coordinator.stop terminal-stops the shared localhost Presenter server',
     () async {
       final api = await _startManifestServer();
@@ -941,14 +1104,58 @@ PresenterSessionRequest _onlineRequest(String sessionId) =>
       template: _template('invoice-template'),
     );
 
-CachedTemplate _template(String id) => CachedTemplate(
+CachedTemplate _template(
+  String id, {
+  Map<String, dynamic>? document,
+  String? systemCode,
+}) => CachedTemplate(
   code: id,
   type: 'invoice',
-  document: const <String, dynamic>{
-    'meta': <String, dynamic>{'name': 'Invoice'},
-    'elements': <dynamic>[],
-  },
+  systemCode: systemCode,
+  document:
+      document ??
+      const <String, dynamic>{
+        'meta': <String, dynamic>{'name': 'Invoice'},
+        'elements': <dynamic>[],
+      },
 );
+
+Map<String, dynamic> _styleOverrideDocument() => <String, dynamic>{
+  'schemaVersion': '1.0.0',
+  'meta': <String, dynamic>{'name': 'Style report', 'family': 'invoice'},
+  'page': <String, dynamic>{
+    'layout': 'Pages',
+    'size': 'A4',
+    'language': 'ar',
+    'direction': 'rtl',
+  },
+  'styleTokens': <String, dynamic>{
+    'color': <String, dynamic>{
+      'primary': '#112233',
+      'table_header_bg': '#223344',
+      'text_primary': '#334455',
+    },
+    'font': <String, dynamic>{
+      'family': 'Cairo',
+      'size_md': 11,
+      'size_xs': 8,
+      'weight_bold': '700',
+    },
+    'spacing': <String, dynamic>{'md': 8},
+    'border': <String, dynamic>{'width': 1},
+    'radius': <String, dynamic>{'md': 4},
+    'system': <String, dynamic>{'brand': 'canonical'},
+  },
+  'elements': <dynamic>[
+    <String, dynamic>{
+      'id': 'literal-text',
+      'type': 'text',
+      'style': <String, dynamic>{
+        'text': <String, dynamic>{'color': '#ABCDEF'},
+      },
+    },
+  ],
+};
 
 Future<void> _writeReadyPresenterSite(Directory presenterRoot) async {
   await presenterRoot.create(recursive: true);

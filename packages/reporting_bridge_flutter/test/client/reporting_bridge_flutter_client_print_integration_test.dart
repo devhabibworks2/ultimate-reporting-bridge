@@ -442,12 +442,26 @@ void main() {
       );
       addTearDown(fixture.client.dispose);
       await _seedSavedTemplate(fixture.connection, preferences);
+      final overrides = ReportTemplateStyleOverrides(
+        color: <String, Object?>{'primary': '#0E5A9C'},
+        font: <String, Object?>{'size_md': 9.5},
+      );
 
       final bytes = await fixture.client.generateReportPdfHeadless(
-        _request(entryPolicy: ReportEntryPolicy.smart),
+        _request(
+          entryPolicy: ReportEntryPolicy.smart,
+          templateStyleOverrides: overrides,
+        ),
       );
 
       expect(bytes, Uint8List.fromList(<int>[1, 2, 3]));
+      expect(
+        bridge.lastSessionRequest?.templateStyleOverrides,
+        same(overrides),
+      );
+      expect(bridge.lastSessionRequest?.template.templateCode, 'THERMAL-EN');
+      expect(bridge.lastSessionRequest?.locale, 'en');
+      expect(bridge.lastSessionRequest?.direction, 'ltr');
       expect(printPlatform.calls, 0);
       expect(filePlatform.saveCalls, 0);
       expect(filePlatform.shareCalls, 0);
@@ -821,10 +835,12 @@ _ClientFixture _createClient({
 ReportOpenRequest _request({
   ReportEntryPolicy entryPolicy = ReportEntryPolicy.alwaysPrepare,
   BridgeUiFeatures? featuresOverride,
+  ReportTemplateStyleOverrides? templateStyleOverrides,
 }) => ReportOpenRequest(
   seedData: const <String, dynamic>{'id': 1},
   reportName: 'Invoice',
   entryPolicy: entryPolicy,
+  templateStyleOverrides: templateStyleOverrides,
   featuresOverride:
       featuresOverride ??
       const BridgeUiFeatures(
@@ -1023,6 +1039,7 @@ final class _FakeBridgeClient extends ReportingBridgeClient {
 
   final List<CachedTemplate> templates = <CachedTemplate>[_template()];
   int prepareCalls = 0;
+  PresenterSessionRequest? lastSessionRequest;
   int syncTemplatesCalls = 0;
   int disposeCalls = 0;
 
@@ -1062,6 +1079,7 @@ final class _FakeBridgeClient extends ReportingBridgeClient {
     PresenterSessionRequest request,
   ) async {
     prepareCalls += 1;
+    lastSessionRequest = request;
     return PresenterSessionLaunch(
       presenterUrl: 'https://presenter.test/session-$prepareCalls',
       sessionId: 'session-$prepareCalls',

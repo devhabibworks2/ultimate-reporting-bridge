@@ -38,6 +38,7 @@ final class ReportOpenRequest {
     String? localeOverride,
     this.featuresOverride,
     this.externalPrint,
+    this.templateStyleOverrides,
   }) : seedData = snapshotJsonObject(seedData),
        reportName = _trimmedOrNull(reportName),
        requestId = _trimmedOrNull(requestId),
@@ -69,6 +70,7 @@ final class ReportOpenRequest {
   final String? localeOverride;
   final BridgeUiFeatures? featuresOverride;
   final HostExternalPrintRequest? externalPrint;
+  final ReportTemplateStyleOverrides? templateStyleOverrides;
 
   ReportOpenRequest copyWith({
     BridgeUiFeatures? featuresOverride,
@@ -87,6 +89,7 @@ final class ReportOpenRequest {
     localeOverride: localeOverride ?? this.localeOverride,
     featuresOverride: featuresOverride ?? this.featuresOverride,
     externalPrint: externalPrint,
+    templateStyleOverrides: templateStyleOverrides,
   );
 }
 

@@ -18,6 +18,7 @@ ReportOpenRequest buildTestOpenRequest({
   TemplateCompatibilityConstraints compatibility =
       const TemplateCompatibilityConstraints(),
   HostExternalPrintRequest? externalPrint,
+  ReportTemplateStyleOverrides? templateStyleOverrides,
   TemplateSyncFilter? filter,
   Map<String, Object?> extra = const <String, Object?>{},
 }) {
@@ -48,5 +49,6 @@ ReportOpenRequest buildTestOpenRequest({
     localeOverride: localeOverride,
     featuresOverride: featuresOverride,
     externalPrint: externalPrint,
+    templateStyleOverrides: templateStyleOverrides,
   );
 }

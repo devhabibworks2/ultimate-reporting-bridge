@@ -71,7 +71,54 @@ void main() {
     );
 
     expect(request.presenterMode, PresenterModePreference.offline);
+    expect(request.templateStyleOverrides, isNull);
   });
+
+  test(
+    'ReportOpenRequest preserves optional style overrides through copyWith',
+    () {
+      const identity = ReportIdentity(userId: 'u1', branchId: 'b1');
+      final overrides = ReportTemplateStyleOverrides(
+        color: <String, Object?>{'primary': '#0E5A9C'},
+        font: <String, Object?>{'size_md': 9.5},
+      );
+      final externalPrint = HostExternalPrintRequest(
+        documentTitle: 'Invoice title',
+        extra: <String, Object?>{'channel': 'host'},
+      );
+      final request = ReportOpenRequest(
+        seedData: const <String, dynamic>{'id': 1},
+        selectedTemplateCriteria: SelectedTemplateCriteria(
+          reportType: UrbReportType.salesInvoice,
+          identity: identity,
+        ),
+        templateSyncRequest: TemplateSyncRequest(
+          systemCode: UrbSystem.motakamelTransactions,
+          identity: identity,
+        ),
+        templateStyleOverrides: overrides,
+        externalPrint: externalPrint,
+      );
+
+      final copied = request.copyWith(
+        featuresOverride: const BridgeUiFeatures(showPrint: true),
+        entryPolicy: ReportEntryPolicy.alwaysSelectTemplate,
+        localeOverride: 'en',
+      );
+
+      expect(request.templateStyleOverrides, same(overrides));
+      expect(copied.templateStyleOverrides, same(overrides));
+      expect(copied.featuresOverride?.showPrint, isTrue);
+      expect(copied.entryPolicy, ReportEntryPolicy.alwaysSelectTemplate);
+      expect(copied.localeOverride, 'en');
+      expect(copied.externalPrint, same(externalPrint));
+      expect(
+        copied.selectedTemplateCriteria,
+        same(request.selectedTemplateCriteria),
+      );
+      expect(copied.templateSyncRequest, same(request.templateSyncRequest));
+    },
+  );
 
   test('TemplateSyncRequest defaults filter to core TemplateSyncFilter', () {
     final sync = TemplateSyncRequest(

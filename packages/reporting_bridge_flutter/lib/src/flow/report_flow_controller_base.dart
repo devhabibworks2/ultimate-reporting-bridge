@@ -1232,6 +1232,7 @@ class ReportFlowControllerImpl
             ? 'rtl'
             : 'ltr',
         sessionId: request.requestId,
+        templateStyleOverrides: request.templateStyleOverrides,
       );
       final launch = replacing
           ? await _runtime.bridgeClient.prepareReplacementSession(

@@ -11,6 +11,7 @@ import 'bridge_runtime_storage.dart';
 import 'bridge_semantic_version.dart';
 import 'bridge_template_cache.dart';
 import 'bridge_template_sync.dart';
+import 'report_template_style_overrides.dart';
 
 enum PresenterSessionMode { online, offline }
 
@@ -26,6 +27,7 @@ class PresenterSessionRequest {
     this.branding,
     this.apiHeaders,
     this.sessionId,
+    this.templateStyleOverrides,
   });
 
   final String reportType;
@@ -38,6 +40,7 @@ class PresenterSessionRequest {
   final BrandConfig? branding;
   final ApiHeaderConfig? apiHeaders;
   final String? sessionId;
+  final ReportTemplateStyleOverrides? templateStyleOverrides;
 }
 
 class PresenterSessionLaunch {
@@ -186,6 +189,14 @@ class PresenterSessionCoordinator {
         requestedSessionId != null && requestedSessionId == previousSessionId
         ? '$requestedSessionId-${DateTime.now().microsecondsSinceEpoch}'
         : requestedSessionId;
+    final styleOverrides = request.templateStyleOverrides;
+    final effectiveTemplateDocument =
+        styleOverrides == null || styleOverrides.isEmpty
+        ? request.template.document
+        : applyReportTemplateStyleOverrides(
+            document: request.template.document,
+            overrides: styleOverrides,
+          );
     final runtimeSession = await runtimeStorage.prepareRuntimeSession(
       RuntimeSessionInput(
         sessionId:
@@ -200,7 +211,7 @@ class PresenterSessionCoordinator {
             ? normalizeBridgeApiBaseUrl(apiBaseUrl).removeFragment().toString()
             : null,
         seedData: request.seedData,
-        templateDocument: request.template.document,
+        templateDocument: effectiveTemplateDocument,
         selectedTemplate: request.template.selectedTemplate,
         branding: request.branding,
         apiHeaders: request.apiHeaders,

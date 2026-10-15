@@ -774,6 +774,7 @@ class _WorkflowBridgeClient extends ReportingBridgeClient {
       branding: request.branding,
       apiHeaders: request.apiHeaders,
       sessionId: request.sessionId,
+      templateStyleOverrides: request.templateStyleOverrides,
     );
   }
 

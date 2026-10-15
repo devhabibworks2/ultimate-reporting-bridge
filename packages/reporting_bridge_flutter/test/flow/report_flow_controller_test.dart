@@ -54,6 +54,8 @@ void main() {
     thumbnailControllerFactory,
     TemplateCompatibilityConstraints compatibility =
         const TemplateCompatibilityConstraints(),
+    ReportTemplateStyleOverrides? templateStyleOverrides,
+    HostExternalPrintRequest? externalPrint,
   }) {
     bridge.templates = templates ?? <CachedTemplate>[_template('t1')];
     return ReportFlowControllerImpl(
@@ -67,6 +69,8 @@ void main() {
         initialTemplateCode: initialTemplateCode,
         compatibility: compatibility,
         userId: userId,
+        templateStyleOverrides: templateStyleOverrides,
+        externalPrint: externalPrint,
       ),
       runtime: ReportFlowRuntime(
         connection: ReportServerConnection(
@@ -588,6 +592,66 @@ void main() {
       expect(controller.value.stage, ReportFlowStage.previewing);
       expect(controller.value.committedTemplateCode, 't1');
       expect(bridge.prepareCalls, 1);
+    },
+  );
+
+  test(
+    'initial and replacement sessions retain Host style overrides and template metadata',
+    () async {
+      final overrides = ReportTemplateStyleOverrides(
+        color: <String, Object?>{'primary': '#0E5A9C'},
+        font: <String, Object?>{'size_md': 9.5},
+      );
+      final externalPrint = HostExternalPrintRequest(
+        documentTitle: 'Host invoice title',
+        extra: <String, Object?>{'channel': 'host'},
+      );
+      final firstTemplate = _template('t1');
+      final replacementTemplate = _template('t2');
+      final controller = createController(
+        templates: <CachedTemplate>[firstTemplate, replacementTemplate],
+        mode: PresenterModePreference.online,
+        templateStyleOverrides: overrides,
+        externalPrint: externalPrint,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+      await controller.continueFromPreparation();
+      controller.selectTemplate('t1');
+      await controller.preparePreview();
+
+      expect(bridge.sessionRequests, hasLength(1));
+      final initialRequest = bridge.sessionRequests.single;
+      expect(initialRequest.templateStyleOverrides, same(overrides));
+      expect(initialRequest.template, same(firstTemplate));
+      expect(initialRequest.template.templateCode, 't1');
+      expect(initialRequest.reportType, 'sales_invoice');
+      expect(initialRequest.locale, 'ar');
+      expect(initialRequest.direction, 'rtl');
+      expect(initialRequest.mode, PresenterSessionMode.online);
+
+      controller.editSettings();
+      controller.selectMode(PresenterModePreference.offline);
+      controller.openTemplateSelection(
+        origin: TemplateSelectionOrigin.reportSettings,
+      );
+      controller.selectTemplate('t2');
+      controller.confirmTemplateSelection();
+      await controller.commitSettings();
+
+      expect(bridge.sessionRequests, hasLength(2));
+      final replacementRequest = bridge.sessionRequests.last;
+      expect(replacementRequest.templateStyleOverrides, same(overrides));
+      expect(replacementRequest.template, same(replacementTemplate));
+      expect(replacementRequest.template.templateCode, 't2');
+      expect(replacementRequest.reportType, initialRequest.reportType);
+      expect(replacementRequest.reportName, initialRequest.reportName);
+      expect(replacementRequest.locale, initialRequest.locale);
+      expect(replacementRequest.direction, initialRequest.direction);
+      expect(replacementRequest.mode, PresenterSessionMode.offline);
+      expect(externalPrint.documentTitle, 'Host invoice title');
+      expect(externalPrint.extra, <String, Object?>{'channel': 'host'});
     },
   );
 
@@ -2709,6 +2773,8 @@ class _FakeBridgeClient extends ReportingBridgeClient {
   Completer<void>? templateSyncBarrier;
   Completer<void>? presenterSyncBarrier;
   int prepareCalls = 0;
+  final List<PresenterSessionRequest> sessionRequests =
+      <PresenterSessionRequest>[];
   int replacementCommitCalls = 0;
   int replacementDiscardCalls = 0;
   int stopCalls = 0;
@@ -2794,12 +2860,18 @@ class _FakeBridgeClient extends ReportingBridgeClient {
   @override
   Future<PresenterSessionLaunch> prepareSession(
     PresenterSessionRequest request,
-  ) => _prepareFakeSession();
+  ) {
+    sessionRequests.add(request);
+    return _prepareFakeSession();
+  }
 
   @override
   Future<PresenterSessionLaunch> prepareReplacementSession(
     PresenterSessionRequest request,
-  ) => _prepareFakeSession();
+  ) {
+    sessionRequests.add(request);
+    return _prepareFakeSession();
+  }
 
   Future<PresenterSessionLaunch> _prepareFakeSession() async {
     prepareCalls += 1;
