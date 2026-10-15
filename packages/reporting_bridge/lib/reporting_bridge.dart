@@ -25,6 +25,7 @@ export 'src/bridge_runtime_controller.dart';
 export 'src/bridge_runtime_error.dart';
 export 'src/bridge_runtime_session.dart';
 export 'src/bridge_runtime_storage.dart';
+export 'src/report_template_style_overrides.dart';
 export 'src/bridge_selected_template.dart';
 export 'src/bridge_semantic_version.dart';
 export 'src/bridge_server_endpoints.dart';
