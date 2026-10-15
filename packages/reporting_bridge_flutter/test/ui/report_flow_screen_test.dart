@@ -826,6 +826,205 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('Settings shows selected mode and honest resource status rows', (
+    WidgetTester tester,
+  ) async {
+    final controller = _FakeController(
+      _settingsState().copyWith(templateCatalogCount: 2, presenterCached: true),
+    );
+    await _pumpFlow(tester, controller);
+
+    final settingsList = find.byType(ListView);
+    final scrollable = find.descendant(
+      of: settingsList,
+      matching: find.byType(Scrollable),
+    );
+    await tester.scrollUntilVisible(
+      find.text('Mode selected: Online', skipOffstage: false),
+      64,
+      scrollable: scrollable,
+    );
+    expect(find.text('Mode selected: Online'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('settings-templates-resource-row')),
+      64,
+      scrollable: scrollable,
+    );
+    expect(find.text('Ready'), findsOneWidget);
+    expect(find.text('Cached'), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('settings-templates-resource-row')),
+    );
+    await tester.pumpAndSettle();
+    expect(controller.value.stage, ReportFlowStage.preparingResources);
+    expect(
+      controller.value.resourceOrigin,
+      ResourcePreparationOrigin.reportSettings,
+    );
+    expect(controller.syncTemplatesCalls, 0);
+  });
+
+  testWidgets(
+    'Settings hides mode switch and status when offline is disabled',
+    (WidgetTester tester) async {
+      final controller = _FakeController(_settingsState());
+      await _pumpFlow(
+        tester,
+        controller,
+        ui: const BridgeUiConfig.inheritHost(
+          features: BridgeUiFeatures(allowOfflineMode: false),
+        ),
+      );
+
+      expect(
+        find.byKey(const ValueKey<String>('settings-offline-mode-row')),
+        findsNothing,
+      );
+      expect(find.text('Mode selected: Online'), findsNothing);
+      expect(find.text('Templates'), findsOneWidget);
+      expect(find.text('Presenter'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'Settings shows unknown resource status without false readiness',
+    (WidgetTester tester) async {
+      final unknown = _FakeController(
+        _settingsState().copyWith(
+          templates: const <CachedTemplate>[],
+          templateCatalogCount: 0,
+        ),
+      );
+      await _pumpFlow(tester, unknown);
+      final templates = find.byKey(
+        const ValueKey<String>('settings-templates-resource-row'),
+      );
+      final presenter = find.byKey(
+        const ValueKey<String>('settings-presenter-resource-row'),
+      );
+      await tester.scrollUntilVisible(
+        templates,
+        64,
+        scrollable: find.descendant(
+          of: find.byType(ListView),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      expect(
+        find.descendant(of: templates, matching: find.text('Not checked')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: presenter, matching: find.text('Not checked')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: templates, matching: find.text('Ready')),
+        findsNothing,
+      );
+      expect(
+        find.descendant(of: presenter, matching: find.text('Cached')),
+        findsNothing,
+      );
+    },
+  );
+
+  testWidgets('Settings shows failed resource operations clearly', (
+    WidgetTester tester,
+  ) async {
+    final failed = _FakeController(
+      _settingsState().copyWith(
+        templateSync: ReportOperationStatus.failed,
+        presenterSync: ReportOperationStatus.failed,
+        templateCatalogCount: 0,
+        presenterCached: false,
+      ),
+    );
+    await _pumpFlow(tester, failed);
+    final scrollable = find.descendant(
+      of: find.byType(ListView),
+      matching: find.byType(Scrollable),
+    );
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('settings-templates-resource-row')),
+      64,
+      scrollable: scrollable,
+    );
+    final templates = find.byKey(
+      const ValueKey<String>('settings-templates-resource-row'),
+    );
+    final presenter = find.byKey(
+      const ValueKey<String>('settings-presenter-resource-row'),
+    );
+    expect(
+      find.descendant(of: templates, matching: find.text('Needs attention')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: presenter, matching: find.text('Needs attention')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: templates, matching: find.text('Ready')),
+      findsNothing,
+    );
+    expect(
+      find.descendant(of: presenter, matching: find.text('Cached')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('Settings support copy explains data sharing and cache removal', (
+    WidgetTester tester,
+  ) async {
+    final controller = _SupportFakeController(_settingsState());
+    await _pumpFlow(tester, controller);
+    final scrollable = find.descendant(
+      of: find.byType(ListView),
+      matching: find.byType(Scrollable),
+    );
+    await tester.scrollUntilVisible(
+      find.text('Share report data with development', skipOffstage: false),
+      80,
+      scrollable: scrollable,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Share report data with development'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Clear downloaded resources', skipOffstage: false),
+      80,
+      scrollable: scrollable,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Clear downloaded resources'), findsOneWidget);
+    await tester.tap(find.text('Clear downloaded resources'));
+    await tester.pumpAndSettle();
+    final confirmation = find.byType(AlertDialog);
+    expect(
+      find.descendant(
+        of: confirmation,
+        matching: find.textContaining('cached templates'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: confirmation,
+        matching: find.textContaining('offline Presenter'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: confirmation,
+        matching: find.textContaining('Saved preferences'),
+      ),
+      findsOneWidget,
+    );
+    expect(controller.clearCacheCalls, 0);
+  });
+
   testWidgets(
     'operational Settings keeps template/mode/resources without filter UI',
     (WidgetTester tester) async {
@@ -835,7 +1034,15 @@ void main() {
       expect(find.text('Report settings'), findsOneWidget);
       expect(find.text('Change template'), findsOneWidget);
       expect(find.text('Use Presenter offline'), findsOneWidget);
-      expect(find.text('Prepare and update'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey<String>('settings-templates-resource-row')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('settings-presenter-resource-row')),
+        findsOneWidget,
+      );
+      expect(find.text('Prepare and update'), findsNothing);
       expect(find.text('Prepare and synchronize'), findsNothing);
       expect(find.text('Language'), findsNothing);
       expect(find.text('Layout'), findsNothing);
@@ -882,11 +1089,11 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.byKey(const ValueKey<String>('settings-resource-row')),
+        find.byKey(const ValueKey<String>('settings-templates-resource-row')),
         findsOneWidget,
       );
       expect(
-        find.text('Manage available preparation and updates'),
+        find.byKey(const ValueKey<String>('settings-presenter-resource-row')),
         findsOneWidget,
       );
 
@@ -906,13 +1113,10 @@ void main() {
         find.text('Help the development team improve this report'),
         findsOneWidget,
       );
-      expect(
-        find.text('Delete locally cached temporary files'),
-        findsOneWidget,
-      );
+      expect(find.textContaining('Removes cached templates'), findsOneWidget);
       final cacheTitleFinder = find.descendant(
         of: find.byKey(const ValueKey<String>('settings-clear-cache-row')),
-        matching: find.text('Delete cache files'),
+        matching: find.text('Clear downloaded resources'),
       );
       final cacheTitle = tester.widget<Text>(cacheTitleFinder);
       expect(
@@ -1501,25 +1705,22 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Unable to display report'), findsOneWidget);
-      expect(find.text('Code :'), findsOneWidget);
-      expect(find.text('Message :'), findsOneWidget);
       expect(
-        find.byWidgetPredicate(
-          (widget) =>
-              widget is SelectableText && widget.data == 'TEXT_RENDER_FAILED',
-        ),
+        find.text('The report could not finish rendering.'),
         findsOneWidget,
       );
+      expect(find.text('Technical details'), findsOneWidget);
+      expect(find.text('Code :'), findsNothing);
       expect(
         find.textContaining('Unable to render text element.'),
-        findsOneWidget,
+        findsNothing,
       );
       expect(
         find.byKey(const ValueKey<String>('render-failure-update-templates')),
-        findsOneWidget,
+        findsNothing,
       );
       expect(find.text('Change template'), findsOneWidget);
-      expect(find.text('Retry'), findsNothing);
+      expect(find.text('Retry'), findsOneWidget);
       expect(find.text('Show details'), findsNothing);
       expect(find.text('Send report data to development'), findsNothing);
       expect(find.text('Report settings'), findsNothing);
@@ -1528,21 +1729,22 @@ void main() {
       expect(find.byType(PresenterActionDock), findsNothing);
       expect(find.byIcon(Icons.warning_rounded), findsOneWidget);
 
-      await tester.tap(
-        find.byKey(const ValueKey<String>('render-failure-update-templates')),
-      );
+      await tester.tap(find.text('Technical details'));
       await tester.pumpAndSettle();
-      expect(controller.value.stage, ReportFlowStage.preparingResources);
+      expect(find.text('Code :'), findsOneWidget);
       expect(
-        controller.value.resourceOrigin,
-        ResourcePreparationOrigin.previewRecovery,
+        find.textContaining('Unable to render text element.'),
+        findsOneWidget,
       );
-      expect(controller.syncTemplatesCalls, 1);
+
+      await tester.tap(find.text('Retry'));
+      await tester.pumpAndSettle();
+      expect(controller.syncTemplatesCalls, 0);
     },
   );
 
   testWidgets(
-    'Presenter error message deduplicates repeated technical values',
+    'technical details show supplied code category and path only on expansion',
     (WidgetTester tester) async {
       InAppWebViewPlatform.instance = _TestInAppWebViewPlatform();
       final controller = _FakeController(
@@ -1571,18 +1773,22 @@ void main() {
       );
       await _pumpDirectFlow(tester, controller);
 
-      final message = tester
-          .widget<Text>(
-            find.byKey(const ValueKey<String>('render-failure-message')),
-          )
-          .data!;
-      expect('Invalid footer height.'.allMatches(message), hasLength(1));
-      expect(r'elements[4].footer.height'.allMatches(message), hasLength(1));
-      expect(message, contains('\u2068schema\u2069'));
+      expect(
+        find.text('The report could not finish rendering.'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Invalid footer height.'), findsNothing);
+      expect(find.textContaining(r'elements[4].footer.height'), findsNothing);
+      await tester.tap(find.text('Technical details'));
+      await tester.pumpAndSettle();
+      expect(find.text('INVALID_DOCUMENT'), findsOneWidget);
+      expect(find.text('schema'), findsOneWidget);
+      expect(find.text(r'elements[4].footer.height'), findsOneWidget);
+      expect(find.text('Invalid footer height.'), findsOneWidget);
     },
   );
 
-  testWidgets('long Presenter error message supports More and Less', (
+  testWidgets('long Presenter diagnostics expand in Technical details', (
     WidgetTester tester,
   ) async {
     InAppWebViewPlatform.instance = _TestInAppWebViewPlatform();
@@ -1611,26 +1817,26 @@ void main() {
     );
     await _pumpDirectFlow(tester, controller);
 
-    expect(find.text('More'), findsOneWidget);
-    final collapsed = tester.widget<Text>(
-      find.byKey(const ValueKey<String>('render-failure-message')),
+    expect(
+      find.textContaining('The published document contains'),
+      findsNothing,
     );
-    expect(collapsed.maxLines, 2);
-    expect(collapsed.overflow, TextOverflow.ellipsis);
-
-    await tester.tap(find.text('More'));
+    await tester.tap(find.text('Technical details'));
     await tester.pumpAndSettle();
-    final expanded = tester.widget<Text>(
-      find.byKey(const ValueKey<String>('render-failure-message')),
+    expect(
+      find.textContaining('The published document contains'),
+      findsOneWidget,
     );
-    expect(expanded.maxLines, isNull);
-    expect(find.text('Less'), findsOneWidget);
-
-    await tester.ensureVisible(find.text('Less'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Less'));
-    await tester.pumpAndSettle();
-    expect(find.text('More'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is SelectableText &&
+            widget.data!.contains(
+              'Additional diagnostic context continues here',
+            ),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets(
@@ -1687,14 +1893,93 @@ void main() {
         findsOneWidget,
       );
       expect(find.byType(SingleChildScrollView), findsWidgets);
-      expect(
-        find.byKey(const ValueKey<String>('render-failure-update-templates')),
-        findsOneWidget,
-      );
+      expect(find.text('Retry'), findsOneWidget);
       expect(find.text('Change template'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets(
+    'structured invalid style offers Report settings and keeps path collapsed',
+    (WidgetTester tester) async {
+      InAppWebViewPlatform.instance = _TestInAppWebViewPlatform();
+      final controller = _FakeController(
+        _selectionState().copyWith(
+          stage: ReportFlowStage.failed,
+          presenterLaunch: const PresenterSessionLaunch(
+            presenterUrl: 'https://presenter.test/session',
+            sessionId: 'session-invalid-style',
+            presenterVersion: '1.0.0',
+            presenterDevVersion: 1,
+          ),
+          failure: const ReportFlowFailure(
+            code: ReportFlowFailureCode.renderFailed,
+            diagnostic: 'Style token has an invalid value.',
+            technicalCode: 'INVALID_STYLE_TOKEN',
+            technicalPath: 'styleTokens.color.primary',
+          ),
+          renderStatus: PresenterRenderStatus.failed,
+        ),
+      );
+
+      await _pumpDirectFlow(tester, controller);
+
+      expect(find.text('Report settings'), findsOneWidget);
+      expect(find.text('Change template'), findsOneWidget);
+      expect(find.text('Retry'), findsOneWidget);
+      expect(find.textContaining('styleTokens.color.primary'), findsNothing);
+      await tester.tap(find.text('Technical details'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('styleTokens.color.primary'), findsOneWidget);
+
+      await tester.ensureVisible(find.text('Report settings'));
+      await tester.tap(find.text('Report settings'));
+      await tester.pumpAndSettle();
+      expect(controller.value.stage, ReportFlowStage.editingSettings);
+      expect(controller.syncTemplatesCalls, 0);
+    },
+  );
+
+  testWidgets('style failure hides settings action when host disables it', (
+    WidgetTester tester,
+  ) async {
+    InAppWebViewPlatform.instance = _TestInAppWebViewPlatform();
+    final controller = _FakeController(
+      _selectionState().copyWith(
+        stage: ReportFlowStage.failed,
+        presenterLaunch: const PresenterSessionLaunch(
+          presenterUrl: 'https://presenter.test/session',
+          sessionId: 'session-style-settings-hidden',
+          presenterVersion: '1.0.0',
+          presenterDevVersion: 1,
+        ),
+        failure: const ReportFlowFailure(
+          code: ReportFlowFailureCode.renderFailed,
+          technicalPath: 'styleTokens.font.heading',
+        ),
+        renderStatus: PresenterRenderStatus.failed,
+      ),
+    );
+    await _pumpDirectFlow(
+      tester,
+      controller,
+      ui: const BridgeUiConfig.inheritHost(
+        features: BridgeUiFeatures(showSettings: false),
+      ),
+    );
+
+    expect(find.text('Report settings'), findsNothing);
+    expect(find.text('Change template'), findsOneWidget);
+    expect(find.text('Retry'), findsOneWidget);
+    await tester.tap(find.text('Change template'));
+    await tester.pumpAndSettle();
+    expect(controller.value.stage, ReportFlowStage.selectingTemplate);
+    expect(
+      controller.value.selectionOrigin,
+      TemplateSelectionOrigin.previewRecovery,
+    );
+    expect(controller.syncTemplatesCalls, 0);
+  });
 
   testWidgets(
     'recovery overlay keeps one physical close control and warning icon in LTR and RTL',
@@ -1720,6 +2005,7 @@ void main() {
             failure: const ReportFlowFailure(
               code: ReportFlowFailureCode.renderFailed,
               diagnostic: 'Unable to render text element.',
+              technicalPath: 'styleTokens.color.primary',
             ),
             renderStatus: PresenterRenderStatus.failed,
           ),
@@ -1764,32 +2050,37 @@ void main() {
 
       await pumpLocale('en');
       expectPhysicalPositions('en');
+      await tester.ensureVisible(find.text('Technical details'));
+      await tester.tap(find.text('Technical details'));
+      await tester.pumpAndSettle();
       expect(
         tester
             .widget<SelectableText>(
-              find.byKey(const ValueKey<String>('render-failure-code')),
+              find.byKey(
+                const ValueKey<String>('render-failure-technical-path'),
+              ),
             )
-            .textAlign,
-        TextAlign.left,
+            .textDirection,
+        TextDirection.ltr,
       );
 
       await pumpLocale('ar');
       expectPhysicalPositions('ar');
+      expect(find.text('إعدادات التقرير'), findsOneWidget);
+      expect(find.text('تعديل إعدادات التقرير'), findsNothing);
       expect(
-        tester
-            .widget<SelectableText>(
-              find.byKey(const ValueKey<String>('render-failure-code')),
-            )
-            .textAlign,
-        TextAlign.right,
+        find.byKey(const ValueKey<String>('render-failure-technical-path')),
+        findsOneWidget,
       );
       expect(
         tester
-            .widget<Text>(
-              find.byKey(const ValueKey<String>('render-failure-message')),
+            .widget<SelectableText>(
+              find.byKey(
+                const ValueKey<String>('render-failure-technical-path'),
+              ),
             )
-            .textAlign,
-        TextAlign.right,
+            .textDirection,
+        TextDirection.ltr,
       );
       expect(tester.takeException(), isNull);
     },
@@ -1807,17 +2098,17 @@ void main() {
         matching: find.byType(Scrollable),
       );
       await tester.scrollUntilVisible(
-        find.text('Send report data to development', skipOffstage: false),
+        find.text('Share report data with development', skipOffstage: false),
         80,
         scrollable: scrollable,
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Send report data to development'));
+      await tester.tap(find.text('Share report data with development'));
       await tester.pumpAndSettle();
 
       expect(controller.supportShareCalls, 1);
-      expect(find.text('Send report data to development?'), findsNothing);
+      expect(find.text('Share report data with development?'), findsNothing);
       expect(find.text('Continue and share'), findsNothing);
       expect(find.byType(AlertDialog), findsNothing);
       expect(find.text('Report data sharing opened.'), findsNothing);
@@ -1909,7 +2200,7 @@ void main() {
     expect(
       find.descendant(
         of: cache,
-        matching: find.text('Delete locally cached temporary files'),
+        matching: find.textContaining('Removes cached templates'),
       ),
       findsOneWidget,
     );
@@ -1928,11 +2219,11 @@ void main() {
       await _pumpFlow(tester, controller);
 
       expect(
-        find.text('Send report data to development', skipOffstage: false),
+        find.text('Share report data with development', skipOffstage: false),
         findsNothing,
       );
       expect(
-        find.text('Delete cache files', skipOffstage: false),
+        find.text('Clear downloaded resources', skipOffstage: false),
         findsOneWidget,
       );
     },
@@ -2183,14 +2474,12 @@ Finder _filledButtonLabeled(String label) => find.ancestor(
 
 Future<void> _pumpDirectFlow(
   WidgetTester tester,
-  _FakeController controller,
-) async {
+  _FakeController controller, {
+  BridgeUiConfig ui = const BridgeUiConfig.inheritHost(),
+}) async {
   await tester.pumpWidget(
     MaterialApp(
-      home: ReportFlowScreen(
-        controller: controller,
-        ui: const BridgeUiConfig.inheritHost(),
-      ),
+      home: ReportFlowScreen(controller: controller, ui: ui),
     ),
   );
   await tester.pumpAndSettle();

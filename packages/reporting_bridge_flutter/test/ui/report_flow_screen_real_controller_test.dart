@@ -222,9 +222,9 @@ void main() {
     },
   );
 
-  test(
-    'render failure retry keeps the Presenter surface reload contract',
-    () async {
+  testWidgets(
+    'render failure recovery opens settings and preserves retry reload contract',
+    (tester) async {
       final root = Directory.systemTemp.createTempSync(
         'urb-flow-retry-surface-',
       );
@@ -270,12 +270,36 @@ void main() {
         onLifecycle: (_) {},
       );
 
-      controller.failPresenterRender(
-        'render failed',
+      controller.failPresenterRenderFailure(
+        const ReportFlowFailure(
+          code: ReportFlowFailureCode.renderFailed,
+          diagnostic: 'Invalid color token.',
+          technicalPath: 'styleTokens.color.primary',
+        ),
         sessionId: launch.sessionId,
       );
       expect(controller.value.stage, ReportFlowStage.failed);
       expect(controller.presenterSurface.attached, isTrue);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ReportFlowScreen(
+            controller: controller,
+            ui: const BridgeUiConfig.inheritHost(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Report settings'));
+      await tester.pumpAndSettle();
+      expect(controller.value.stage, ReportFlowStage.editingSettings);
+      expect(controller.value.settingsDraft, isNotNull);
+      controller.cancelSettings();
+
+      controller.failPresenterRender(
+        'render failed again',
+        sessionId: launch.sessionId,
+      );
 
       await controller.retry();
 

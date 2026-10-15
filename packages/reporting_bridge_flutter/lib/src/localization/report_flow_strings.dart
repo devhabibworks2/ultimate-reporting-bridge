@@ -4,6 +4,7 @@ import '../contracts/report_contract_values.dart';
 import '../flow/report_flow_failure.dart';
 import '../flow/report_flow_state.dart';
 import '../flow/urb_identifiers.dart';
+import '../ui/report_failure_recovery.dart';
 
 class ReportFlowStrings {
   const ReportFlowStrings(this.locale);
@@ -42,16 +43,31 @@ class ReportFlowStrings {
       ? 'اختر قالبًا مناسبًا حسب نوع الصفحة والحجم.'
       : 'Choose a template that fits the type, layout, and size.';
   String get clearTemplateFilters => arabic ? 'مسح الفلتر' : 'Clear filters';
-  String get adjustTemplateSearchOrFilters =>
-      arabic ? 'جرّب تغيير البحث أو الفلتر.' : 'Try changing the search or filters.';
+  String get adjustTemplateSearchOrFilters => arabic
+      ? 'جرّب تغيير البحث أو الفلتر.'
+      : 'Try changing the search or filters.';
   String get templateFilterPages => arabic ? 'متعدد الصفحات' : 'Pages';
   String get templateFilterThermal => arabic ? 'حراري' : 'Thermal';
   String get templateFilterA4 => 'A4';
   String get templateFilter80mm => arabic ? '٨٠ مم' : '80 mm';
   String get online => arabic ? 'متصل' : 'Online';
   String get offline => arabic ? 'دون اتصال' : 'Offline';
+  String get selectedOnlineMode =>
+      arabic ? 'الوضع المحدد: عبر الإنترنت' : 'Mode selected: Online';
+  String get selectedOfflineMode =>
+      arabic ? 'الوضع المحدد: دون اتصال' : 'Mode selected: Offline';
+  String get selectedTemplatesResource => arabic ? 'القوالب' : 'Templates';
+  String get selectedPresenterResource =>
+      arabic ? 'مستعرض التقارير' : 'Presenter';
+  String get resourceReady => arabic ? 'جاهز' : 'Ready';
+  String get resourceCached => arabic ? 'مخزّن' : 'Cached';
+  String get resourceNeedsAttention =>
+      arabic ? 'يتطلب الانتباه' : 'Needs attention';
+  String get resourceNotChecked => arabic ? 'لم يتم التحقق' : 'Not checked';
+  String get resourceUpdating => arabic ? 'جارٍ التحديث' : 'Updating';
   String get presenterMode => arabic ? 'العمل بدون اتصال' : 'Presenter mode';
-  String get usePresenterOffline => arabic ? 'استخدام التقارير دون اتصال' : 'Use Presenter offline';
+  String get usePresenterOffline =>
+      arabic ? 'استخدام التقارير دون اتصال' : 'Use Presenter offline';
   String get continueLabel => arabic ? 'متابعة' : 'Continue';
   String get saveSettings => arabic ? 'حفظ الإعدادات' : 'Save settings';
   String get cancel => arabic ? 'إلغاء' : 'Cancel';
@@ -60,23 +76,66 @@ class ReportFlowStrings {
   String get less => arabic ? 'أقل' : 'Less';
   String get errorCode => arabic ? 'الرمز' : 'Code';
   String get errorMessage => arabic ? 'الرسالة' : 'Message';
-  String get renderFailureTitle => arabic ? 'تعذر عرض التقرير' : 'Unable to display report';
-  String get maintenanceAndSupport => arabic ? 'الصيانة والدعم' : 'Maintenance and support';
-  String get clearCacheFiles => arabic ? 'حذف ملفات الكاش' : 'Delete cache files';
-  String get clearCacheFilesDescription =>
-      arabic ? 'حذف الملفات المؤقتة المحفوظة' : 'Delete locally cached temporary files';
-  String get sendReportDataToDevelopment =>
-      arabic ? 'إرسال بيانات التقرير إلى التطوير' : 'Send report data to development';
+  String get renderFailureTitle =>
+      arabic ? 'تعذر عرض التقرير' : 'Unable to display report';
+  String get technicalDetails => arabic ? 'تفاصيل تقنية' : 'Technical details';
+  String recoveryDescription(ReportRecoveryKind kind) => switch (kind) {
+    ReportRecoveryKind.invalidStyle =>
+      arabic
+          ? 'تعذر عرض التقرير بسبب قيمة غير صالحة في إعدادات التنسيق.'
+          : 'The report could not be displayed because a formatting setting is invalid.',
+    ReportRecoveryKind.templates =>
+      arabic
+          ? 'يتعذر العثور على قالب تقرير متوافق.'
+          : 'A compatible report template could not be found.',
+    ReportRecoveryKind.presenterResources =>
+      arabic
+          ? 'مستعرض التقارير غير جاهز أو غير متوافق.'
+          : 'Presenter resources are missing or incompatible.',
+    ReportRecoveryKind.generic =>
+      arabic
+          ? 'تعذر إكمال عرض التقرير.'
+          : 'The report could not finish rendering.',
+  };
+  String recoveryNextStep(ReportRecoveryKind kind) => switch (kind) {
+    ReportRecoveryKind.invalidStyle =>
+      arabic
+          ? 'صحح قيمة التصميم من مصدر التقرير، أو اختر قالبًا آخر، ثم أعد المحاولة.'
+          : 'Correct the style value at the report source, or choose another template, then retry.',
+    ReportRecoveryKind.templates =>
+      arabic
+          ? 'حدّث القوالب المتاحة ثم حاول مرة أخرى.'
+          : 'Update available templates, then try again.',
+    ReportRecoveryKind.presenterResources =>
+      arabic
+          ? 'جهّز مستعرض التقارير ثم حاول مرة أخرى.'
+          : 'Prepare Presenter resources, then try again.',
+    ReportRecoveryKind.generic =>
+      arabic
+          ? 'أعد المحاولة أو اختر قالبًا آخر.'
+          : 'Retry or choose another template.',
+  };
+  String get maintenanceAndSupport =>
+      arabic ? 'الصيانة والدعم' : 'Maintenance and support';
+  String get clearCacheFiles =>
+      arabic ? 'حذف الموارد المحمّلة' : 'Clear downloaded resources';
+  String get clearCacheFilesDescription => arabic
+      ? 'يحذف القوالب ومستعرض التقارير المحفوظين دون اتصال، مع الاحتفاظ بالتفضيلات المحفوظة.'
+      : 'Removes cached templates and the offline Presenter while keeping saved preferences.';
+  String get sendReportDataToDevelopment => arabic
+      ? 'مشاركة بيانات التقرير مع فريق التطوير'
+      : 'Share report data with development';
   String get developmentSupportDescription => arabic
       ? 'مساعدة فريق التطوير على تحسين التقرير'
       : 'Help the development team improve this report';
   String get preparingDevelopmentSupportShare =>
       arabic ? 'جارٍ تجهيز المشاركة…' : 'Preparing share…';
-  String get clearCacheWarningTitle => arabic ? 'حذف ملفات الكاش؟' : 'Delete cache files?';
+  String get clearCacheWarningTitle =>
+      arabic ? 'حذف الموارد المحمّلة؟' : 'Clear downloaded resources?';
   String get clearCacheWarningBody => arabic
-      ? 'سيتم حذف ملفات التقارير المخزنة . لن يتم حذف تفضيلات القالب المحفوظة.'
-      : 'Only cached templates and offline Presenter files will be deleted. Saved report settings and template preferences will be kept.';
-  String get deleteCache => arabic ? 'حذف الكاش' : 'Delete cache';
+      ? 'سيؤدي التأكيد إلى حذف القوالب ومستعرض التقارير المحفوظين دون اتصال، مع الاحتفاظ بالتفضيلات المحفوظة.'
+      : 'Confirming removes cached templates and offline Presenter files. Saved preferences are kept.';
+  String get deleteCache => arabic ? 'حذف الموارد' : 'Clear resources';
   String get cacheCleared => arabic
       ? 'تم حذف ملفات الكاش. حدّث التقارير للمتابعة.'
       : 'Cache files were deleted. Update resources to continue.';
@@ -85,64 +144,87 @@ class ReportFlowStrings {
   String get close => arabic ? 'إغلاق' : 'Close';
   String get settings => arabic ? 'إعدادات التقرير' : 'Report settings';
   String get resources => arabic ? 'الموارد' : 'Resources';
-  String get defaultTemplate => arabic ? 'القالب الافتراضي' : 'Default template';
+  String get defaultTemplate =>
+      arabic ? 'القالب الافتراضي' : 'Default template';
   String get changeTemplate => arabic ? 'تغيير القالب' : 'Change template';
-  String get prepareAndSynchronize => arabic ? 'تحديث التقارير' : 'Prepare and update';
-  String get prepareAndSynchronizeDescription =>
-      arabic ? 'تحديث القوالب والمستعرض' : 'Manage available preparation and updates';
-  String get saveAndRefresh => arabic ? 'حفظ وتحديث التقرير' : 'Save and refresh report';
+  String get prepareAndSynchronize =>
+      arabic ? 'تحديث التقارير' : 'Prepare and update';
+  String get prepareAndSynchronizeDescription => arabic
+      ? 'تحديث القوالب والمستعرض'
+      : 'Manage available preparation and updates';
+  String get saveAndRefresh =>
+      arabic ? 'حفظ وتحديث التقرير' : 'Save and refresh report';
   String get useTemplate => arabic ? 'استخدام القالب' : 'Use template';
-  String get adoptAndOpenReport => arabic ? 'اعتماد القالب وفتح التقرير' : 'Adopt and open report';
+  String get adoptAndOpenReport =>
+      arabic ? 'اعتماد القالب وفتح التقرير' : 'Adopt and open report';
   String get print => arabic ? 'طباعة' : 'Print';
-  String get preparingPrint => arabic ? 'جارٍ تجهيز الطباعة' : 'Preparing print';
-  String get connectingPrinter => arabic ? 'جارٍ الاتصال بالطابعة' : 'Connecting printer';
-  String get sendingToPrinter => arabic ? 'جارٍ إرسال الطباعة' : 'Sending to printer';
+  String get preparingPrint =>
+      arabic ? 'جارٍ تجهيز الطباعة' : 'Preparing print';
+  String get connectingPrinter =>
+      arabic ? 'جارٍ الاتصال بالطابعة' : 'Connecting printer';
+  String get sendingToPrinter =>
+      arabic ? 'جارٍ إرسال الطباعة' : 'Sending to printer';
   String get thermalPrinterSettings =>
       arabic ? 'إعدادات الطابعة الحرارية' : 'Thermal printer settings';
   String get printingSection => arabic ? 'الطباعة' : 'Printing';
   String get configureThermalPrinter =>
       arabic ? 'إعداد الطابعة الحرارية' : 'Set up thermal printer';
-  String get noDefaultPrinterConfigured =>
-      arabic ? 'لم يتم إعداد طابعة افتراضية.' : 'No default printer has been configured.';
+  String get noDefaultPrinterConfigured => arabic
+      ? 'لم يتم إعداد طابعة افتراضية.'
+      : 'No default printer has been configured.';
   String get thermalPrinterSettingsDescription => arabic
       ? 'تغيير الاتصال، عرض الطباعة، وخيارات الورق.'
       : 'Change the connection, print width, and paper options.';
-  String get printerConnectionType => arabic ? 'نوع الاتصال' : 'Connection type';
+  String get printerConnectionType =>
+      arabic ? 'نوع الاتصال' : 'Connection type';
   String get printerName => arabic ? 'اسم الطابعة' : 'Printer name';
   String get bluetooth => 'Bluetooth';
   String get usb => 'USB';
   String get tcpNetwork => arabic ? 'الشبكة (TCP)' : 'TCP / Network';
-  String get suggestedPaperSize => arabic ? 'مقاس الورق المقترح' : 'Suggested paper size';
-  String get printableWidth => arabic ? 'العرض القابل للطباعة (بكسل)' : 'Printable width (px)';
+  String get suggestedPaperSize =>
+      arabic ? 'مقاس الورق المقترح' : 'Suggested paper size';
+  String get printableWidth =>
+      arabic ? 'العرض القابل للطباعة (بكسل)' : 'Printable width (px)';
   String get copies => arabic ? 'النسخ' : 'Copies';
   String get feedDots => arabic ? 'تغذية الورق (نقطة)' : 'Feed dots';
   String get grayscale => arabic ? 'تدرج رمادي' : 'Grayscale';
   String get grayscaleDescription =>
       arabic ? 'إيقافه يرسل أسود وأبيض' : 'When off, black and white is sent';
-  String get sendCutCommand => arabic ? 'إرسال أمر قص الورق' : 'Send paper-cut command';
-  String get sendCutCommandDescription =>
-      arabic ? 'لا يمكن التحقق من وجود قاطع في الطابعة' : 'The printer cutter cannot be detected';
+  String get sendCutCommand =>
+      arabic ? 'إرسال أمر قص الورق' : 'Send paper-cut command';
+  String get sendCutCommandDescription => arabic
+      ? 'لا يمكن التحقق من وجود قاطع في الطابعة'
+      : 'The printer cutter cannot be detected';
   String get testPrint => arabic ? 'طباعة اختبار' : 'Test print';
-  String get saveDefaultPrinter => arabic ? 'حفظ الطابعة الافتراضية' : 'Save default printer';
-  String get removeDefaultPrinter => arabic ? 'إزالة الطابعة الافتراضية' : 'Remove default printer';
-  String get defaultPrinter => arabic ? 'الطابعة الافتراضية' : 'Default printer';
+  String get saveDefaultPrinter =>
+      arabic ? 'حفظ الطابعة الافتراضية' : 'Save default printer';
+  String get removeDefaultPrinter =>
+      arabic ? 'إزالة الطابعة الافتراضية' : 'Remove default printer';
+  String get defaultPrinter =>
+      arabic ? 'الطابعة الافتراضية' : 'Default printer';
   String get refreshDevices => arabic ? 'تحديث الأجهزة' : 'Refresh devices';
   String get bluetoothPairedDevices =>
       arabic ? 'الأجهزة المقترنة عبر Bluetooth' : 'Paired Bluetooth devices';
-  String get connectedUsbPrinters => arabic ? 'طابعات USB المتصلة' : 'Connected USB printers';
-  String get hostOrIpAddress => arabic ? 'عنوان المضيف أو IP' : 'Host / IP address';
+  String get connectedUsbPrinters =>
+      arabic ? 'طابعات USB المتصلة' : 'Connected USB printers';
+  String get hostOrIpAddress =>
+      arabic ? 'عنوان المضيف أو IP' : 'Host / IP address';
   String get port => arabic ? 'المنفذ' : 'Port';
-  String get timeoutSeconds => arabic ? 'مهلة الاتصال (ثوانٍ)' : 'Timeout (seconds)';
+  String get timeoutSeconds =>
+      arabic ? 'مهلة الاتصال (ثوانٍ)' : 'Timeout (seconds)';
   String get refreshToShowDevices => arabic
       ? 'اضغط «تحديث الأجهزة» لعرض الأجهزة المتاحة.'
       : 'Refresh devices to show available devices.';
   String get invalidPrintableWidth =>
       arabic ? 'أدخل عرض طباعة صالحًا.' : 'Enter a valid printable width.';
-  String get hostRequired =>
-      arabic ? 'أدخل عنوان IP أو اسم المضيف.' : 'Enter an IP address or hostname.';
-  String get invalidPort => arabic ? 'أدخل منفذًا بين 1 و65535.' : 'Enter a port from 1 to 65535.';
-  String get invalidTimeout =>
-      arabic ? 'أدخل مهلة بين 1 و60 ثانية.' : 'Enter a timeout from 1 to 60 seconds.';
+  String get hostRequired => arabic
+      ? 'أدخل عنوان IP أو اسم المضيف.'
+      : 'Enter an IP address or hostname.';
+  String get invalidPort =>
+      arabic ? 'أدخل منفذًا بين 1 و65535.' : 'Enter a port from 1 to 65535.';
+  String get invalidTimeout => arabic
+      ? 'أدخل مهلة بين 1 و60 ثانية.'
+      : 'Enter a timeout from 1 to 60 seconds.';
   String get savedPrinterUnavailable => arabic
       ? 'الطابعة المحفوظة غير متاحة الآن. اربطها من إعدادات Android ثم حدّث الأجهزة وأعد اختيارها.'
       : 'The saved printer is unavailable. Pair it in Android settings, refresh devices, then select it again.';
@@ -195,7 +277,8 @@ class ReportFlowStrings {
   String get pageSize => arabic ? 'الحجم' : 'Size';
   String get reportType => arabic ? 'نوع التقرير' : 'Report Type';
   String get customType => arabic ? 'النوع المخصص' : 'Custom type';
-  String get documentSettings => arabic ? 'إعدادات المستند' : 'Document settings';
+  String get documentSettings =>
+      arabic ? 'إعدادات المستند' : 'Document settings';
   String get apply => arabic ? 'تطبيق' : 'Apply';
   String get all => arabic ? 'الكل' : 'All';
 
@@ -234,8 +317,9 @@ class ReportFlowStrings {
     required double height,
     required ReportMeasurementUnit unit,
   }) {
-    String number(double value) =>
-        value == value.roundToDouble() ? value.toInt().toString() : value.toStringAsFixed(1);
+    String number(double value) => value == value.roundToDouble()
+        ? value.toInt().toString()
+        : value.toStringAsFixed(1);
     return '${number(width)} × ${number(height)} ${unit.value}';
   }
 
@@ -253,26 +337,35 @@ class ReportFlowStrings {
     required double height,
     required ReportMeasurementUnit unit,
   }) {
-    String number(double value) =>
-        value == value.roundToDouble() ? value.toInt().toString() : value.toStringAsFixed(1);
+    String number(double value) => value == value.roundToDouble()
+        ? value.toInt().toString()
+        : value.toStringAsFixed(1);
     return '${number(width)}×${number(height)}${unit.value}';
   }
 
-  String orientationValueLabel(ReportOrientation orientation) => switch (orientation) {
-    ReportOrientation.portrait => arabic ? 'عمودي' : 'Portrait',
-    ReportOrientation.landscape => arabic ? 'أفقي' : 'Landscape',
-  };
+  String orientationValueLabel(ReportOrientation orientation) =>
+      switch (orientation) {
+        ReportOrientation.portrait => arabic ? 'عمودي' : 'Portrait',
+        ReportOrientation.landscape => arabic ? 'أفقي' : 'Landscape',
+      };
   String get loading => arabic ? 'جارٍ التحميل…' : 'Loading…';
-  String get preparingReportLoading => arabic ? 'تجهيز التقرير…' : 'Preparing report…';
+  String get preparingReportLoading =>
+      arabic ? 'تجهيز التقرير…' : 'Preparing report…';
   String get preparingDataStage => arabic ? 'تجهيز البيانات' : 'Preparing data';
-  String get preparingReportStage => arabic ? 'إعداد التقرير' : 'Preparing report';
+  String get preparingReportStage =>
+      arabic ? 'إعداد التقرير' : 'Preparing report';
   String get openingPreviewStage => arabic ? 'عرض التقرير' : 'Opening preview';
-  String get syncingTemplates => arabic ? 'جارٍ تحديث القوالب…' : 'Updating templates…';
-  String get syncingPresenter => arabic ? 'جارٍ تحديث مستعرض التقارير…' : 'Updating Presenter…';
-  String get preparingPreview => arabic ? 'تجهيز التقرير…' : 'Preparing preview…';
-  String get noSearchResults => arabic ? 'لا توجد قوالب مطابقة.' : 'No matching templates.';
-  String matchingTemplates(int count) =>
-      arabic ? 'القوالب المطابقة: $count' : '$count matching template${count == 1 ? '' : 's'}';
+  String get syncingTemplates =>
+      arabic ? 'جارٍ تحديث القوالب…' : 'Updating templates…';
+  String get syncingPresenter =>
+      arabic ? 'جارٍ تحديث مستعرض التقارير…' : 'Updating Presenter…';
+  String get preparingPreview =>
+      arabic ? 'تجهيز التقرير…' : 'Preparing preview…';
+  String get noSearchResults =>
+      arabic ? 'لا توجد قوالب مطابقة.' : 'No matching templates.';
+  String matchingTemplates(int count) => arabic
+      ? 'القوالب المطابقة: $count'
+      : '$count matching template${count == 1 ? '' : 's'}';
   String templateCount(int count) => arabic
       ? 'عدد القوالب المتوافقة: $count'
       : '$count compatible template${count == 1 ? '' : 's'}';
@@ -290,7 +383,8 @@ class ReportFlowStrings {
     return '$cachedLabel: $cachedCount · $compatibleLabel: $compatibleCount';
   }
 
-  String lastSynchronized(String date) => arabic ? 'آخر تحديث: $date' : 'Last updated: $date';
+  String lastSynchronized(String date) =>
+      arabic ? 'آخر تحديث: $date' : 'Last updated: $date';
   String presenterBundleDetails({
     required String presenterVersion,
     required String bundleVersion,
@@ -298,9 +392,14 @@ class ReportFlowStrings {
   }) {
     final details = arabic
         ? <String>['رقم النسخة: $presenterVersion', 'الحزمة: $bundleVersion']
-        : <String>['version Number: $presenterVersion', 'Bundle: $bundleVersion'];
+        : <String>[
+            'version Number: $presenterVersion',
+            'Bundle: $bundleVersion',
+          ];
     if (updatedDate != null) {
-      details.add(arabic ? 'تاريخ التحديث: $updatedDate' : 'Updated: $updatedDate');
+      details.add(
+        arabic ? 'تاريخ التحديث: $updatedDate' : 'Updated: $updatedDate',
+      );
     }
     return details.join(' · ');
   }
@@ -344,7 +443,8 @@ class ReportFlowStrings {
   String get presenterOfflineUnavailableHelp => arabic
       ? 'حدّث مستعرض التقارير للعمل بدون اتصال.'
       : 'Update Presenter before enabling offline mode.';
-  String get previewFailed => arabic ? 'تعذر عرض التقرير.' : 'The report could not be displayed.';
+  String get previewFailed =>
+      arabic ? 'تعذر عرض التقرير.' : 'The report could not be displayed.';
   String get presenterIncompatible => arabic
       ? 'نسخة مستعرض التقارير قديمة أو غير متوافقة. حدّث مستعرض التقارير ثم أعد المحاولة.'
       : 'The Presenter is outdated or incompatible. Update it and try again.';
@@ -353,9 +453,11 @@ class ReportFlowStrings {
       : 'Report rendering took longer than expected. Retry or update Presenter.';
   String get printSubmitted =>
       arabic ? 'تم إرسال التقرير للطباعة.' : 'Report submitted for printing.';
-  String get printCancelled => arabic ? 'تم إلغاء الطباعة.' : 'Printing was cancelled.';
+  String get printCancelled =>
+      arabic ? 'تم إلغاء الطباعة.' : 'Printing was cancelled.';
   String get pdfSaved => arabic ? 'تم حفظ ملف PDF.' : 'PDF saved.';
-  String get pdfShared => arabic ? 'تم فتح مشاركة ملف PDF.' : 'PDF share opened.';
+  String get pdfShared =>
+      arabic ? 'تم فتح مشاركة ملف PDF.' : 'PDF share opened.';
   String get cleanupWarning => arabic
       ? 'أُغلق التقرير مع تعذر إكمال التنظيف.'
       : 'The report closed with an incomplete cleanup warning.';
@@ -364,7 +466,9 @@ class ReportFlowStrings {
     if (failure == null) return previewFailed;
     return switch (failure.code) {
       ReportFlowFailureCode.flowAlreadyActive =>
-        arabic ? 'هناك تقرير مفتوح بالفعل.' : 'Another report flow is already active.',
+        arabic
+            ? 'هناك تقرير مفتوح بالفعل.'
+            : 'Another report flow is already active.',
       ReportFlowFailureCode.noCompatibleTemplates =>
         arabic
             ? 'لا توجد قوالب متوافقة لهذا التقرير.'
@@ -386,7 +490,9 @@ class ReportFlowStrings {
       ReportFlowFailureCode.pdfGenerationFailed =>
         arabic ? 'تعذر إنشاء ملف PDF.' : 'PDF generation failed.',
       ReportFlowFailureCode.persistenceFailed =>
-        arabic ? 'تعذر حفظ إعدادات التقرير.' : 'The report settings could not be saved.',
+        arabic
+            ? 'تعذر حفظ إعدادات التقرير.'
+            : 'The report settings could not be saved.',
       ReportFlowFailureCode.exportUnavailable =>
         arabic
             ? 'التصدير غير متاح حتى يكتمل عرض التقرير.'
@@ -396,20 +502,27 @@ class ReportFlowStrings {
             ? 'انتظر حتى تكتمل عملية الإخراج الحالية.'
             : 'Wait for the current output action to finish.',
       ReportFlowFailureCode.operationInProgress =>
-        arabic ? 'انتظر حتى تكتمل العملية الحالية.' : 'Wait for the current operation to finish.',
-      ReportFlowFailureCode.exportFailed => arabic ? 'تعذر تصدير ملف PDF.' : 'PDF export failed.',
+        arabic
+            ? 'انتظر حتى تكتمل العملية الحالية.'
+            : 'Wait for the current operation to finish.',
+      ReportFlowFailureCode.exportFailed =>
+        arabic ? 'تعذر تصدير ملف PDF.' : 'PDF export failed.',
       ReportFlowFailureCode.developmentSupportFailed =>
         arabic
             ? 'تعذر إنشاء أو مشاركة بيانات التقرير.'
             : 'Report support data could not be created or shared.',
       ReportFlowFailureCode.cacheClearFailed =>
-        arabic ? 'تعذر حذف ملفات الكاش بالكامل.' : 'Cache files could not be fully deleted.',
+        arabic
+            ? 'تعذر حذف ملفات الكاش بالكامل.'
+            : 'Cache files could not be fully deleted.',
       ReportFlowFailureCode.printUnavailable =>
         arabic
             ? 'الطباعة غير متاحة حتى يكتمل عرض التقرير.'
             : 'Printing is unavailable until report rendering completes.',
       ReportFlowFailureCode.printSetupRequired =>
-        arabic ? 'يجب إكمال إعداد الطباعة أولًا.' : 'Printer setup must be completed first.',
+        arabic
+            ? 'يجب إكمال إعداد الطباعة أولًا.'
+            : 'Printer setup must be completed first.',
       ReportFlowFailureCode.printAppNotInstalled =>
         arabic
             ? 'تطبيق الطباعة المطلوب غير مثبت.'

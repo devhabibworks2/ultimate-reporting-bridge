@@ -20,6 +20,7 @@ import 'bridge_presenter_view.dart';
 import 'bridge_ui_config.dart';
 import 'bridge_ui_features.dart';
 import 'presenter_action_dock.dart';
+import 'report_failure_recovery.dart';
 import 'report_preview_loading_overlay.dart';
 import 'template_presentation.dart';
 import 'thermal_printer_settings_screen.dart';
@@ -1922,16 +1923,47 @@ class _SettingsPage extends StatelessWidget {
                 _SettingsSectionTitle(strings.resources),
                 const SizedBox(height: 8),
                 _SettingsSurface(
-                  child: _SettingsActionTile(
-                    key: const ValueKey<String>('settings-resource-row'),
-                    icon: Icons.sync_rounded,
-                    title: strings.prepareAndSynchronize,
-                    description: strings.prepareAndSynchronizeDescription,
-                    onTap: state.busy
-                        ? null
-                        : () => controller.openResourcePreparation(
-                            ResourcePreparationOrigin.reportSettings,
-                          ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      _SettingsActionTile(
+                        key: const ValueKey<String>(
+                          'settings-templates-resource-row',
+                        ),
+                        icon: Icons.description_outlined,
+                        title: strings.selectedTemplatesResource,
+                        titleFontWeight: FontWeight.w600,
+                        trailing: _SettingsResourceStatusBadge(
+                          label: _templateResourceStatus(state, strings),
+                        ),
+                        onTap: state.busy
+                            ? null
+                            : () => controller.openResourcePreparation(
+                                ResourcePreparationOrigin.reportSettings,
+                              ),
+                      ),
+                      Divider(
+                        height: 1,
+                        thickness: 1,
+                        color: scheme.outlineVariant.withValues(alpha: 0.62),
+                      ),
+                      _SettingsActionTile(
+                        key: const ValueKey<String>(
+                          'settings-presenter-resource-row',
+                        ),
+                        icon: Icons.web_asset_outlined,
+                        title: strings.selectedPresenterResource,
+                        titleFontWeight: FontWeight.w600,
+                        trailing: _SettingsResourceStatusBadge(
+                          label: _presenterResourceStatus(state, strings),
+                        ),
+                        onTap: state.busy
+                            ? null
+                            : () => controller.openResourcePreparation(
+                                ResourcePreparationOrigin.reportSettings,
+                              ),
+                      ),
+                    ],
                   ),
                 ),
                 if (controller.supportActionsAvailable) ...<Widget>[
@@ -2085,6 +2117,8 @@ class _SettingsActionTile extends StatelessWidget {
     this.description,
     this.destructive = false,
     this.loading = false,
+    this.trailing,
+    this.titleFontWeight = FontWeight.w800,
   });
 
   final IconData icon;
@@ -2093,6 +2127,8 @@ class _SettingsActionTile extends StatelessWidget {
   final VoidCallback? onTap;
   final bool destructive;
   final bool loading;
+  final Widget? trailing;
+  final FontWeight titleFontWeight;
 
   @override
   Widget build(BuildContext context) {
@@ -2118,7 +2154,7 @@ class _SettingsActionTile extends StatelessWidget {
           : _SettingsLeadingIcon(icon: icon, destructive: destructive),
       title: Text(
         title,
-        style: TextStyle(color: titleColor, fontWeight: FontWeight.w800),
+        style: TextStyle(color: titleColor, fontWeight: titleFontWeight),
       ),
       subtitle: description == null
           ? null
@@ -2129,12 +2165,14 @@ class _SettingsActionTile extends StatelessWidget {
                 style: TextStyle(color: scheme.onSurfaceVariant),
               ),
             ),
-      trailing: Icon(
-        Icons.chevron_right_rounded,
-        color: destructive
-            ? scheme.error.withValues(alpha: 0.82)
-            : scheme.onSurfaceVariant,
-      ),
+      trailing:
+          trailing ??
+          Icon(
+            Icons.chevron_right_rounded,
+            color: destructive
+                ? scheme.error.withValues(alpha: 0.82)
+                : scheme.onSurfaceVariant,
+          ),
       enabled: onTap != null,
       onTap: onTap,
     );
@@ -2166,6 +2204,7 @@ class _SettingsSupportActions extends StatelessWidget {
               ? strings.preparingDevelopmentSupportShare
               : strings.sendReportDataToDevelopment,
           description: strings.developmentSupportDescription,
+          titleFontWeight: FontWeight.w600,
           loading: sharingSupport,
           onTap: state.busy
               ? null
@@ -2179,6 +2218,7 @@ class _SettingsSupportActions extends StatelessWidget {
         title: strings.clearCacheFiles,
         description: strings.clearCacheFilesDescription,
         destructive: true,
+        titleFontWeight: FontWeight.w600,
         onTap: state.busy
             ? null
             : () => unawaited(
@@ -2226,34 +2266,116 @@ class _ModeControl extends StatelessWidget {
   Widget build(BuildContext context) {
     final offline = selected == PresenterModePreference.offline;
     return _SettingsSurface(
-      child: SwitchListTile.adaptive(
-        key: const ValueKey<String>('settings-offline-mode-row'),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
-        secondary: _SettingsLeadingIcon(
-          icon: offline ? Icons.wifi_off_rounded : Icons.wifi_rounded,
-        ),
-        title: Text(
-          strings.usePresenterOffline,
-          style: const TextStyle(fontWeight: FontWeight.w800),
-        ),
-        subtitle: Text(
-          !offlineAvailable
-              ? strings.presenterOfflineUnavailableHelp
-              : offline
-              ? strings.presenterOfflineHelp
-              : strings.presenterOnlineHelp,
-        ),
-        value: offline,
-        onChanged: !enabled || (!offline && !offlineAvailable)
-            ? null
-            : (value) => onChanged(
-                value
-                    ? PresenterModePreference.offline
-                    : PresenterModePreference.online,
-              ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          SwitchListTile.adaptive(
+            key: const ValueKey<String>('settings-offline-mode-row'),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 2,
+            ),
+            secondary: _SettingsLeadingIcon(
+              icon: offline ? Icons.wifi_off_rounded : Icons.wifi_rounded,
+            ),
+            title: Text(
+              strings.usePresenterOffline,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            subtitle: Text(
+              !offlineAvailable
+                  ? strings.presenterOfflineUnavailableHelp
+                  : offline
+                  ? strings.presenterOfflineHelp
+                  : strings.presenterOnlineHelp,
+            ),
+            value: offline,
+            onChanged: !enabled || (!offline && !offlineAvailable)
+                ? null
+                : (value) => onChanged(
+                    value
+                        ? PresenterModePreference.offline
+                        : PresenterModePreference.online,
+                  ),
+          ),
+          Padding(
+            padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Icon(
+                  offline ? Icons.wifi_off_rounded : Icons.wifi_rounded,
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    offline
+                        ? strings.selectedOfflineMode
+                        : strings.selectedOnlineMode,
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
+}
+
+String _templateResourceStatus(
+  ReportFlowState state,
+  ReportFlowStrings strings,
+) {
+  if (state.templateSync == ReportOperationStatus.failed ||
+      state.templateSyncFailure != null) {
+    return strings.resourceNeedsAttention;
+  }
+  if (state.templateCatalogCount > 0 || state.templatesReady) {
+    return strings.resourceReady;
+  }
+  if (state.templateSync == ReportOperationStatus.running) {
+    return strings.resourceUpdating;
+  }
+  return strings.resourceNotChecked;
+}
+
+String _presenterResourceStatus(
+  ReportFlowState state,
+  ReportFlowStrings strings,
+) {
+  if (state.presenterSync == ReportOperationStatus.failed ||
+      state.presenterSyncFailure != null) {
+    return strings.resourceNeedsAttention;
+  }
+  if (state.presenterCached) return strings.resourceCached;
+  if (state.presenterSync == ReportOperationStatus.running) {
+    return strings.resourceUpdating;
+  }
+  return strings.resourceNotChecked;
+}
+
+class _SettingsResourceStatusBadge extends StatelessWidget {
+  const _SettingsResourceStatusBadge({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: <Widget>[
+      Chip(
+        label: Text(label),
+        visualDensity: VisualDensity.compact,
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        padding: EdgeInsets.zero,
+      ),
+      const SizedBox(width: 2),
+      Icon(Icons.chevron_right_rounded, color: Theme.of(context).hintColor),
+    ],
+  );
 }
 
 class _CurrentTemplateCard extends StatelessWidget {
@@ -2922,6 +3044,7 @@ class _PreviewPageState extends State<_PreviewPage> {
                 state: state,
                 controller: widget.controller,
                 strings: widget.strings,
+                features: widget.features,
               ),
             ),
           if (!loading)
@@ -2984,11 +3107,13 @@ class _RenderFailureOverlay extends StatelessWidget {
     required this.state,
     required this.controller,
     required this.strings,
+    required this.features,
   });
 
   final ReportFlowState state;
   final ReportFlowController controller;
   final ReportFlowStrings strings;
+  final BridgeUiFeatures features;
 
   @override
   Widget build(BuildContext context) {
@@ -2996,8 +3121,14 @@ class _RenderFailureOverlay extends StatelessWidget {
     final failure =
         state.failure ??
         const ReportFlowFailure(code: ReportFlowFailureCode.unknown);
+    final recovery = classifyReportRecovery(failure);
     final code = _failureCodeValue(failure);
-    final message = _failureCombinedMessage(failure, strings);
+    final canEditSettings =
+        recovery == ReportRecoveryKind.invalidStyle &&
+        features.showSettings &&
+        state.presenterLaunch != null &&
+        state.stage == ReportFlowStage.failed &&
+        !state.busy;
 
     return ColoredBox(
       color: scheme.scrim.withValues(alpha: 0.58),
@@ -3060,62 +3191,82 @@ class _RenderFailureOverlay extends StatelessWidget {
                                   ?.copyWith(fontWeight: FontWeight.w900),
                             ),
                             const SizedBox(height: 18),
-                            _FailureValueBlock(
-                              label: strings.errorCode,
-                              child: SelectableText(
-                                code,
-                                key: const ValueKey<String>(
-                                  'render-failure-code',
-                                ),
-                                textDirection: TextDirection.ltr,
-                                textAlign:
-                                    Directionality.of(context) ==
-                                        TextDirection.rtl
-                                    ? TextAlign.right
-                                    : TextAlign.left,
-                                style: Theme.of(context).textTheme.bodyMedium
-                                    ?.copyWith(
-                                      fontFamily: 'monospace',
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                              ),
+                            Text(
+                              strings.recoveryDescription(recovery),
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context).textTheme.bodyLarge,
                             ),
-                            const SizedBox(height: 14),
-                            _FailureValueBlock(
-                              label: strings.errorMessage,
-                              child: _ExpandableFailureMessage(
-                                message: message,
-                                strings: strings,
+                            const SizedBox(height: 8),
+                            Text(
+                              strings.recoveryNextStep(recovery),
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                            const SizedBox(height: 8),
+                            ExpansionTile(
+                              key: const ValueKey<String>(
+                                'render-failure-technical-details',
                               ),
+                              tilePadding: EdgeInsets.zero,
+                              childrenPadding: const EdgeInsets.only(bottom: 8),
+                              title: Text(strings.technicalDetails),
+                              children: <Widget>[
+                                _FailureValueBlock(
+                                  label: strings.errorCode,
+                                  child: SelectableText(
+                                    code,
+                                    key: const ValueKey<String>(
+                                      'render-failure-code',
+                                    ),
+                                    textDirection: TextDirection.ltr,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium
+                                        ?.copyWith(fontFamily: 'monospace'),
+                                  ),
+                                ),
+                                if (failure.technicalCategory != null &&
+                                    failure.technicalCategory!
+                                        .trim()
+                                        .isNotEmpty)
+                                  _FailureValueBlock(
+                                    label: strings.technicalCategory,
+                                    child: SelectableText(
+                                      failure.technicalCategory!.trim(),
+                                      textDirection: TextDirection.ltr,
+                                    ),
+                                  ),
+                                if (failure.technicalPath != null &&
+                                    failure.technicalPath!.trim().isNotEmpty)
+                                  _FailureValueBlock(
+                                    label: strings.technicalPath,
+                                    child: SelectableText(
+                                      failure.technicalPath!.trim(),
+                                      key: const ValueKey<String>(
+                                        'render-failure-technical-path',
+                                      ),
+                                      textDirection: TextDirection.ltr,
+                                    ),
+                                  ),
+                                if (failure.diagnostic != null &&
+                                    failure.diagnostic!.trim().isNotEmpty)
+                                  _FailureValueBlock(
+                                    label: strings.errorMessage,
+                                    child: SelectableText(
+                                      failure.diagnostic!.trim(),
+                                      textDirection: _contentTextDirection(
+                                        failure.diagnostic!,
+                                        Directionality.of(context),
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
                             const SizedBox(height: 18),
                             Divider(color: scheme.outlineVariant),
                             const SizedBox(height: 12),
                             LayoutBuilder(
-                              builder: (context, constraints) {
-                                final stacked =
-                                    constraints.maxWidth < 360 ||
-                                    MediaQuery.textScalerOf(context).scale(1) >=
-                                        1.3;
-                                final update = FilledButton.icon(
-                                  key: const ValueKey<String>(
-                                    'render-failure-update-templates',
-                                  ),
-                                  onPressed: state.busy
-                                      ? null
-                                      : () {
-                                          controller.openResourcePreparation(
-                                            ResourcePreparationOrigin
-                                                .previewRecovery,
-                                          );
-                                          unawaited(controller.syncTemplates());
-                                        },
-                                  icon: const Icon(Icons.refresh),
-                                  label: Text(
-                                    strings.updateTemplates,
-                                    textAlign: TextAlign.center,
-                                  ),
-                                );
+                              builder: (context, _) {
                                 final change = OutlinedButton.icon(
                                   key: const ValueKey<String>(
                                     'render-failure-change-template',
@@ -3132,36 +3283,102 @@ class _RenderFailureOverlay extends StatelessWidget {
                                     textAlign: TextAlign.center,
                                   ),
                                 );
-                                if (stacked) {
-                                  return Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.stretch,
-                                    children: <Widget>[
-                                      ConstrainedBox(
-                                        constraints: const BoxConstraints(
-                                          minHeight: 52,
-                                        ),
-                                        child: update,
-                                      ),
-                                      const SizedBox(height: 10),
-                                      ConstrainedBox(
-                                        constraints: const BoxConstraints(
-                                          minHeight: 52,
-                                        ),
-                                        child: change,
-                                      ),
-                                    ],
-                                  );
-                                }
-                                return SizedBox(
-                                  height: 52,
-                                  child: Row(
-                                    children: <Widget>[
-                                      Expanded(child: update),
-                                      const SizedBox(width: 8),
-                                      Expanded(child: change),
-                                    ],
+                                final primaryLabel = switch (recovery) {
+                                  ReportRecoveryKind.invalidStyle =>
+                                    canEditSettings
+                                        ? strings.settings
+                                        : strings.changeTemplate,
+                                  ReportRecoveryKind.templates =>
+                                    strings.updateTemplates,
+                                  ReportRecoveryKind.presenterResources =>
+                                    strings.prepareAndSynchronize,
+                                  ReportRecoveryKind.generic => strings.retry,
+                                };
+                                final primaryAction = switch (recovery) {
+                                  ReportRecoveryKind.invalidStyle =>
+                                    canEditSettings
+                                        ? controller.editSettings
+                                        : () =>
+                                              controller.openTemplateSelection(
+                                                origin: TemplateSelectionOrigin
+                                                    .previewRecovery,
+                                              ),
+                                  ReportRecoveryKind.templates ||
+                                  ReportRecoveryKind.presenterResources =>
+                                    () => controller.openResourcePreparation(
+                                      ResourcePreparationOrigin.previewRecovery,
+                                    ),
+                                  ReportRecoveryKind.generic => () => unawaited(
+                                    controller.retry(),
                                   ),
+                                };
+                                final primary = FilledButton.icon(
+                                  key: const ValueKey<String>(
+                                    'render-failure-primary-action',
+                                  ),
+                                  onPressed: state.busy ? null : primaryAction,
+                                  icon: Icon(switch (recovery) {
+                                    ReportRecoveryKind.invalidStyle =>
+                                      canEditSettings
+                                          ? Icons.settings_outlined
+                                          : Icons.description_outlined,
+                                    ReportRecoveryKind.templates ||
+                                    ReportRecoveryKind.presenterResources =>
+                                      Icons.sync_rounded,
+                                    ReportRecoveryKind.generic => Icons.refresh,
+                                  }),
+                                  label: Text(
+                                    primaryLabel,
+                                    textAlign: TextAlign.center,
+                                  ),
+                                );
+                                final retry = OutlinedButton.icon(
+                                  key: const ValueKey<String>(
+                                    'render-failure-retry',
+                                  ),
+                                  onPressed: state.busy
+                                      ? null
+                                      : () => unawaited(controller.retry()),
+                                  icon: const Icon(Icons.refresh),
+                                  label: Text(strings.retry),
+                                );
+                                final secondary = switch (recovery) {
+                                  ReportRecoveryKind.invalidStyle =>
+                                    canEditSettings ? change : retry,
+                                  ReportRecoveryKind.templates ||
+                                  ReportRecoveryKind.presenterResources =>
+                                    retry,
+                                  ReportRecoveryKind.generic => change,
+                                };
+                                final showTertiary = canEditSettings;
+                                final actions = <Widget>[
+                                  ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      minHeight: 48,
+                                    ),
+                                    child: primary,
+                                  ),
+                                  const SizedBox(height: 10),
+                                  ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      minHeight: 48,
+                                    ),
+                                    child: secondary,
+                                  ),
+                                  if (showTertiary) ...<Widget>[
+                                    const SizedBox(height: 10),
+                                    ConstrainedBox(
+                                      constraints: const BoxConstraints(
+                                        minHeight: 48,
+                                      ),
+                                      child: retry,
+                                    ),
+                                  ],
+                                ];
+                                return Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: actions,
                                 );
                               },
                             ),
