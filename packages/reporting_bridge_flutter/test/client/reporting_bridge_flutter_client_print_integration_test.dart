@@ -471,6 +471,185 @@ void main() {
   );
 
   test(
+    'headless path writes only override leaves to actual runtime template JSON',
+    () async {
+      addTearDown(bridge.dispose);
+      final endpoints = ReportServerEndpoints.deployed(
+        Uri.parse('https://example.test'),
+      );
+      final bridgeClient = ReportingBridgeClient(
+        apiBaseUrl: endpoints.apiBaseUrl,
+        cacheIdentityBaseUrl: endpoints.cacheIdentityBaseUrl,
+        presenterEntryUrl: endpoints.presenterEntryUrl,
+        bridgeRoot: root,
+      );
+      addTearDown(bridgeClient.dispose);
+      final request = _request(
+        entryPolicy: ReportEntryPolicy.smart,
+        requestId: 'headless-style-overrides',
+        seedData: <String, dynamic>{
+          'id': 'headless-style-overrides',
+          'rows': <dynamic>[
+            <String, dynamic>{'sku': 'A-1', 'quantity': 2},
+          ],
+        },
+        templateStyleOverrides: ReportTemplateStyleOverrides(
+          color: <String, Object?>{'primary': '#0E5A9C'},
+          font: <String, Object?>{'size_md': 9.5},
+        ),
+      );
+      final sourceTemplate = _headlessStyleTemplate();
+      final sourceDocumentBefore = jsonEncode(sourceTemplate.document);
+      final query = TemplateQueryRequest(
+        systemCode: request.templateSyncRequest.systemCode.value,
+        filter: request.templateSyncRequest.filter,
+        extra: request.templateSyncRequest.extra,
+      );
+      final templateCache = TemplateCacheService(
+        cacheRoot: bridgeTemplateCacheDirectoryForScope(
+          bridgeRoot: root,
+          scope: BridgeTemplateCacheScope(
+            apiBaseUrl: endpoints.cacheIdentityBaseUrl,
+            systemCode: query.systemCode,
+            filter: query.filter,
+            extra: query.extra,
+          ),
+        ),
+      );
+      await templateCache.putTemplate(sourceTemplate);
+      await templateCache.writeCatalogMetadata(
+        TemplateCatalogMetadata(
+          catalogRevision: 'headless-style-fixture',
+          systemCode: query.systemCode,
+          filterFingerprint: query.filterFingerprint,
+          extraFingerprint: query.extraFingerprint,
+          systemId: sourceTemplate.systemId,
+        ),
+      );
+      await _seedOfflinePresenter(
+        root,
+        resolveBridgeApiRoute(
+          endpoints.apiBaseUrl,
+          'presenter/bundles/manifest',
+        ),
+      );
+
+      final preferences = MemoryReportFlowPreferenceStore();
+      late Map<String, dynamic> runtimeTemplateDocument;
+      late String runtimeSeedJson;
+      late Map<String, dynamic> runtimeSession;
+      late CachedTemplate selectedTemplateInFlow;
+      late String selectedTemplateInFlowBefore;
+      final surface = _RecordingWarmableSurface(
+        onStart: (launch, controller) async {
+          final runtimeDirectory = Directory(
+            '${root.path}/runtime/${launch.sessionId}',
+          );
+          runtimeTemplateDocument =
+              jsonDecode(
+                    await File(
+                      '${runtimeDirectory.path}/template.json',
+                    ).readAsString(),
+                  )
+                  as Map<String, dynamic>;
+          runtimeSeedJson = await File(
+            '${runtimeDirectory.path}/seed_report_data.json',
+          ).readAsString();
+          runtimeSession =
+              jsonDecode(
+                    await File(
+                      '${runtimeDirectory.path}/session.json',
+                    ).readAsString(),
+                  )
+                  as Map<String, dynamic>;
+          selectedTemplateInFlow = controller.value.selectedTemplate!;
+          selectedTemplateInFlowBefore = jsonEncode(
+            selectedTemplateInFlow.document,
+          );
+        },
+      );
+      final fixture = _createClient(
+        root: root,
+        bridge: bridgeClient,
+        filePlatform: filePlatform,
+        printPlatform: _FakePrintPlatform(),
+        preferences: preferences,
+        headlessPresenterSurface: surface,
+      );
+      addTearDown(fixture.client.dispose);
+      await _seedSavedTemplate(
+        fixture.connection,
+        preferences,
+        templateCode: sourceTemplate.templateCode,
+        mode: PresenterModePreference.offline,
+      );
+      final cachedBefore = jsonEncode(
+        (await templateCache.getTemplateByCode(
+          sourceTemplate.templateCode,
+        ))!.document,
+      );
+      final seedDataBefore = jsonEncode(request.seedData);
+      expect(cachedBefore, sourceDocumentBefore);
+
+      final bytes = await fixture.client.generateReportPdfHeadless(request);
+
+      expect(bytes, Uint8List.fromList(<int>[1, 2, 3]));
+      expect(runtimeSession['sessionId'], 'headless-style-overrides');
+      expect(runtimeSession['selectedTemplate'], <String, dynamic>{
+        'type': 'sales_invoice',
+        'code': sourceTemplate.templateCode,
+        'systemCode': 'motakamel_transactions',
+      });
+      expect(runtimeSeedJson, seedDataBefore);
+      expect(jsonEncode(request.seedData), seedDataBefore);
+      expect(selectedTemplateInFlow.templateCode, sourceTemplate.templateCode);
+      expect(selectedTemplateInFlow.systemCode, sourceTemplate.systemCode);
+      expect(
+        runtimeTemplateDocument.keys.toSet(),
+        sourceTemplate.document.keys.toSet(),
+      );
+      for (final key in sourceTemplate.document.keys.where(
+        (key) => key != 'styleTokens',
+      )) {
+        expect(runtimeTemplateDocument[key], sourceTemplate.document[key]);
+      }
+      expect(runtimeTemplateDocument['styleTokens'], <String, dynamic>{
+        'color': <String, dynamic>{
+          'primary': '#0E5A9C',
+          'text_primary': '#223344',
+          'table_header_bg': '#334455',
+        },
+        'font': <String, dynamic>{
+          'family': 'NotoSansArabic',
+          'size_sm': 8,
+          'size_md': 9.5,
+          'size_lg': 16,
+          'weight_bold': '700',
+        },
+        'spacing': <String, dynamic>{'md': 8},
+        'border': <String, dynamic>{'width': 1},
+        'radius': <String, dynamic>{'md': 4},
+        'system': <String, dynamic>{'brand': 'canonical'},
+      });
+      expect(jsonEncode(sourceTemplate.document), sourceDocumentBefore);
+      expect(
+        jsonEncode(selectedTemplateInFlow.document),
+        selectedTemplateInFlowBefore,
+      );
+      expect(selectedTemplateInFlowBefore, sourceDocumentBefore);
+      expect(
+        jsonEncode(
+          (await templateCache.getTemplateByCode(
+            sourceTemplate.templateCode,
+          ))!.document,
+        ),
+        cachedBefore,
+      );
+      expect(surface.startCalls, 1);
+    },
+  );
+
+  test(
     'active interactive flow excludes headless PDF generation without hidden warm-up',
     () async {
       final surface = _RecordingWarmableSurface();
@@ -836,9 +1015,12 @@ ReportOpenRequest _request({
   ReportEntryPolicy entryPolicy = ReportEntryPolicy.alwaysPrepare,
   BridgeUiFeatures? featuresOverride,
   ReportTemplateStyleOverrides? templateStyleOverrides,
+  String? requestId,
+  Map<String, dynamic> seedData = const <String, dynamic>{'id': 1},
 }) => ReportOpenRequest(
-  seedData: const <String, dynamic>{'id': 1},
+  seedData: seedData,
   reportName: 'Invoice',
+  requestId: requestId,
   entryPolicy: entryPolicy,
   templateStyleOverrides: templateStyleOverrides,
   featuresOverride:
@@ -858,21 +1040,119 @@ ReportOpenRequest _request({
 
 Future<void> _seedSavedTemplate(
   ReportServerConnection connection,
-  ReportFlowPreferenceStore preferences,
-) {
+  ReportFlowPreferenceStore preferences, {
+  String templateCode = 'THERMAL-EN',
+  PresenterModePreference mode = PresenterModePreference.online,
+}) {
   return preferences.save(
     ReportPreferenceScope(
       connectionKey: connection.preferenceSourceKey,
       system: 'motakamel_transactions',
       reportType: 'sales_invoice',
     ),
-    const ReportFlowPreferences(
-      templateCode: 'THERMAL-EN',
-      mode: PresenterModePreference.online,
+    ReportFlowPreferences(
+      templateCode: templateCode,
+      mode: mode,
       language: 'en',
       layout: 'thermal',
       size: '80mm',
     ),
+  );
+}
+
+CachedTemplate _headlessStyleTemplate() => CachedTemplate(
+  type: 'sales_invoice',
+  systemId: 7,
+  systemCode: 'motakamel_transactions',
+  code: 'THERMAL-STYLE',
+  name: 'Thermal style fixture',
+  document: <String, dynamic>{
+    'schemaVersion': '1.0.0',
+    'meta': <String, dynamic>{
+      'name': 'Thermal style fixture',
+      'family': 'sales_invoice',
+      'systemCode': 'motakamel_transactions',
+      'code': 'THERMAL-STYLE',
+    },
+    'page': <String, dynamic>{
+      'unit': 'mm',
+      'layout': 'Thermal',
+      'size': '80mm',
+      'width': 80,
+      'height': 220,
+      'orientation': 'portrait',
+      'language': 'en',
+      'direction': 'ltr',
+    },
+    'styleTokens': <String, dynamic>{
+      'color': <String, dynamic>{
+        'primary': '#112233',
+        'text_primary': '#223344',
+        'table_header_bg': '#334455',
+      },
+      'font': <String, dynamic>{
+        'family': 'NotoSansArabic',
+        'size_sm': 8,
+        'size_md': 12,
+        'size_lg': 16,
+        'weight_bold': '700',
+      },
+      'spacing': <String, dynamic>{'md': 8},
+      'border': <String, dynamic>{'width': 1},
+      'radius': <String, dynamic>{'md': 4},
+      'system': <String, dynamic>{'brand': 'canonical'},
+    },
+    'assets': <dynamic>[],
+    'layers': <dynamic>[],
+    'elements': <dynamic>[],
+  },
+);
+
+Future<void> _seedOfflinePresenter(Directory root, Uri manifestUrl) async {
+  const fontHash =
+      'a446817d40e4dc37c526fb5e30859fe0dd7bb0a7d5b3c0c56f7a0626d0019307';
+  const iconHash =
+      '6cbd50037e50937c7aa9ad4a2de7770c8f5db9455c1be9e021bc236060dafa21';
+  final resourceHashes = <String, String>{
+    for (final path in PresenterBundleContract.requiredResourceFiles)
+      path: path == 'icons/MaterialIcons-Regular.ttf' ? iconHash : fontHash,
+  };
+  final entries = <String, String>{
+    'index.html': '<!doctype html><html><head><base href="/"></head></html>',
+    PresenterBundleContract.presenterEntryFile: PresenterBundleContract
+        .requiredJavaScriptMarkers
+        .join(' '),
+    PresenterBundleContract.presenterManifestFile: jsonEncode(<String, Object>{
+      'formatVersion': 1,
+      'presenterVersion': '1.0.0',
+      'devVersion': 1,
+      'protocolVersion': 1,
+      'entry': PresenterBundleContract.presenterEntryFile,
+      'resourceManifest': PresenterBundleContract.resourceManifestFile,
+    }),
+    PresenterBundleContract.resourceManifestFile: jsonEncode(<String, Object>{
+      'version': 'headless-fixture-v1',
+      'bundleSha256': List<String>.filled(64, 'a').join(),
+      'resources': resourceHashes,
+    }),
+    for (final path in resourceHashes.keys)
+      path: path == 'icons/MaterialIcons-Regular.ttf'
+          ? 'icon-bytes'
+          : 'font-bytes',
+  };
+  final presenterRoot = Directory('${root.path}/presenter');
+  for (final entry in entries.entries) {
+    final file = File('${presenterRoot.path}/${entry.key}');
+    await file.parent.create(recursive: true);
+    await file.writeAsString(entry.value);
+  }
+  await File('${root.path}/presenter_manifest.json').writeAsString(
+    jsonEncode(<String, Object>{
+      'manifestUrl': manifestUrl.toString(),
+      'presenterVersion': '1.0.0',
+      'bundleVersion': 'headless-fixture-v1',
+      'devVersion': 1,
+    }),
   );
 }
 
@@ -930,11 +1210,17 @@ final class _RecordingWarmableSurface
     this.startEntered,
     this.startGate,
     this.warmUpError,
+    this.onStart,
   });
 
   final Completer<void>? startEntered;
   final Completer<void>? startGate;
   final Object? warmUpError;
+  final Future<void> Function(
+    PresenterSessionLaunch launch,
+    ReportFlowController controller,
+  )?
+  onStart;
   int warmUpCalls = 0;
   int startCalls = 0;
   int disposeCalls = 0;
@@ -958,6 +1244,7 @@ final class _RecordingWarmableSurface
     await Future<void>.value();
     startCalls += 1;
     lastStartedSurface = this;
+    await onStart?.call(launch, controller);
     if (startEntered != null && !startEntered!.isCompleted) {
       startEntered!.complete();
     }
