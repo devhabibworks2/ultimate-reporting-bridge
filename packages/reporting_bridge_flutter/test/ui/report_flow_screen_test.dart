@@ -1899,6 +1899,76 @@ void main() {
     },
   );
 
+  for (final code in <ReportFlowFailureCode>[
+    ReportFlowFailureCode.templateSyncFailed,
+    ReportFlowFailureCode.noCompatibleTemplates,
+    ReportFlowFailureCode.presenterSyncFailed,
+  ]) {
+    testWidgets('resource recovery has no inert Retry: ${code.name}', (
+      WidgetTester tester,
+    ) async {
+      InAppWebViewPlatform.instance = _TestInAppWebViewPlatform();
+      final controller = _FakeController(
+        _selectionState().copyWith(
+          stage: ReportFlowStage.failed,
+          committedTemplateCode: 't1',
+          presenterLaunch: const PresenterSessionLaunch(
+            presenterUrl: 'https://presenter.test/session',
+            sessionId: 'session-resource-recovery',
+            presenterVersion: '1.0.0',
+            presenterDevVersion: 1,
+          ),
+          failure: ReportFlowFailure(code: code),
+          renderStatus: PresenterRenderStatus.failed,
+        ),
+      );
+      await _pumpDirectFlow(tester, controller);
+      expect(
+        find.byKey(const ValueKey<String>('render-failure-retry')),
+        findsNothing,
+      );
+      expect(find.text('Change template'), findsOneWidget);
+      await tester.ensureVisible(find.text('Change template'));
+      await tester.tap(find.text('Change template'));
+      await tester.pumpAndSettle();
+      expect(controller.value.stage, ReportFlowStage.selectingTemplate);
+      expect(
+        controller.value.selectionOrigin,
+        TemplateSelectionOrigin.previewRecovery,
+      );
+    });
+  }
+
+  testWidgets('technical details preserve allow-listed Presenter metadata', (
+    WidgetTester tester,
+  ) async {
+    InAppWebViewPlatform.instance = _TestInAppWebViewPlatform();
+    final controller = _FakeController(
+      _selectionState().copyWith(
+        stage: ReportFlowStage.failed,
+        committedTemplateCode: 't1',
+        presenterLaunch: const PresenterSessionLaunch(
+          presenterUrl: 'https://presenter.test/session',
+          sessionId: 'session-resource-recovery',
+          presenterVersion: '1.0.0',
+          presenterDevVersion: 1,
+        ),
+        failure: const ReportFlowFailure(
+          code: ReportFlowFailureCode.renderFailed,
+          details: {'source': 'presenter', 'sessionId': 'uat-session-marker'},
+          diagnostic: 'Invalid document.',
+        ),
+        renderStatus: PresenterRenderStatus.failed,
+      ),
+    );
+    await _pumpDirectFlow(tester, controller);
+    expect(find.text('uat-session-marker'), findsNothing);
+    await tester.tap(find.text('Technical details'));
+    await tester.pumpAndSettle();
+    expect(find.text('uat-session-marker'), findsOneWidget);
+    expect(find.text('presenter'), findsOneWidget);
+  });
+
   testWidgets(
     'structured invalid style offers Report settings and keeps path collapsed',
     (WidgetTester tester) async {

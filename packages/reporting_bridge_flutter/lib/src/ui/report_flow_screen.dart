@@ -3260,6 +3260,21 @@ class _RenderFailureOverlay extends StatelessWidget {
                                       ),
                                     ),
                                   ),
+                                for (final key in const <String>[
+                                  'source',
+                                  'sessionId',
+                                ])
+                                  if (failure.details[key] is String &&
+                                      (failure.details[key] as String)
+                                          .trim()
+                                          .isNotEmpty)
+                                    _FailureValueBlock(
+                                      label: key,
+                                      child: SelectableText(
+                                        (failure.details[key] as String).trim(),
+                                        textDirection: TextDirection.ltr,
+                                      ),
+                                    ),
                               ],
                             ),
                             const SizedBox(height: 18),
@@ -3347,10 +3362,13 @@ class _RenderFailureOverlay extends StatelessWidget {
                                     canEditSettings ? change : retry,
                                   ReportRecoveryKind.templates ||
                                   ReportRecoveryKind.presenterResources =>
-                                    retry,
+                                    change,
                                   ReportRecoveryKind.generic => change,
                                 };
-                                final showTertiary = canEditSettings;
+                                final showTertiary =
+                                    recovery ==
+                                        ReportRecoveryKind.invalidStyle &&
+                                    canEditSettings;
                                 final actions = <Widget>[
                                   ConstrainedBox(
                                     constraints: const BoxConstraints(
