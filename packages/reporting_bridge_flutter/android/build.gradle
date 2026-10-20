@@ -22,7 +22,9 @@ repositories {
 
 android {
     namespace 'com.ultimate.reportbuilder.reporting_bridge_flutter'
-    compileSdk 35
+       compileSdk Math.max(flutter.compileSdkVersion, 36)
+    // compileSdk = flutter.compileSdkVersion
+    // compileSdk = (findProperty('urbCompileSdk') ?: '35').toString().toInteger()
 
     defaultConfig {
         minSdk 24
