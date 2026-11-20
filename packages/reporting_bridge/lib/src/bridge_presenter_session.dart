@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'bridge_cache_namespace.dart';
@@ -12,6 +13,7 @@ import 'bridge_semantic_version.dart';
 import 'bridge_template_cache.dart';
 import 'bridge_template_sync.dart';
 import 'report_template_style_overrides.dart';
+import 'report_template_page_overrides.dart';
 
 enum PresenterSessionMode { online, offline }
 
@@ -28,6 +30,7 @@ class PresenterSessionRequest {
     this.apiHeaders,
     this.sessionId,
     this.templateStyleOverrides,
+    this.templatePageOverrides,
   });
 
   final String reportType;
@@ -41,6 +44,7 @@ class PresenterSessionRequest {
   final ApiHeaderConfig? apiHeaders;
   final String? sessionId;
   final ReportTemplateStyleOverrides? templateStyleOverrides;
+  final ReportTemplatePageOverrides? templatePageOverrides;
 }
 
 class PresenterSessionLaunch {
@@ -50,6 +54,7 @@ class PresenterSessionLaunch {
     required this.presenterVersion,
     required this.presenterDevVersion,
     this.presenterManifest,
+    this.effectivePage,
   });
 
   final String presenterUrl;
@@ -57,6 +62,9 @@ class PresenterSessionLaunch {
   final String presenterVersion;
   final int presenterDevVersion;
   final PresenterCacheManifest? presenterManifest;
+  /// Immutable snapshot of the effective page on this committed session.
+  /// Null means the original template page was used.
+  final Map<String, dynamic>? effectivePage;
 }
 
 /// Owns one active Presenter runtime session for a host application.
@@ -189,12 +197,19 @@ class PresenterSessionCoordinator {
         requestedSessionId != null && requestedSessionId == previousSessionId
         ? '$requestedSessionId-${DateTime.now().microsecondsSinceEpoch}'
         : requestedSessionId;
+    final pageOverrides = request.templatePageOverrides;
+    final pageDocument = pageOverrides == null || pageOverrides.isEmpty
+        ? request.template.document
+        : applyReportTemplatePageOverrides(
+            document: request.template.document,
+            overrides: pageOverrides,
+          );
     final styleOverrides = request.templateStyleOverrides;
     final effectiveTemplateDocument =
         styleOverrides == null || styleOverrides.isEmpty
-        ? request.template.document
+        ? pageDocument
         : applyReportTemplateStyleOverrides(
-            document: request.template.document,
+            document: pageDocument,
             overrides: styleOverrides,
           );
     final runtimeSession = await runtimeStorage.prepareRuntimeSession(
@@ -245,6 +260,12 @@ class PresenterSessionCoordinator {
         presenterVersion: presenterVersion,
         presenterDevVersion: presenterDevVersion,
         presenterManifest: currentManifest,
+        effectivePage: pageOverrides == null || pageOverrides.isEmpty
+            ? null
+            : Map<String, dynamic>.unmodifiable(
+                jsonDecode(jsonEncode(effectiveTemplateDocument['page']))
+                    as Map<String, dynamic>,
+              ),
       );
       if (deferReplacementCommit && previousSessionId != null) {
         _stagedSession = _StagedPresenterSession(

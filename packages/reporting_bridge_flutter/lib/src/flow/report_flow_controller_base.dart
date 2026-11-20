@@ -1233,6 +1233,7 @@ class ReportFlowControllerImpl
             : 'ltr',
         sessionId: request.requestId,
         templateStyleOverrides: request.templateStyleOverrides,
+        templatePageOverrides: request.templatePageOverrides,
       );
       final launch = replacing
           ? await _runtime.bridgeClient.prepareReplacementSession(
@@ -1979,10 +1980,14 @@ class ReportFlowControllerImpl
   ReportFlowFailure _asFailure(Object error, ReportFlowFailureCode fallback) {
     if (error is ReportFlowFailure) return error;
     if (error is BridgeRuntimeException) {
+      final pagePath = error.code == BridgeRuntimeErrorCodes.templatePageOverrideInvalid
+          ? RegExp(r'^(page(?:\.[a-zA-Z_]+)*):').firstMatch(error.message)?.group(1)
+          : null;
       return ReportFlowFailure(
         code: fallback,
         diagnostic: error.message,
         technicalCode: error.code,
+        technicalPath: pagePath,
       );
     }
     return ReportFlowFailure(

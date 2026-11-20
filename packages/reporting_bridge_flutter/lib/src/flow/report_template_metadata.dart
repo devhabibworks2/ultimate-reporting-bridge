@@ -32,8 +32,12 @@ final class ReportTemplateMetadata {
   bool get hasPrintableDimensions =>
       width.isFinite && height.isFinite && width > 0 && height > 0;
 
-  factory ReportTemplateMetadata.fromTemplate(CachedTemplate template) {
-    final document = template.document;
+  factory ReportTemplateMetadata.fromTemplate(CachedTemplate template) =>
+      ReportTemplateMetadata.fromDocument(template.document);
+
+  /// Reads effective runtime metadata without changing original-template
+  /// selection eligibility or cache ownership.
+  factory ReportTemplateMetadata.fromDocument(Map<String, dynamic> document) {
     final page = _map(document['page']);
     final meta = _map(document['meta']);
 

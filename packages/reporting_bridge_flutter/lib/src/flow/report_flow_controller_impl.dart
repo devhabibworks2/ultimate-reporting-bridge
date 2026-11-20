@@ -253,7 +253,8 @@ class ReportFlowControllerImpl extends base.ReportFlowControllerImpl
   Future<ReportPrintResult> _submitPrint() async {
     beginOutputAction(ReportExportAction.print);
     try {
-      final template = value.selectedTemplate ?? value.committedTemplate;
+      // Prefer the template belonging to the committed Presenter session.
+      final template = value.committedTemplate ?? value.selectedTemplate;
       if (template == null) {
         throw const ReportFlowFailure(
           code: ReportFlowFailureCode.printUnavailable,
@@ -270,7 +271,13 @@ class ReportFlowControllerImpl extends base.ReportFlowControllerImpl
           'templateCode': template.templateCode,
         },
         action: () async {
-          final metadata = template.reportMetadata;
+          final effectivePage = value.presenterLaunch?.effectivePage;
+          final metadata = effectivePage == null
+              ? template.reportMetadata
+              : ReportTemplateMetadata.fromDocument(<String, dynamic>{
+                  ...template.document,
+                  'page': effectivePage,
+                });
           late final ReportPrintDocumentMetadata document;
           try {
             document = metadata.toPrintDocumentMetadata();
