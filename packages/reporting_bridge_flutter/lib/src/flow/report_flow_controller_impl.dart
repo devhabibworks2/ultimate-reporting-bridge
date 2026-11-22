@@ -777,11 +777,13 @@ class _WorkflowBridgeClient extends ReportingBridgeClient {
       seedData: request.seedData,
       template: request.template,
       locale: metadata.language.value,
-      direction: metadata.direction,
+      direction:
+          request.templatePageOverrides?.direction?.value ?? metadata.direction,
       branding: request.branding,
       apiHeaders: request.apiHeaders,
       sessionId: request.sessionId,
       templateStyleOverrides: request.templateStyleOverrides,
+      templatePageOverrides: request.templatePageOverrides,
     );
   }
 

@@ -134,34 +134,50 @@ void main() {
     expect(bridge.lastSessionRequest?.direction, 'ltr');
   });
 
-  test('effective landscape page metadata reaches print without rewriting selected template', () async {
-    bridge.templates = <CachedTemplate>[_pagesTemplate('pages-original')];
-    final printPlatform = _FakePrintPlatform();
-    final fixture = _createController(
-      connection: connection,
-      bridge: bridge,
-      preferences: preferences,
-      printPlatform: printPlatform,
-      pageOverrides: const ReportTemplatePageOverrides(
-        layout: BridgePageLayout.pages,
-        size: BridgePageSize.a4,
-        orientation: BridgePageOrientation.landscape,
-        direction: BridgePageDirection.rtl,
-      ),
-    );
-    addTearDown(fixture.controller.dispose);
-    await _ready(fixture);
-    await fixture.controller.printPdf();
-    final effective = printPlatform.lastRequest!.document;
-    expect(effective.layout, 'Pages');
-    expect(effective.size, 'A4');
-    expect(effective.width, 297);
-    expect(effective.height, 210);
-    expect(effective.orientation, 'landscape');
-    expect(bridge.templates.single.reportMetadata.width, 210);
-    expect(bridge.lastSessionRequest?.templatePageOverrides?.direction,
-        BridgePageDirection.rtl);
-  });
+  test(
+    'effective landscape page metadata reaches print without rewriting selected template',
+    () async {
+      bridge.templates = <CachedTemplate>[_pagesTemplate('pages-original')];
+      final printPlatform = _FakePrintPlatform();
+      final fixture = _createController(
+        connection: connection,
+        bridge: bridge,
+        preferences: preferences,
+        printPlatform: printPlatform,
+        pageOverrides: const ReportTemplatePageOverrides(
+          layout: BridgePageLayout.pages,
+          size: BridgePageSize.a4,
+          orientation: BridgePageOrientation.landscape,
+          direction: BridgePageDirection.rtl,
+        ),
+      );
+      addTearDown(fixture.controller.dispose);
+      await _ready(fixture);
+      expect(bridge.prepareCalls, greaterThan(0));
+      expect(
+        bridge.lastSessionRequest?.templatePageOverrides?.size,
+        BridgePageSize.a4,
+      );
+      expect(bridge.lastSessionRequest?.direction, 'rtl');
+      expect(fixture.controller.value.presenterLaunch, isNotNull);
+      expect(
+        fixture.controller.value.presenterLaunch?.effectivePage?['width'],
+        297,
+      );
+      await fixture.controller.printPdf();
+      final effective = printPlatform.lastRequest!.document;
+      expect(effective.layout, 'Pages');
+      expect(effective.size, 'A4');
+      expect(effective.width, 297);
+      expect(effective.height, 210);
+      expect(effective.orientation, 'landscape');
+      expect(bridge.templates.single.reportMetadata.width, 210);
+      expect(
+        bridge.lastSessionRequest?.templatePageOverrides?.direction,
+        BridgePageDirection.rtl,
+      );
+    },
+  );
 
   test('duplicate and cross-action output submissions are blocked', () async {
     final barrier = Completer<ReportPrintResult>();

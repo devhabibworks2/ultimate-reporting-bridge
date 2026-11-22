@@ -86,15 +86,18 @@ Map<String, dynamic> applyReportTemplatePageOverrides({
   if (originalPage is! Map) {
     _reject('page', 'Template page must be a JSON object.');
   }
-  final source = Map<String, dynamic>.from(originalPage as Map);
+  final source = Map<String, dynamic>.from(originalPage);
   // Direction-only is a surgical runtime change. Keep even legacy authoring
   // dimensions exactly as they were; never silently normalize A4 geometry.
   if (overrides.direction != null &&
-      overrides.layout == null && overrides.size == null &&
-      overrides.orientation == null && overrides.widthMm == null &&
+      overrides.layout == null &&
+      overrides.size == null &&
+      overrides.orientation == null &&
+      overrides.widthMm == null &&
       overrides.heightMm == null) {
     return _snapshotWithPage(document, <String, dynamic>{
-      ...source, 'direction': overrides.direction!.value,
+      ...source,
+      'direction': overrides.direction!.value,
     });
   }
   if (source['unit'] != 'mm') {
@@ -104,11 +107,19 @@ Map<String, dynamic> applyReportTemplatePageOverrides({
   final sourceLayout = source['layout']?.toString();
   final sourceSize = source['size']?.toString();
   final sourceOrientation = source['orientation']?.toString();
-  final layout = overrides.layout?.value ?? sourceLayout;
+  var layout = overrides.layout?.value ?? sourceLayout;
   var size = overrides.size?.value ?? sourceSize;
   var orientation = overrides.orientation?.value ?? sourceOrientation;
   final direction = overrides.direction?.value ?? source['direction'];
 
+  // All six public properties are independent. A paper preset determines its
+  // compatible layout if layout was not explicitly requested.
+  if (overrides.layout == null && overrides.size != null) {
+    layout = switch (overrides.size!) {
+      BridgePageSize.thermal58 || BridgePageSize.thermal80 => 'Thermal',
+      _ => 'Pages',
+    };
+  }
   if (layout != 'Pages' && layout != 'Thermal') {
     _reject('page.layout', 'Expected Pages or Thermal.');
   }
@@ -116,13 +127,23 @@ Map<String, dynamic> applyReportTemplatePageOverrides({
     _reject('page.direction', 'Expected rtl or ltr.');
   }
   final switchingLayout = layout != sourceLayout;
-  if (switchingLayout && overrides.size == null) {
-    _reject('page.size', 'Changing layout requires an explicit compatible page size.');
+  if (switchingLayout) {
+    // Inherit a compatible preset when available. Otherwise use the standard
+    // default for the selected layout. Never use Thermal height for Pages.
+    if (overrides.size == null) {
+      size = layout == 'Thermal' ? '80mm' : 'A4';
+    }
+    if (overrides.orientation == null) {
+      orientation = 'portrait';
+    }
   }
 
   if (layout == 'Thermal') {
     if (overrides.heightMm != null) {
-      _reject('page.height', 'Thermal PDF height is content-driven; a fixed-height override is not supported.');
+      _reject(
+        'page.height',
+        'Thermal PDF height is content-driven; a fixed-height override is not supported.',
+      );
     }
     if (size != '80mm' && size != '58mm') {
       _reject('page.size', 'Thermal currently supports only 58mm and 80mm.');
@@ -140,7 +161,10 @@ Map<String, dynamic> applyReportTemplatePageOverrides({
     }
     final height = _number(source['height']);
     if (!height.isFinite || height <= 0) {
-      _reject('page.height', 'Thermal serialized compatibility height must be positive.');
+      _reject(
+        'page.height',
+        'Thermal serialized compatibility height must be positive.',
+      );
     }
     _checkMargins(source['margins'], width, height, thermal: true);
     return _snapshotWithPage(document, <String, dynamic>{
@@ -164,17 +188,18 @@ Map<String, dynamic> applyReportTemplatePageOverrides({
   final requestedDimensions =
       overrides.widthMm != null || overrides.heightMm != null;
 
-  // Supplying two custom dimensions without a size is an explicit request to
-  // change the physical sheet, not an instruction to mislabel it as A4/A5.
-  if (overrides.size == null && requestedDimensions &&
-      size != 'custom' && !switchingLayout) {
-    if (overrides.widthMm == null || overrides.heightMm == null) {
-      _reject('page.width', 'Changing a named preset requires widthMm and heightMm together.');
-    }
+  // Even a single dimension is a valid custom page request. Preserve the
+  // other dimension from the selected source template.
+  if (overrides.size == null &&
+      requestedDimensions &&
+      size != 'custom' &&
+      !switchingLayout) {
     final candidate = _namedDimensions(size, orientation);
     if (candidate == null ||
-        !_approx(overrides.widthMm!, candidate.$1) ||
-        !_approx(overrides.heightMm!, candidate.$2)) {
+        (overrides.widthMm != null &&
+            !_approx(overrides.widthMm!, candidate.$1)) ||
+        (overrides.heightMm != null &&
+            !_approx(overrides.heightMm!, candidate.$2))) {
       size = 'custom';
     }
   }
@@ -182,30 +207,62 @@ Map<String, dynamic> applyReportTemplatePageOverrides({
   late final double width;
   late final double height;
   if (size == 'custom') {
-    final previouslyCustom = sourceLayout == 'Pages' && sourceSize == 'custom';
-    if (!previouslyCustom &&
+    // Existing Pages geometry provides omitted dimensions. Thermal's stored
+    // height is not a physical page length, so converting Thermal to custom
+    // Pages still needs both explicit physical dimensions.
+    if (sourceLayout == 'Thermal' &&
         (overrides.widthMm == null || overrides.heightMm == null)) {
-      _reject('page.width', 'Switching to custom Pages requires both widthMm and heightMm.');
+      _reject(
+        'page.width',
+        'Converting Thermal to custom Pages requires physical width and height.',
+      );
     }
-    width = overrides.widthMm ?? sourceWidth;
-    height = overrides.heightMm ?? sourceHeight;
+    // A custom page has no preset to rotate its geometry. If orientation is
+    // the only physical override, swap existing dimensions rather than merely
+    // changing the orientation label.
+    final rotating =
+        sourceLayout == 'Pages' &&
+        overrides.orientation != null &&
+        sourceOrientation != orientation;
+    width = overrides.widthMm ?? (rotating ? sourceHeight : sourceWidth);
+    height = overrides.heightMm ?? (rotating ? sourceWidth : sourceHeight);
+
+    if (overrides.orientation == null) {
+      // A single width or height may change the sheet's aspect ratio.
+      orientation = width > height ? 'landscape' : 'portrait';
+    } else if ((orientation == 'landscape' && width < height) ||
+        (orientation == 'portrait' && width > height)) {
+      _reject(
+        'page.orientation',
+        'Explicit custom orientation conflicts with physical dimensions.',
+      );
+    }
   } else {
     final expected = _namedDimensions(size, orientation);
     if (expected == null) {
       _reject('page.size', 'Pages supports A4, A5, Letter, or custom.');
     }
-    width = expected!.$1;
+    width = expected.$1;
     height = expected.$2;
     if (overrides.widthMm != null && !_approx(overrides.widthMm!, width)) {
-      _reject('page.width', 'Explicit width contradicts $size $orientation ($width mm).');
+      _reject(
+        'page.width',
+        'Explicit width contradicts $size $orientation ($width mm).',
+      );
     }
     if (overrides.heightMm != null && !_approx(overrides.heightMm!, height)) {
-      _reject('page.height', 'Explicit height contradicts $size $orientation ($height mm).');
+      _reject(
+        'page.height',
+        'Explicit height contradicts $size $orientation ($height mm).',
+      );
     }
   }
 
   if (!width.isFinite || !height.isFinite || width <= 0 || height <= 0) {
-    _reject('page.width', 'Width and height must be finite positive mm values.');
+    _reject(
+      'page.width',
+      'Width and height must be finite positive mm values.',
+    );
   }
   _checkMargins(source['margins'], width, height, thermal: false);
   return _snapshotWithPage(document, <String, dynamic>{
@@ -228,9 +285,7 @@ Map<String, dynamic> applyReportTemplatePageOverrides({
     _ => null,
   };
   if (sides == null) return null;
-  return orientation == 'landscape'
-      ? (sides.$2, sides.$1)
-      : sides;
+  return orientation == 'landscape' ? (sides.$2, sides.$1) : sides;
 }
 
 Map<String, dynamic> _snapshotWithPage(
@@ -242,8 +297,7 @@ Map<String, dynamic> _snapshotWithPage(
     _reject('document', 'Template must be a JSON object.');
   }
   final pageCopy = jsonDecode(jsonEncode(page)) as Map<String, dynamic>;
-  return Map<String, dynamic>.from(decoded as Map<String, dynamic>)
-    ..['page'] = pageCopy;
+  return Map<String, dynamic>.from(decoded)..['page'] = pageCopy;
 }
 
 void _checkOptionalDimension(double? value, String path) {
@@ -252,10 +306,15 @@ void _checkOptionalDimension(double? value, String path) {
   }
 }
 
-void _checkMargins(Object? raw, double width, double height, {required bool thermal}) {
+void _checkMargins(
+  Object? raw,
+  double width,
+  double height, {
+  required bool thermal,
+}) {
   if (raw == null) return;
   if (raw is! Map) _reject('page.margins', 'Expected a margins object.');
-  final margins = raw as Map;
+  final margins = raw;
   final top = _number(margins['top'] ?? 0);
   final bottom = _number(margins['bottom'] ?? 0);
   final left = _number(margins['left'] ?? 0);
@@ -268,10 +327,12 @@ void _checkMargins(Object? raw, double width, double height, {required bool ther
   }
 }
 
-double _number(Object? raw) =>
-    raw is num ? raw.toDouble() : (double.tryParse(raw?.toString() ?? '') ?? double.nan);
+double _number(Object? raw) => raw is num
+    ? raw.toDouble()
+    : (double.tryParse(raw?.toString() ?? '') ?? double.nan);
 
-bool _approx(double actual, double expected) => (actual - expected).abs() < 0.05;
+bool _approx(double actual, double expected) =>
+    (actual - expected).abs() < 0.05;
 
 Never _reject(String path, String message) => throw BridgeRuntimeException(
   BridgeRuntimeErrorCodes.templatePageOverrideInvalid,

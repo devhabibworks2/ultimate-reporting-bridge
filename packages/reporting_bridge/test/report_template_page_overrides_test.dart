@@ -22,14 +22,22 @@ Map<String, dynamic> document({
     'language': 'en',
     'margins': <String, num>{'top': 10, 'right': 10, 'bottom': 10, 'left': 10},
   },
-  'styleTokens': <String, dynamic>{'color': <String, dynamic>{'primary': '#000000'}},
+  'styleTokens': <String, dynamic>{
+    'color': <String, dynamic>{'primary': '#000000'},
+  },
   'elements': <Map<String, dynamic>>[],
 };
 
 void main() {
   test('empty overrides preserve canonical document untouched', () {
     final original = document();
-    expect(applyReportTemplatePageOverrides(document: original, overrides: const ReportTemplatePageOverrides()), same(original));
+    expect(
+      applyReportTemplatePageOverrides(
+        document: original,
+        overrides: const ReportTemplatePageOverrides(),
+      ),
+      same(original),
+    );
   });
 
   test('A4 landscape derives dimensions, preserves source and other keys', () {
@@ -55,7 +63,9 @@ void main() {
   test('only direction changes direction, not UI locale or dimensions', () {
     final output = applyReportTemplatePageOverrides(
       document: document(),
-      overrides: const ReportTemplatePageOverrides(direction: BridgePageDirection.rtl),
+      overrides: const ReportTemplatePageOverrides(
+        direction: BridgePageDirection.rtl,
+      ),
     );
     final page = output['page'] as Map;
     expect(page['width'], 210);
@@ -64,16 +74,21 @@ void main() {
     expect(page['language'], 'en');
   });
 
-  test('direction-only does not normalize irregular legacy page dimensions', () {
-    final original = document(width: 208, height: 295);
-    final result = applyReportTemplatePageOverrides(
-      document: original,
-      overrides: const ReportTemplatePageOverrides(direction: BridgePageDirection.rtl),
-    );
-    expect((result['page'] as Map)['width'], 208);
-    expect((result['page'] as Map)['height'], 295);
-    expect((original['page'] as Map)['direction'], 'ltr');
-  });
+  test(
+    'direction-only does not normalize irregular legacy page dimensions',
+    () {
+      final original = document(width: 208, height: 295);
+      final result = applyReportTemplatePageOverrides(
+        document: original,
+        overrides: const ReportTemplatePageOverrides(
+          direction: BridgePageDirection.rtl,
+        ),
+      );
+      expect((result['page'] as Map)['width'], 208);
+      expect((result['page'] as Map)['height'], 295);
+      expect((original['page'] as Map)['direction'], 'ltr');
+    },
+  );
 
   test('Pages custom dimensions accepted', () {
     final output = applyReportTemplatePageOverrides(
@@ -94,20 +109,33 @@ void main() {
     expect(
       () => applyReportTemplatePageOverrides(
         document: document(),
-        overrides: const ReportTemplatePageOverrides(size: BridgePageSize.a4, widthMm: 105),
+        overrides: const ReportTemplatePageOverrides(
+          size: BridgePageSize.a4,
+          widthMm: 105,
+        ),
       ),
-      throwsA(isA<BridgeRuntimeException>().having((x) => x.message, 'message', contains('page.width'))),
+      throwsA(
+        isA<BridgeRuntimeException>().having(
+          (x) => x.message,
+          'message',
+          contains('page.width'),
+        ),
+      ),
     );
   });
 
-  test('custom requires both explicit dimensions when switching size', () {
-    expect(
-      () => applyReportTemplatePageOverrides(
-        document: document(),
-        overrides: const ReportTemplatePageOverrides(size: BridgePageSize.custom, widthMm: 105),
+  test('custom size may override width alone and preserve template height', () {
+    final result = applyReportTemplatePageOverrides(
+      document: document(),
+      overrides: const ReportTemplatePageOverrides(
+        size: BridgePageSize.custom,
+        widthMm: 105,
       ),
-      throwsA(isA<BridgeRuntimeException>()),
     );
+    final page = result['page'] as Map;
+    expect(page['size'], 'custom');
+    expect(page['width'], 105);
+    expect(page['height'], 297);
   });
 
   test('width and height imply custom when no named preset requested', () {
@@ -119,36 +147,78 @@ void main() {
   });
 
   test('thermal width is fixed and height remains compatibility metadata', () {
-    final original = document(layout: 'Thermal', size: '80mm', width: 80, height: 1000);
+    final original = document(
+      layout: 'Thermal',
+      size: '80mm',
+      width: 80,
+      height: 1000,
+    );
     final result = applyReportTemplatePageOverrides(
       document: original,
-      overrides: const ReportTemplatePageOverrides(direction: BridgePageDirection.rtl),
+      overrides: const ReportTemplatePageOverrides(
+        direction: BridgePageDirection.rtl,
+      ),
     );
     expect((result['page'] as Map)['height'], 1000);
     expect((result['page'] as Map)['width'], 80);
   });
 
-  test('thermal rejects explicit physical height, landscape and custom widths', () {
-    final original = document(layout: 'Thermal', size: '80mm', width: 80, height: 1000);
-    for (final value in [
-      const ReportTemplatePageOverrides(heightMm: 150),
-      const ReportTemplatePageOverrides(orientation: BridgePageOrientation.landscape),
-      const ReportTemplatePageOverrides(size: BridgePageSize.custom, widthMm: 72, heightMm: 1000),
-    ]) {
-      expect(() => applyReportTemplatePageOverrides(document: original, overrides: value), throwsA(isA<BridgeRuntimeException>()));
-    }
-  });
+  test(
+    'thermal rejects explicit physical height, landscape and custom widths',
+    () {
+      final original = document(
+        layout: 'Thermal',
+        size: '80mm',
+        width: 80,
+        height: 1000,
+      );
+      for (final value in [
+        const ReportTemplatePageOverrides(heightMm: 150),
+        const ReportTemplatePageOverrides(
+          orientation: BridgePageOrientation.landscape,
+        ),
+        const ReportTemplatePageOverrides(
+          layout: BridgePageLayout.thermal,
+          size: BridgePageSize.custom,
+          widthMm: 72,
+          heightMm: 1000,
+        ),
+      ]) {
+        expect(
+          () => applyReportTemplatePageOverrides(
+            document: original,
+            overrides: value,
+          ),
+          throwsA(isA<BridgeRuntimeException>()),
+        );
+      }
+    },
+  );
 
-  test('pages cannot inherit thermal compatibility height when converting', () {
-    final original = document(layout: 'Thermal', size: '80mm', width: 80, height: 1000);
-    expect(
-      () => applyReportTemplatePageOverrides(
+  test(
+    'Pages-only override derives A4 rather than inheriting Thermal height',
+    () {
+      final original = document(
+        layout: 'Thermal',
+        size: '80mm',
+        width: 80,
+        height: 1000,
+      );
+      final snapshot = jsonEncode(original);
+      final result = applyReportTemplatePageOverrides(
         document: original,
-        overrides: const ReportTemplatePageOverrides(layout: BridgePageLayout.pages),
-      ),
-      throwsA(isA<BridgeRuntimeException>()),
-    );
-  });
+        overrides: const ReportTemplatePageOverrides(
+          layout: BridgePageLayout.pages,
+        ),
+      );
+      final page = result['page'] as Map;
+      expect(page['layout'], 'Pages');
+      expect(page['size'], 'A4');
+      expect(page['width'], 210);
+      expect(page['height'], 297);
+      expect(jsonEncode(original), snapshot);
+    },
+  );
 
   test('impossible margins reject without editing caller-owned document', () {
     final original = document();
@@ -156,7 +226,11 @@ void main() {
     expect(
       () => applyReportTemplatePageOverrides(
         document: original,
-        overrides: const ReportTemplatePageOverrides(size: BridgePageSize.custom, widthMm: 15, heightMm: 15),
+        overrides: const ReportTemplatePageOverrides(
+          size: BridgePageSize.custom,
+          widthMm: 15,
+          heightMm: 15,
+        ),
       ),
       throwsA(isA<BridgeRuntimeException>()),
     );
