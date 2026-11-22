@@ -13,6 +13,7 @@ class ReportServerConnection {
     this.headers = const <String, String>{},
     this.headersProvider,
     this.httpClientFactory,
+    this.allowInvalidServerCertificates = false,
     this.diagnostics = const BridgeDiagnostics.disabled(),
   });
 
@@ -27,6 +28,37 @@ class ReportServerConnection {
   final Map<String, String> headers;
   final BridgeHeadersProvider? headersProvider;
   final HttpClient Function()? httpClientFactory;
+
+  /// Opt-in for development servers with expired, self-signed, or incomplete
+  /// HTTPS certificate chains. Only the configured API and Presenter origins
+  /// are exempted. This weakens TLS authentication and must not be enabled
+  /// when transmitting sensitive credentials over untrusted networks.
+  final bool allowInvalidServerCertificates;
+
+  /// True only for an explicitly opted-in HTTPS API or Presenter origin.
+  /// Host and port must both match; unrelated or redirected hosts are denied.
+  bool acceptsInvalidCertificateFor(String host, int port) {
+    if (!allowInvalidServerCertificates) return false;
+    bool matches(Uri uri) =>
+        uri.scheme == 'https' &&
+        uri.host.toLowerCase() == host.toLowerCase() &&
+        uri.port == port;
+    return matches(endpoints.apiBaseUrl) ||
+        matches(endpoints.presenterEntryUrl);
+  }
+
+  /// Preserves custom transport injection. Otherwise, optionally overrides
+  /// TLS verification only for the configured Report Server endpoints.
+  HttpClient Function()? get resolvedHttpClientFactory {
+    if (httpClientFactory != null || !allowInvalidServerCertificates) {
+      return httpClientFactory;
+    }
+    return () =>
+        HttpClient()
+          ..badCertificateCallback = (_, host, port) =>
+              acceptsInvalidCertificateFor(host, port);
+  }
+
   final BridgeDiagnostics diagnostics;
 
   String get preferenceSourceKey => <String>[

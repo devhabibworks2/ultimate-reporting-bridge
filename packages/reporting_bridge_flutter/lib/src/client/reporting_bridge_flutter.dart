@@ -110,7 +110,7 @@ class ReportingBridgeFlutter {
       bundleManifestUrl: connection.bundleManifestUrl,
       headers: connection.headers,
       headersProvider: connection.headersProvider,
-      httpClientFactory: connection.httpClientFactory,
+      httpClientFactory: connection.resolvedHttpClientFactory,
     );
     return DefaultReportingBridgeFlutterClient(
       connection: connection,

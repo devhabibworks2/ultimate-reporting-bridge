@@ -4,6 +4,7 @@ import '../printing/thermal_printer_controller.dart';
 import 'android_print_configuration.dart';
 import 'bridge_platform_adapters.dart';
 import 'ios_print_configuration.dart';
+import 'windows_system_report_print_platform.dart';
 
 Future<T> runManagedResourceCreation<T>({
   required Future<T> Function() create,
@@ -55,6 +56,11 @@ Future<ManagedPrintPlatformResources> resolveManagedPrintPlatform({
           ? thermalFactory(androidConfiguration)
           : androidFactory(androidConfiguration),
     TargetPlatform.iOS => iosFactory(iosPrintMode),
+    TargetPlatform.windows => Future<ManagedPrintPlatformResources>.value(
+      const ManagedPrintPlatformResources(
+        platform: WindowsSystemReportPrintPlatform(),
+      ),
+    ),
     _ => Future<ManagedPrintPlatformResources>.value(
       const ManagedPrintPlatformResources(
         platform: UnsupportedReportPrintPlatform(),

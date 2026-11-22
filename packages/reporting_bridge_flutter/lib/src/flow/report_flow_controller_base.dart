@@ -264,7 +264,7 @@ class ReportFlowControllerImpl
                 descriptor: descriptor,
                 headers: headers,
                 cancellation: cancellation,
-                httpClientFactory: connection.httpClientFactory,
+                httpClientFactory: connection.resolvedHttpClientFactory,
               );
             },
       );
@@ -1980,8 +1980,11 @@ class ReportFlowControllerImpl
   ReportFlowFailure _asFailure(Object error, ReportFlowFailureCode fallback) {
     if (error is ReportFlowFailure) return error;
     if (error is BridgeRuntimeException) {
-      final pagePath = error.code == BridgeRuntimeErrorCodes.templatePageOverrideInvalid
-          ? RegExp(r'^(page(?:\.[a-zA-Z_]+)*):').firstMatch(error.message)?.group(1)
+      final pagePath =
+          error.code == BridgeRuntimeErrorCodes.templatePageOverrideInvalid
+          ? RegExp(
+              r'^(page(?:\.[a-zA-Z_]+)*):',
+            ).firstMatch(error.message)?.group(1)
           : null;
       return ReportFlowFailure(
         code: fallback,

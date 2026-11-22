@@ -73,6 +73,32 @@ flutter pub get
 flutter run --dart-define=HOST_SERVER_URL=https://mdev.yemensoft.net:473
 ```
 
+## Development HTTP and untrusted HTTPS certificates
+
+HTTP is already supported for local servers through `ReportServerEndpoints`.
+Certificate verification remains enabled by default for HTTPS. To connect to a
+trusted **development-only** server with an expired, self-signed, or incomplete
+certificate chain, explicitly opt in for that server's configured API and
+Presenter origins:
+
+```dart
+ReportServerConnection(
+  endpoints: endpoints,
+  cacheRoot: cacheRoot,
+  allowInvalidServerCertificates: true,
+  headers: <String, String>{
+    'Authorization': 'ApiKey $apiKey', // Read from Host secure configuration.
+  },
+)
+```
+
+The opt-in is scoped to the configured HTTPS host(s) and port(s); it does not
+turn off verification globally. It is insecure against certificate spoofing on
+those origins, so **never enable it on untrusted networks or in production**.
+Do not commit API keys to the repository; provide them through your Host's
+credential storage. For production, install a complete, trusted TLS certificate
+chain on the server instead.
+
 ## Docs
 
 - [Architecture / contract](docs/architecture/bridge-contract.md)

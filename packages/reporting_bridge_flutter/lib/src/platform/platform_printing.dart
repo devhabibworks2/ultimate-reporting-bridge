@@ -11,3 +11,4 @@ export 'bridge_platform_adapters.dart'
 export 'ios_air_print_report_print_platform.dart';
 export 'ios_print_configuration.dart';
 export 'report_print_invocation_gate.dart';
+export 'windows_system_report_print_platform.dart';

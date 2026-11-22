@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 1.0.6
+
+- Fix Windows PDF preview and native thumbnail caching/path handling.
+- Support Windows system PDF printing with typed cancellation and error results.
+- Add explicit, origin-scoped `allowInvalidServerCertificates` opt-in for
+  development servers, preserving strict TLS verification by default.
+- Keep local HTTP Report Server connections supported without certificate checks.
+- Preserve existing session-only page override behavior and host compatibility.
+
 ## 1.0.3
 
 - Add shared Presenter warmup/resource-preparation orchestration and the

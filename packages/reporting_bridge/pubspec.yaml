@@ -1,7 +1,7 @@
 name: reporting_bridge
 description: Typed host–presenter bridge messages for Ultimate Report Builder (see bridge contract documentation).
 publish_to: "none"
-version: 1.0.0
+version: 1.0.6
 
 environment:
   sdk: ">=3.9.0 <4.0.0"

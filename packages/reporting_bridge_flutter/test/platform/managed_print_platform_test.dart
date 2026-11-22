@@ -193,6 +193,32 @@ void main() {
     expect(seen, IosPrintMode.airPrint);
   });
 
+  test(
+    'Windows resolves a real print gateway without Android/iOS factories',
+    () async {
+      var mobileFactoryCalls = 0;
+      final resources = await resolveManagedPrintPlatform(
+        effectivePlatform: TargetPlatform.windows,
+        androidConfiguration: const AndroidPrintConfiguration.escPos(),
+        iosPrintMode: IosPrintMode.airPrint,
+        thermalFactory: (_) async {
+          mobileFactoryCalls++;
+          throw StateError('unexpected thermal print gateway');
+        },
+        androidFactory: (_) async {
+          mobileFactoryCalls++;
+          throw StateError('unexpected Android print gateway');
+        },
+        iosFactory: (_) async {
+          mobileFactoryCalls++;
+          throw StateError('unexpected iOS print gateway');
+        },
+      );
+      expect(resources.platform, isNot(isA<UnsupportedReportPrintPlatform>()));
+      expect(mobileFactoryCalls, 0);
+    },
+  );
+
   test('selected factory failure has no fallback', () async {
     var fallbackCalls = 0;
     await expectLater(

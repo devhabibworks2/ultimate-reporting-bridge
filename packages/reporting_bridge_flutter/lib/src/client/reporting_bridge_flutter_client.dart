@@ -345,7 +345,7 @@ class DefaultReportingBridgeFlutterClient
       bundleManifestUrl: _connection.bundleManifestUrl,
       headers: _connection.headers,
       headersProvider: _connection.headersProvider,
-      httpClientFactory: _connection.httpClientFactory,
+      httpClientFactory: _connection.resolvedHttpClientFactory,
     );
     try {
       await ReportResourcePreparationService(
