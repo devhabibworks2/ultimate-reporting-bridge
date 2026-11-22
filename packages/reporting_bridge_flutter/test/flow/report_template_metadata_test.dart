@@ -2,6 +2,29 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:reporting_bridge_flutter/reporting_bridge_flutter.dart';
 
 void main() {
+  test('effective runtime metadata is derived from page copy, not original template', () {
+    final selected = _canonical(
+      family: 'sales_invoice',
+      layout: 'Pages', size: 'A4', orientation: 'portrait',
+      language: 'en', width: 210, height: 297,
+    );
+    final page = Map<String, dynamic>.from(selected.document['page'] as Map);
+    page.addAll(<String, Object>{
+      'orientation': 'landscape',
+      'width': 297.0, 'height': 210.0, 'direction': 'rtl',
+    });
+    final effective = ReportTemplateMetadata.fromDocument(<String, dynamic>{
+      ...selected.document,
+      'page': page,
+    });
+    expect(effective.width, 297);
+    expect(effective.height, 210);
+    expect(effective.orientation, ReportOrientation.landscape);
+    expect(effective.direction, 'rtl');
+    expect(selected.reportMetadata.width, 210);
+    expect(selected.reportMetadata.orientation, ReportOrientation.portrait);
+  });
+
   group('canonical PASS cases', () {
     test('Pages/A4/portrait/ar/mm', () {
       final metadata = ReportTemplateMetadata.fromTemplate(

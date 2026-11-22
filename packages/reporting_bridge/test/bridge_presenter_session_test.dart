@@ -432,6 +432,80 @@ void main() {
   );
 
   test(
+    'session Page overrides reach actual runtime files in both modes without mutating cache',
+    () async {
+      final root = await Directory.systemTemp.createTemp('bridge_page_override_');
+      addTearDown(() => root.delete(recursive: true));
+      final sourceDocument = _styleOverrideDocument();
+      (sourceDocument['page'] as Map<String, dynamic>).addAll({
+        'unit': 'mm',
+        'width': 210,
+        'height': 297,
+        'orientation': 'portrait',
+        'margins': <String, num>{
+          'top': 10, 'right': 10, 'bottom': 10, 'left': 10,
+        },
+      });
+      final snapshot = jsonEncode(sourceDocument);
+      final original = _template('page-override-template',
+        document: sourceDocument, systemCode: 'motakamel_transactions');
+      final api = await _startManifestServer();
+      addTearDown(() => api.close(force: true));
+      for (final mode in <PresenterSessionMode>[
+        PresenterSessionMode.online,
+        PresenterSessionMode.offline,
+      ]) {
+        final modeRoot = Directory('${root.path}/${mode.name}')
+          ..createSync(recursive: true);
+        if (mode == PresenterSessionMode.offline) {
+          await _writeReadyPresenterSite(Directory('${modeRoot.path}/presenter'));
+          await _writeCachedManifest(modeRoot,
+            presenterVersion: '2.0.0', devVersion: 20);
+        }
+        final coordinator = _coordinator(
+          root: modeRoot,
+          apiBaseUrl: mode == PresenterSessionMode.online
+            ? Uri.parse('http://127.0.0.1:${api.port}/')
+            : Uri.parse('https://reports.example/'),
+        );
+        addTearDown(coordinator.dispose);
+        final id = 'page-${mode.name}';
+        final launch = await coordinator.prepare(PresenterSessionRequest(
+          sessionId: id,
+          reportType: 'invoice',
+          reportName: 'Page override report',
+          mode: mode,
+          seedData: const {},
+          template: original,
+          templatePageOverrides: const ReportTemplatePageOverrides(
+            layout: BridgePageLayout.pages,
+            size: BridgePageSize.a4,
+            orientation: BridgePageOrientation.landscape,
+            direction: BridgePageDirection.rtl,
+          ),
+          templateStyleOverrides: ReportTemplateStyleOverrides(
+            color: <String, Object?>{'primary': '#123456'},
+          ),
+        ));
+        expect(launch.effectivePage?['width'], 297);
+        expect(launch.effectivePage?['height'], 210);
+        expect(launch.effectivePage?['orientation'], 'landscape');
+        final runtime = jsonDecode(await File(
+          '${modeRoot.path}/runtime/$id/template.json').readAsString()) as Map;
+        final page = runtime['page'] as Map;
+        expect(page['width'], 297);
+        expect(page['height'], 210);
+        expect(page['direction'], 'rtl');
+        expect((runtime['styleTokens'] as Map)['color'],
+          containsPair('primary', '#123456'));
+        expect(jsonEncode(sourceDocument), snapshot);
+        expect(jsonEncode(original.document), snapshot);
+        await coordinator.stop();
+      }
+    },
+  );
+
+  test(
     'replacement sessions apply overrides independently from cached template',
     () async {
       final root = await Directory.systemTemp.createTemp(

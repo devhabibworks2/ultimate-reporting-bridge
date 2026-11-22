@@ -134,6 +134,51 @@ void main() {
     expect(bridge.lastSessionRequest?.direction, 'ltr');
   });
 
+  test(
+    'effective landscape page metadata reaches print without rewriting selected template',
+    () async {
+      bridge.templates = <CachedTemplate>[_pagesTemplate('pages-original')];
+      final printPlatform = _FakePrintPlatform();
+      final fixture = _createController(
+        connection: connection,
+        bridge: bridge,
+        preferences: preferences,
+        printPlatform: printPlatform,
+        pageOverrides: const ReportTemplatePageOverrides(
+          layout: BridgePageLayout.pages,
+          size: BridgePageSize.a4,
+          orientation: BridgePageOrientation.landscape,
+          direction: BridgePageDirection.rtl,
+        ),
+      );
+      addTearDown(fixture.controller.dispose);
+      await _ready(fixture);
+      expect(bridge.prepareCalls, greaterThan(0));
+      expect(
+        bridge.lastSessionRequest?.templatePageOverrides?.size,
+        BridgePageSize.a4,
+      );
+      expect(bridge.lastSessionRequest?.direction, 'rtl');
+      expect(fixture.controller.value.presenterLaunch, isNotNull);
+      expect(
+        fixture.controller.value.presenterLaunch?.effectivePage?['width'],
+        297,
+      );
+      await fixture.controller.printPdf();
+      final effective = printPlatform.lastRequest!.document;
+      expect(effective.layout, 'Pages');
+      expect(effective.size, 'A4');
+      expect(effective.width, 297);
+      expect(effective.height, 210);
+      expect(effective.orientation, 'landscape');
+      expect(bridge.templates.single.reportMetadata.width, 210);
+      expect(
+        bridge.lastSessionRequest?.templatePageOverrides?.direction,
+        BridgePageDirection.rtl,
+      );
+    },
+  );
+
   test('duplicate and cross-action output submissions are blocked', () async {
     final barrier = Completer<ReportPrintResult>();
     final printPlatform = _FakePrintPlatform(barrier: barrier);
@@ -260,6 +305,7 @@ _ControllerFixture _createController({
   ReportEntryPolicy entryPolicy = ReportEntryPolicy.alwaysPrepare,
   TemplateCompatibilityConstraints compatibility =
       const TemplateCompatibilityConstraints(),
+  ReportTemplatePageOverrides? pageOverrides,
 }) {
   final surface = PresenterSurfaceBinding(
     exportTransport: PresenterWebExportTransport(
@@ -276,7 +322,7 @@ _ControllerFixture _createController({
       entryPolicy: entryPolicy,
       compatibility: compatibility,
       featuresOverride: features,
-    ),
+    ).copyWith(templatePageOverrides: pageOverrides),
     features: features,
     runtime: ReportFlowRuntime(
       connection: connection,
@@ -296,7 +342,9 @@ Future<void> _ready(_ControllerFixture fixture) async {
     await fixture.controller.continueFromPreparation();
   }
   if (fixture.controller.value.stage == ReportFlowStage.selectingTemplate) {
-    fixture.controller.selectTemplate('thermal-en');
+    fixture.controller.selectTemplate(
+      fixture.controller.eligibleTemplates.first.templateCode,
+    );
     await fixture.controller.preparePreview();
   }
   final launch = fixture.controller.value.presenterLaunch!;
@@ -409,7 +457,17 @@ class _FakeBridgeClient extends ReportingBridgeClient {
   ) async {
     prepareCalls += 1;
     lastSessionRequest = request;
+    final pageOverride = request.templatePageOverrides;
+    final effective = pageOverride == null || pageOverride.isEmpty
+        ? request.template.document
+        : applyReportTemplatePageOverrides(
+            document: request.template.document,
+            overrides: pageOverride,
+          );
     return PresenterSessionLaunch(
+      effectivePage: pageOverride == null || pageOverride.isEmpty
+          ? null
+          : Map<String, dynamic>.from(effective['page'] as Map),
       presenterUrl: 'https://presenter.test/session-$prepareCalls',
       sessionId: 'session-$prepareCalls',
       presenterVersion: '1.0.0',

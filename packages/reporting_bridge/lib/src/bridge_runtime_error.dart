@@ -18,5 +18,6 @@ abstract final class BridgeRuntimeErrorCodes {
   static const String runtimeSessionInvalid = 'RUNTIME_SESSION_INVALID';
   static const String runtimeFileWriteFailed = 'RUNTIME_FILE_WRITE_FAILED';
   static const String templateDocumentInvalid = 'TEMPLATE_DOCUMENT_INVALID';
+  static const String templatePageOverrideInvalid = 'TEMPLATE_PAGE_OVERRIDE_INVALID';
   static const String staleTemplateSelection = 'STALE_TEMPLATE_SELECTION';
 }

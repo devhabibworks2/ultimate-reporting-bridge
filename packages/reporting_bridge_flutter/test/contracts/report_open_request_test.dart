@@ -120,6 +120,32 @@ void main() {
     },
   );
 
+  test('ReportOpenRequest retains page override across copyWith', () {
+    const identity = ReportIdentity(userId: 'user-1');
+    const page = ReportTemplatePageOverrides(
+      size: BridgePageSize.a4,
+      orientation: BridgePageOrientation.landscape,
+      direction: BridgePageDirection.rtl,
+    );
+    final original = ReportOpenRequest(
+      seedData: const <String, dynamic>{},
+      selectedTemplateCriteria: SelectedTemplateCriteria(
+        reportType: UrbReportType.salesInvoice, identity: identity,
+      ),
+      templateSyncRequest: TemplateSyncRequest(
+        systemCode: UrbSystem.motakamelTransactions, identity: identity,
+      ),
+      templatePageOverrides: page,
+    );
+    final copied = original.copyWith(
+      localeOverride: 'ar',
+      entryPolicy: ReportEntryPolicy.alwaysPrepare,
+    );
+    expect(copied.templatePageOverrides, same(page));
+    expect(copied.localeOverride, 'ar');
+    expect(copied.compatibility.size, isNull);
+  });
+
   test('TemplateSyncRequest defaults filter to core TemplateSyncFilter', () {
     final sync = TemplateSyncRequest(
       systemCode: UrbSystem.motakamelTransactions,
