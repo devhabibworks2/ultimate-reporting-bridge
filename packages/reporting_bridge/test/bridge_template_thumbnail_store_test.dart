@@ -33,6 +33,17 @@ CachedTemplate _template({
   document: const <String, dynamic>{'meta': <String, dynamic>{}},
 );
 
+File _pngFile(
+  Directory root,
+  String code, {
+  int version = 3,
+  String hash = _hashA,
+}) {
+  final digest = sha256.convert(utf8.encode(code)).toString();
+  final token = sha256.convert(utf8.encode(hash)).toString().substring(0, 32);
+  return File('${root.path}/tpl_${digest}_${version}_$token.png');
+}
+
 void main() {
   late Directory root;
   late BridgeTemplateThumbnailStore store;
@@ -55,7 +66,7 @@ void main() {
       final digest = sha256
           .convert(utf8.encode(template.templateCode))
           .toString();
-      final png = File('${root.path}/tpl_${digest}_3_$_hashA.png');
+      final png = _pngFile(root, template.templateCode);
       final json = File('${root.path}/tpl_$digest.json');
       expect(await json.exists(), isTrue);
       expect(await png.exists(), isTrue);
@@ -155,19 +166,43 @@ void main() {
       final c = _template(code: 'C');
       await scoped.write(a, _png);
       await scoped.write(b, _png);
-      final aHash = sha256.convert(utf8.encode('A')).toString();
-      final bHash = sha256.convert(utf8.encode('B')).toString();
-      await File(
-        '${root.path}/tpl_${aHash}_3_$_hashA.png',
-      ).setLastModified(DateTime.utc(2020));
-      await File(
-        '${root.path}/tpl_${bHash}_3_$_hashA.png',
-      ).setLastModified(DateTime.utc(2021));
+      await File(_pngFile(root, 'A').path).setLastModified(DateTime.utc(2020));
+      await File(_pngFile(root, 'B').path).setLastModified(DateTime.utc(2021));
       expect(await scoped.read(a), orderedEquals(_png));
       await scoped.write(c, _png);
       expect(await scoped.read(b), isNull);
       expect(await scoped.read(a), orderedEquals(_png));
       expect(await scoped.read(c), orderedEquals(_png));
+    },
+  );
+
+  test('cached PNG names leave room for Windows temporary paths', () async {
+    await store.write(_template(), _png);
+    final files = await root
+        .list(followLinks: false)
+        .where((entity) => entity is File)
+        .toList();
+    final png = files.singleWhere((entity) => entity.path.endsWith('.png'));
+    // Old names included two 64-character hashes and exceeded MAX_PATH
+    // when written inside Windows's nested authenticated cache directory.
+    expect(png.uri.pathSegments.last.length, lessThan(120));
+    expect(await store.read(_template()), orderedEquals(_png));
+  });
+
+  test(
+    'quota retains the new image even when another image has future mtime',
+    () async {
+      final scoped = BridgeTemplateThumbnailStore(
+        cacheRoot: root,
+        maxImagesPerScope: 1,
+      );
+      final a = _template(code: 'A');
+      final b = _template(code: 'B');
+      await scoped.write(a, _png);
+      await _pngFile(root, 'A').setLastModified(DateTime.utc(2035));
+      await scoped.write(b, _png);
+      expect(await scoped.read(a), isNull);
+      expect(await scoped.read(b), orderedEquals(_png));
     },
   );
 
@@ -180,6 +215,19 @@ void main() {
     await scoped.write(_template(code: 'B'), _png);
     expect(await scoped.read(_template(code: 'A')), isNull);
     expect(await scoped.read(_template(code: 'B')), orderedEquals(_png));
+  });
+
+  test('reads a legacy full-hash PNG without moving or deleting it', () async {
+    final template = _template(code: 'LEGACY');
+    final digest = sha256
+        .convert(utf8.encode(template.templateCode))
+        .toString();
+    final legacy = File('${root.path}/tpl_${digest}_3_$_hashA.png');
+    await legacy.writeAsBytes(_png, flush: true);
+    expect(await store.read(template), orderedEquals(_png));
+    await store.deleteObsolete([template]);
+    expect(await legacy.exists(), isTrue);
+    expect(await store.read(template), orderedEquals(_png));
   });
 
   test('mismatching version/hash does not accept older image', () async {
@@ -209,10 +257,7 @@ void main() {
       throwsA(isA<FormatException>()),
     );
     await store.write(template, _png);
-    final digest = sha256
-        .convert(utf8.encode(template.templateCode))
-        .toString();
-    final file = File('${root.path}/tpl_${digest}_3_$_hashA.png');
+    final file = _pngFile(root, template.templateCode);
     await file.writeAsBytes([1, 2, 3], flush: true);
     expect(await store.read(template), isNull);
   });
@@ -254,10 +299,7 @@ void main() {
       await store.write(template, _png);
       final changed = Uint8List.fromList(_png);
       changed[44] ^= 1; // data changed while chunk CRC stays original.
-      final digest = sha256
-          .convert(utf8.encode(template.templateCode))
-          .toString();
-      final file = File('${root.path}/tpl_${digest}_3_$_hashA.png');
+      final file = _pngFile(root, template.templateCode);
       await file.writeAsBytes(changed, flush: true);
       expect(await store.read(template), isNull);
     },

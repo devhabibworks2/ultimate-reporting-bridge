@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 import 'dart:convert';
 
@@ -67,11 +68,29 @@ final class BridgeTemplateThumbnailStore {
   }
 
   static const _pngSignature = <int>[137, 80, 78, 71, 13, 10, 26, 10];
+  // The 128-bit shortened content token makes paths usable on Windows.
+  // Accept the old 256-bit token so existing offline caches can be read.
   static final _candidate = RegExp(
-    r'^tpl_[0-9a-f]{64}_[1-9][0-9]*_[0-9a-f]{64}\.png$',
+    r'^tpl_[0-9a-f]{64}_[1-9][0-9]*_[0-9a-f]{32}(?:[0-9a-f]{32})?\.png$',
   );
 
   File? _file(CachedTemplate template) {
+    final thumbnail = template.publishedThumbnail;
+    if (thumbnail == null || !thumbnail.available) return null;
+    final code = template.durableTemplateCode;
+    if (code == null || code.trim().isEmpty) return null;
+    final digest = sha256.convert(utf8.encode(code)).toString();
+    final contentToken = sha256
+        .convert(utf8.encode(thumbnail.contentHash))
+        .toString()
+        .substring(0, 32);
+    return File(
+      '${cacheRoot.path}/tpl_${digest}_${thumbnail.versionNo}_$contentToken.png',
+    );
+  }
+
+  // A best-effort read-only path for images written before the Windows fix.
+  File? _legacyFile(CachedTemplate template) {
     final thumbnail = template.publishedThumbnail;
     if (thumbnail == null || !thumbnail.available) return null;
     final code = template.durableTemplateCode;
@@ -146,13 +165,24 @@ final class BridgeTemplateThumbnailStore {
     } on StateError {
       return null;
     }
-    final file = _file(template);
-    if (file == null || !await cacheRoot.exists()) return null;
+    final primary = _file(template);
+    if (primary == null || !await cacheRoot.exists()) return null;
     try {
       if (await FileSystemEntity.type(cacheRoot.path, followLinks: false) !=
-              FileSystemEntityType.directory ||
-          await FileSystemEntity.type(file.path, followLinks: false) !=
-              FileSystemEntityType.file) {
+          FileSystemEntityType.directory) {
+        return null;
+      }
+      final primaryType = await FileSystemEntity.type(
+        primary.path,
+        followLinks: false,
+      );
+      // Never follow a substituted symlink, even as a legacy fallback.
+      if (primaryType == FileSystemEntityType.link) return null;
+      final file = primaryType == FileSystemEntityType.file
+          ? primary
+          : _legacyFile(template)!;
+      if (await FileSystemEntity.type(file.path, followLinks: false) !=
+          FileSystemEntityType.file) {
         return null;
       }
       if (await file.length() > maxImageBytes) return null;
@@ -200,10 +230,18 @@ final class BridgeTemplateThumbnailStore {
     }
     final current = await read(template);
     if (current != null && _equalBytes(current, png)) return;
-    final tmp = File(
-      '${file.path}.${DateTime.now().microsecondsSinceEpoch}.$pid.tmp',
-    );
+    // Do not append to the already long PNG basename. The staging file is
+    // kept in the same directory so rename stays on the same filesystem.
+    // Windows timestamps can have coarse resolution. Concurrent downloads
+    // must never share a temporary filename.
+    final random = Random.secure();
+    final token = List<int>.generate(
+      16,
+      (_) => random.nextInt(256),
+    ).map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
+    final tmp = File('${cacheRoot.path}/.tpl-$token.tmp');
     try {
+      await tmp.create(exclusive: true);
       await tmp.writeAsBytes(png, flush: true);
       if (!_looksLikePng(await tmp.readAsBytes())) {
         throw const FormatException('Staged PNG failed validation.');
@@ -247,9 +285,14 @@ final class BridgeTemplateThumbnailStore {
     required String protect,
   }) async {
     final images = await _imagesIn(root);
+    final protectedPath = File(
+      protect,
+    ).absolute.uri.normalizePath().toFilePath();
+    bool isProtected(File file) =>
+        file.absolute.uri.normalizePath().toFilePath() == protectedPath;
     images.sort((a, b) {
-      if (a.file.path == protect) return 1;
-      if (b.file.path == protect) return -1;
+      if (isProtected(a.file)) return 1;
+      if (isProtected(b.file)) return -1;
       final byTime = a.modified.compareTo(b.modified);
       return byTime != 0 ? byTime : a.file.path.compareTo(b.file.path);
     });
@@ -257,7 +300,7 @@ final class BridgeTemplateThumbnailStore {
     var bytes = images.fold<int>(0, (total, image) => total + image.size);
     for (final image in images) {
       if (count <= maxCount && bytes <= maxBytes) break;
-      if (image.file.path == protect) {
+      if (isProtected(image.file)) {
         throw StateError('New PNG alone exceeds the cache budget.');
       }
       try {
@@ -300,7 +343,7 @@ final class BridgeTemplateThumbnailStore {
     }
     final digest = sha256.convert(utf8.encode(templateCode)).toString();
     final templatePattern = RegExp(
-      '^tpl_${digest}_[1-9][0-9]*_[0-9a-f]{64}\\.png'
+      '^tpl_${digest}_[1-9][0-9]*_[0-9a-f]{32}([0-9a-f]{32})?\\.png'
       r'$',
     );
     await for (final entity in cacheRoot.list(followLinks: false)) {
@@ -322,15 +365,20 @@ final class BridgeTemplateThumbnailStore {
         FileSystemEntityType.directory) {
       return;
     }
-    final keep = activeTemplates
-        .map(_file)
-        .whereType<File>()
-        .map((file) => file.path)
-        .toSet();
+    final keep = <String>{
+      ...activeTemplates
+          .map(_file)
+          .whereType<File>()
+          .map((file) => file.uri.pathSegments.last),
+      ...activeTemplates
+          .map(_legacyFile)
+          .whereType<File>()
+          .map((file) => file.uri.pathSegments.last),
+    };
     await for (final entity in cacheRoot.list(followLinks: false)) {
       if (entity is! File ||
           !_candidate.hasMatch(entity.uri.pathSegments.last) ||
-          keep.contains(entity.path)) {
+          keep.contains(entity.uri.pathSegments.last)) {
         continue;
       }
       await entity.delete();

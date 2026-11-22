@@ -444,14 +444,29 @@ class PresenterTemplateSyncService {
     required TemplateCatalogMetadata metadata,
   }) async {
     final storedSelection = await cache.readSelectedTemplate();
-    final root = cache.cacheRoot;
+    // Windows Directory.delete(recursive: true) expects a native path after
+    // directory swaps; scoped cache paths may contain mixed separators.
+    final nativePath = cache.cacheRoot.absolute.uri
+        .normalizePath()
+        .toFilePath();
+    final minRootLength = Platform.isWindows ? 3 : 1;
+    final rootPath =
+        nativePath.length > minRootLength &&
+            nativePath.endsWith(Platform.pathSeparator)
+        ? nativePath.substring(0, nativePath.length - 1)
+        : nativePath;
+    final root = Directory(rootPath);
     await root.parent.create(recursive: true);
-    final token = DateTime.now().microsecondsSinceEpoch;
-    final staging = Directory('${root.path}.stage-$token');
-    final backup = Directory('${root.path}.backup-$token');
-    if (await staging.exists()) await staging.delete(recursive: true);
-    if (await backup.exists()) await backup.delete(recursive: true);
-    await staging.create(recursive: true);
+    // A long catalog basename plus ".backup-<timestamp>" can push an
+    // otherwise valid PNG filename over Windows MAX_PATH during cleanup.
+    // Use a uniquely created short sibling folder on the same filesystem.
+    final staging = await root.parent.createTemp('.urb-s-');
+    final backup = Directory('${staging.path}.b');
+    if (await FileSystemEntity.type(backup.path, followLinks: false) !=
+        FileSystemEntityType.notFound) {
+      await staging.delete(recursive: true);
+      throw StateError('Catalog backup path collision.');
+    }
 
     var originalMoved = false;
     var stagedInstalled = false;
